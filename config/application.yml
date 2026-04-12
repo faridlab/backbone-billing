@@ -1,0 +1,107 @@
+server:
+  host: 0.0.0.0
+  port: 3000
+  grpc_port: 50051
+database:
+  url: postgresql://root:password@localhost:5432/backbonedb
+  max_connections: 20
+  min_connections: 5
+  connect_timeout: 30
+  idle_timeout: 600
+module:
+  name: billing
+  enabled: true
+features:
+  soft_delete: true
+  state_machines: true
+  workflows: true
+logging:
+  level: info
+  format: json
+  file: logs/billing.log
+tracing:
+  enabled: true
+  exporter: otlp
+  endpoint: http://localhost:4317
+metrics:
+  enabled: true
+  endpoint: /metrics
+  port: 9090
+entities:
+  agent_earning:
+    collection: agent_earnings
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  financial_period:
+    collection: financial_periods
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  payment:
+    collection: payments
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  payment_gateway_detail:
+    collection: payment_gateway_details
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  payment_fee:
+    collection: payment_fees
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  invoice:
+    collection: invoices
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  invoice_party:
+    collection: invoice_parties
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  invoice_line_item:
+    collection: invoice_line_items
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  provider_bank_account:
+    collection: provider_bank_accounts
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  refund_request:
+    collection: refund_requests
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  settlement:
+    collection: settlements
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
