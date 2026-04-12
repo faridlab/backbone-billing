@@ -1,0 +1,340 @@
+# =============================================================================
+# Domain: Payments
+# Entities: RefundRequest
+# Description: Refund request workflow and processing
+# =============================================================================
+
+models:
+  # ---------------------------------------------------------------------------
+  # RefundRequest - Refund request and processing
+  # ---------------------------------------------------------------------------
+  - name: RefundRequest
+    collection: refund_requests
+    description: "Refund request and processing"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique refund request identifier"
+
+      # Reference number
+      refund_number:
+        type: string
+        attributes: ["@required", "@unique", "@max(30)"]
+        description: "Refund reference number (REF-XXXXXXXX)"
+
+      # =======================================================================
+      # Related Payment
+      # =======================================================================
+      payment_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(Payment.id)"]
+        description: "Original payment"
+
+      order_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.Order.id
+        description: "Related order"
+
+      # =======================================================================
+      # Requester
+      # =======================================================================
+      requester_type:
+        type: string
+        attributes: ["@required", "@max(30)"]
+        description: "Requester type (customer, provider, admin)"
+
+      requester_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Requester entity ID"
+
+      requester_name:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Requester name"
+
+      # =======================================================================
+      # Amount
+      # =======================================================================
+      currency:
+        type: string
+        attributes: ["@default('IDR')", "@length(3)"]
+        description: "Currency code"
+
+      original_amount:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)", "@positive"]
+        description: "Original payment amount"
+
+      requested_amount:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)", "@positive"]
+        description: "Requested refund amount"
+
+      approved_amount:
+        type: decimal?
+        attributes: ["@precision(14,2)", "@non_negative"]
+        description: "Approved refund amount"
+
+      refunded_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Actually refunded amount"
+
+      # =======================================================================
+      # Reason
+      # =======================================================================
+      reason:
+        type: RefundReason
+        attributes: ["@default(customer_request)"]
+        description: "Refund reason category"
+
+      reason_detail:
+        type: string?
+        attributes: ["@max(1000)"]
+        description: "Detailed reason explanation"
+
+      # Evidence
+      evidence_urls:
+        type: json
+        attributes: ["@default('[]')"]
+        description: "Array of evidence photo/document URLs"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      status:
+        type: RefundStatus
+        attributes: ["@default(pending)"]
+        description: "Refund request status"
+
+      # =======================================================================
+      # Review Process
+      # =======================================================================
+      reviewed_by:
+        type: uuid?
+        description: "Reviewer admin/staff"
+
+      reviewed_at:
+        type: datetime?
+        description: "Review timestamp"
+
+      review_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Review notes"
+
+      # Approval
+      approved_by:
+        type: uuid?
+        description: "Approver"
+
+      approved_at:
+        type: datetime?
+        description: "Approval timestamp"
+
+      approval_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Approval notes"
+
+      # Rejection
+      rejected_by:
+        type: uuid?
+        description: "Who rejected"
+
+      rejected_at:
+        type: datetime?
+        description: "Rejection timestamp"
+
+      rejection_reason:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Rejection reason"
+
+      # =======================================================================
+      # Processing
+      # =======================================================================
+      processing_started_at:
+        type: datetime?
+        description: "Processing start time"
+
+      completed_at:
+        type: datetime?
+        description: "Completion timestamp"
+
+      failed_at:
+        type: datetime?
+        description: "Failure timestamp"
+
+      failure_reason:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Processing failure reason"
+
+      # =======================================================================
+      # Gateway Refund
+      # =======================================================================
+      gateway_refund_id:
+        type: string?
+        attributes: ["@max(100)", "@exclude_from_foreign_key_check"]
+        description: "Gateway refund transaction ID"
+
+      gateway_status:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Gateway refund status"
+
+      # =======================================================================
+      # Refund Destination
+      # =======================================================================
+      refund_method:
+        type: RefundMethod?
+        description: "Refund method"
+
+      # If bank transfer
+      bank_name:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Bank name"
+
+      account_number:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Account number"
+
+      account_name:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Account holder name"
+
+      # =======================================================================
+      # Customer Communication
+      # =======================================================================
+      customer_notified:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Customer has been notified"
+
+      customer_notified_at:
+        type: datetime?
+        description: "Notification timestamp"
+
+      notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Internal notes"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      payment:
+        type: Payment
+        attributes: ["@one", "@foreign_key(payment_id)"]
+        description: "Original payment"
+        inverse: refunds
+
+      reviewed_by_user:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(reviewed_by)"]
+        description: "Review staff"
+
+      approved_by_user:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(approved_by)"]
+        description: "Approver"
+
+      rejected_by_user:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(rejected_by)"]
+        description: "Rejecter"
+
+    indexes:
+      - type: unique
+        fields: [refund_number]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [payment_id]
+      - type: index
+        fields: [order_id]
+      - type: index
+        fields: [requester_type, requester_id]
+      - type: index
+        fields: [status, created_at]
+      - type: index
+        fields: [reason]
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  # ---------------------------------------------------------------------------
+  # Refund Method
+  # ---------------------------------------------------------------------------
+  - name: RefundMethod
+    description: "Method used to process the refund"
+    variants:
+      - name: original
+        description: "Refund to original payment method"
+        default: true
+      - name: bank_transfer
+        description: "Refund via bank transfer"
+      - name: ewallet
+        description: "Refund via e-wallet"
+
+  # ---------------------------------------------------------------------------
+  # Refund Reason
+  # ---------------------------------------------------------------------------
+  - name: RefundReason
+    description: "Reason categories for refund requests"
+    variants:
+      - name: customer_request
+        description: "Customer requested refund"
+        default: true
+      - name: order_cancelled
+        description: "Order was cancelled"
+      - name: service_issue
+        description: "Issue with service quality"
+      - name: item_damaged
+        description: "Item was damaged"
+      - name: item_lost
+        description: "Item was lost"
+      - name: overcharge
+        description: "Customer was overcharged"
+      - name: duplicate_payment
+        description: "Duplicate payment made"
+      - name: provider_unable
+        description: "Provider unable to fulfill"
+      - name: other
+        description: "Other reason"
+
+  # ---------------------------------------------------------------------------
+  # Refund Status
+  # ---------------------------------------------------------------------------
+  - name: RefundStatus
+    description: "Refund request processing status"
+    variants:
+      - name: pending
+        description: "Awaiting review"
+        default: true
+      - name: under_review
+        description: "Being reviewed"
+      - name: approved
+        description: "Approved, awaiting processing"
+      - name: processing
+        description: "Being processed"
+      - name: completed
+        description: "Refund completed"
+      - name: rejected
+        description: "Request rejected"
+      - name: failed
+        description: "Processing failed"
+      - name: cancelled
+        description: "Request cancelled"

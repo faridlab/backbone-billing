@@ -1,0 +1,321 @@
+# =============================================================================
+# Domain: Payments
+# Entity: Settlement
+# Description: Provider payment settlements
+# =============================================================================
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  # ---------------------------------------------------------------------------
+  # Settlement Status
+  # ---------------------------------------------------------------------------
+  - name: SettlementStatus
+    description: "Provider settlement status"
+    variants:
+      - name: pending
+        description: "Pending settlement"
+        default: true
+      - name: processing
+        description: "Processing"
+      - name: completed
+        description: "Completed"
+      - name: failed
+        description: "Failed"
+      - name: on_hold
+        description: "On hold"
+
+  # ---------------------------------------------------------------------------
+  # Settlement Frequency
+  # ---------------------------------------------------------------------------
+  - name: SettlementFrequency
+    description: "How often settlements are processed"
+    variants:
+      - name: daily
+        description: "Daily settlement"
+        default: true
+      - name: weekly
+        description: "Weekly settlement"
+      - name: biweekly
+        description: "Bi-weekly settlement"
+      - name: monthly
+        description: "Monthly settlement"
+
+# =============================================================================
+# Models
+# =============================================================================
+
+models:
+  # ---------------------------------------------------------------------------
+  # Settlement - Provider payment settlement batch
+  # ---------------------------------------------------------------------------
+  - name: Settlement
+    collection: settlements
+    description: "Provider payment settlement batch"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique settlement identifier"
+
+      # Reference number
+      settlement_number:
+        type: string
+        attributes: ["@required", "@unique", "@max(30)"]
+        description: "Settlement reference (STL-YYYYMMDD-XXXXX)"
+
+      # =======================================================================
+      # Provider
+      # =======================================================================
+      provider_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.Provider.id
+        description: "Provider receiving settlement"
+
+      # =======================================================================
+      # Settlement Period
+      # =======================================================================
+      period_start:
+        type: datetime
+        attributes: ["@required"]
+        description: "Period start date"
+
+      period_end:
+        type: datetime
+        attributes: ["@required"]
+        description: "Period end date"
+
+      frequency:
+        type: SettlementFrequency
+        attributes: ["@default(daily)"]
+        description: "Settlement frequency"
+
+      # =======================================================================
+      # Amount Breakdown
+      # =======================================================================
+      currency:
+        type: string
+        attributes: ["@default('IDR')", "@length(3)"]
+        description: "Currency code"
+
+      # Gross amounts
+      gross_amount:
+        type: decimal
+        attributes: ["@required", "@precision(16,2)", "@non_negative"]
+        description: "Total gross amount from orders"
+
+      # Deductions
+      platform_commission:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Platform commission amount"
+
+      platform_commission_rate:
+        type: decimal
+        attributes: ["@precision(5,2)"]
+        description: "Commission rate applied"
+
+      transaction_fees:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Total transaction fees"
+
+      payment_gateway_fees:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Payment gateway fees"
+
+      # Adjustments
+      refunds_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Refunds deducted"
+
+      adjustments_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)"]
+        description: "Other adjustments (can be negative)"
+
+      adjustment_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Notes for adjustments"
+
+      # Withholding (if applicable)
+      withholding_tax:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Withholding tax amount"
+
+      withholding_tax_rate:
+        type: decimal?
+        attributes: ["@precision(5,2)"]
+        description: "Withholding tax rate"
+
+      # Net amount
+      net_amount:
+        type: decimal
+        attributes: ["@required", "@precision(16,2)"]
+        description: "Net amount to be transferred"
+
+      # =======================================================================
+      # Bank Account
+      # =======================================================================
+      bank_account_id:
+        type: uuid?
+        attributes: ["@foreign_key(ProviderBankAccount.id)"]
+        description: "Destination bank account"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      status:
+        type: SettlementStatus
+        attributes: ["@default(pending)"]
+        description: "Settlement status"
+
+      # =======================================================================
+      # Processing
+      # =======================================================================
+      scheduled_at:
+        type: datetime?
+        description: "Scheduled transfer date"
+
+      processing_started_at:
+        type: datetime?
+        description: "Processing start time"
+
+      completed_at:
+        type: datetime?
+        description: "Completion timestamp"
+
+      failed_at:
+        type: datetime?
+        description: "Failure timestamp"
+
+      failure_reason:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Failure reason"
+
+      # =======================================================================
+      # Transfer Details
+      # =======================================================================
+      transfer_reference:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Bank transfer reference"
+
+      transfer_receipt_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Transfer receipt/proof"
+
+      # =======================================================================
+      # Hold/Release
+      # =======================================================================
+      is_on_hold:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Settlement is on hold"
+
+      hold_reason:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Reason for hold"
+
+      held_by:
+        type: uuid?
+        description: "Who put on hold"
+
+      held_at:
+        type: datetime?
+        description: "Hold timestamp"
+
+      released_by:
+        type: uuid?
+        description: "Who released hold"
+
+      released_at:
+        type: datetime?
+        description: "Release timestamp"
+
+      # =======================================================================
+      # Invoice
+      # =======================================================================
+      invoice_id:
+        type: uuid?
+        attributes: ["@foreign_key(Invoice.id)"]
+        description: "Settlement invoice"
+
+      invoice_generated:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Invoice has been generated"
+
+      # =======================================================================
+      # Notes
+      # =======================================================================
+      notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Internal notes"
+
+      # =======================================================================
+      # Denormalized stats (JSONB)
+      # =======================================================================
+      data:
+        type: json
+        attributes: ["@default('{\"total_orders\":0,\"total_payments\":0,\"bank_name\":null,\"account_number\":null,\"account_name\":null}')"]
+        description: "Denormalized stats: total_orders, total_payments, bank_name, account_number, account_name"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      bank_account:
+        type: ProviderBankAccount?
+        attributes: ["@one", "@foreign_key(bank_account_id)"]
+        description: "Destination bank account"
+        inverse: settlements
+
+      payments:
+        type: Payment[]
+        attributes: ["@one_to_many"]
+        description: "Payments in this settlement"
+        inverse: settlement
+
+      invoice:
+        type: Invoice?
+        attributes: ["@one", "@foreign_key(invoice_id)"]
+        description: "Settlement invoice"
+        inverse: settlement
+
+      held_by_user:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(held_by)"]
+        description: "User who put on hold"
+
+      released_by_user:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(released_by)"]
+        description: "User who released hold"
+
+    indexes:
+      - type: unique
+        fields: [settlement_number]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [provider_id, status]
+      - type: index
+        fields: [provider_id, period_start, period_end]
+      - type: index
+        fields: [status, scheduled_at]
+      - type: index
+        fields: [is_on_hold, status]

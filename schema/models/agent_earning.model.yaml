@@ -1,0 +1,240 @@
+# =============================================================================
+# Domain: Payments
+# Entities: AgentEarning
+# Description: Agent earnings and payout tracking
+# =============================================================================
+
+models:
+  # ---------------------------------------------------------------------------
+  # AgentEarning - Agent earning record for tasks completed
+  # ---------------------------------------------------------------------------
+  - name: AgentEarning
+    collection: agent_earnings
+    description: "Agent earning record for tasks completed"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique earning identifier"
+
+      agent_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.Agent.id
+        description: "Agent who earned"
+
+      # =======================================================================
+      # Related Task
+      # =======================================================================
+      task_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.AgentTask.id
+        description: "Related task"
+
+      order_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.Order.id
+        description: "Related order"
+
+      # =======================================================================
+      # Earning Type
+      # =======================================================================
+      earning_type:
+        type: EarningType
+        attributes: ["@required"]
+        description: "Type of earning"
+
+      description:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Earning description"
+
+      # =======================================================================
+      # Amount
+      # =======================================================================
+      currency:
+        type: string
+        attributes: ["@default('IDR')", "@length(3)"]
+        description: "Currency code"
+
+      # Base earning
+      base_amount:
+        type: decimal
+        attributes: ["@required", "@precision(12,2)"]
+        description: "Base earning amount"
+
+      # Distance bonus (if applicable)
+      distance_km:
+        type: decimal?
+        attributes: ["@precision(6,2)", "@non_negative"]
+        description: "Task distance in km"
+
+      distance_bonus:
+        type: decimal
+        attributes: ["@default(0)", "@precision(10,2)", "@non_negative"]
+        description: "Distance bonus"
+
+      # Other bonuses
+      time_bonus:
+        type: decimal
+        attributes: ["@default(0)", "@precision(10,2)", "@non_negative"]
+        description: "Time/speed bonus"
+
+      surge_bonus:
+        type: decimal
+        attributes: ["@default(0)", "@precision(10,2)", "@non_negative"]
+        description: "Surge pricing bonus"
+
+      incentive_bonus:
+        type: decimal
+        attributes: ["@default(0)", "@precision(10,2)", "@non_negative"]
+        description: "Incentive/campaign bonus"
+
+      # Tips
+      tip_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(10,2)", "@non_negative"]
+        description: "Customer tip"
+
+      # Deductions
+      deduction_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(10,2)", "@non_negative"]
+        description: "Any deductions"
+
+      deduction_reason:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Reason for deduction"
+
+      # Total
+      total_earning:
+        type: decimal
+        attributes: ["@required", "@precision(12,2)"]
+        description: "Total earning for this record"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      status:
+        type: EarningStatus
+        attributes: ["@default(pending)"]
+        description: "Earning status"
+
+      # =======================================================================
+      # Earning Date
+      # =======================================================================
+      earned_at:
+        type: datetime
+        attributes: ["@required"]
+        description: "When earning was made"
+
+      earning_date:
+        type: date
+        attributes: ["@required"]
+        description: "Earning date (for daily aggregation)"
+
+      # =======================================================================
+      # Payout
+      # =======================================================================
+      is_paid:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Has been paid out"
+
+      payout_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.AgentPayout.id
+        description: "Payout batch reference"
+
+      paid_at:
+        type: datetime?
+        description: "Payout timestamp"
+
+      # =======================================================================
+      # COD Handling
+      # =======================================================================
+      cod_collected:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "COD amount collected"
+
+      cod_deposited:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "COD has been deposited"
+
+      cod_deposited_at:
+        type: datetime?
+        description: "COD deposit timestamp"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    indexes:
+      - type: index
+        fields: [agent_id, earning_date]
+      - type: index
+        fields: [agent_id, status, is_paid]
+      - type: index
+        fields: [task_id]
+      - type: index
+        fields: [order_id]
+      - type: index
+        fields: [earning_type, earned_at]
+      - type: index
+        fields: [cod_collected, cod_deposited]
+        where: "cod_collected > 0"
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  # ---------------------------------------------------------------------------
+  # Earning Type
+  # ---------------------------------------------------------------------------
+  - name: EarningType
+    description: "Type of agent earning"
+    variants:
+      - name: pickup
+        description: "Pickup task earning"
+      - name: delivery
+        description: "Delivery task earning"
+      - name: pickup_delivery
+        description: "Combined pickup and delivery"
+        default: true
+      - name: bonus
+        description: "Bonus earning"
+      - name: tip
+        description: "Customer tip"
+      - name: incentive
+        description: "Incentive program earning"
+      - name: adjustment
+        description: "Manual adjustment"
+      - name: referral
+        description: "Referral bonus"
+
+  # ---------------------------------------------------------------------------
+  # Earning Status
+  # ---------------------------------------------------------------------------
+  - name: EarningStatus
+    description: "Agent earning status"
+    variants:
+      - name: pending
+        description: "Pending confirmation"
+        default: true
+      - name: confirmed
+        description: "Confirmed, awaiting payout"
+      - name: paid
+        description: "Paid out"
+      - name: cancelled
+        description: "Cancelled"
+      - name: disputed
+        description: "Under dispute"

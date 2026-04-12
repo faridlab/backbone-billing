@@ -1,0 +1,320 @@
+# =============================================================================
+# Domain: Payments
+# Entity: FinancialPeriod
+# Description: Provider P&L reporting periods
+# =============================================================================
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  # ---------------------------------------------------------------------------
+  # Financial Period Type
+  # ---------------------------------------------------------------------------
+  - name: FinancialPeriodType
+    description: "Type of financial period"
+    variants:
+      - name: daily
+        description: "Daily period"
+      - name: weekly
+        description: "Weekly period"
+      - name: monthly
+        description: "Monthly period"
+        default: true
+      - name: quarterly
+        description: "Quarterly period"
+      - name: yearly
+        description: "Yearly period"
+
+  # ---------------------------------------------------------------------------
+  # Financial Period Status
+  # ---------------------------------------------------------------------------
+  - name: FinancialPeriodStatus
+    description: "Financial period status"
+    variants:
+      - name: open
+        description: "Period is open for transactions"
+        default: true
+      - name: closing
+        description: "Period is being closed"
+      - name: closed
+        description: "Period is closed"
+      - name: locked
+        description: "Period is locked (no changes allowed)"
+
+# =============================================================================
+# Models
+# =============================================================================
+
+models:
+  # ---------------------------------------------------------------------------
+  # FinancialPeriod - Provider P&L reporting period
+  # ---------------------------------------------------------------------------
+  - name: FinancialPeriod
+    collection: financial_periods
+    description: "Provider financial period for P&L reporting"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique period identifier"
+
+      provider_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.Provider.id
+        description: "Provider"
+
+      # =======================================================================
+      # Period Info
+      # =======================================================================
+      period_type:
+        type: FinancialPeriodType
+        attributes: ["@default(monthly)"]
+        description: "Type of period"
+
+      period_start:
+        type: datetime
+        attributes: ["@required"]
+        description: "Period start date"
+
+      period_end:
+        type: datetime
+        attributes: ["@required"]
+        description: "Period end date"
+
+      fiscal_year:
+        type: int
+        attributes: ["@required"]
+        description: "Fiscal year"
+
+      fiscal_month:
+        type: int?
+        attributes: ["@min(1)", "@max(12)"]
+        description: "Fiscal month"
+
+      # =======================================================================
+      # Revenue
+      # =======================================================================
+      gross_revenue:
+        type: decimal
+        attributes: ["@default(0)", "@precision(16,2)", "@non_negative"]
+        description: "Gross revenue before deductions"
+
+      discounts_given:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Total discounts given"
+
+      refunds_issued:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Total refunds issued"
+
+      net_revenue:
+        type: decimal
+        attributes: ["@default(0)", "@precision(16,2)"]
+        description: "Net revenue after deductions"
+
+      # =======================================================================
+      # Cost of Goods Sold
+      # =======================================================================
+      cogs:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Cost of goods sold"
+
+      labor_cost:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Labor cost"
+
+      material_cost:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Material/supply cost"
+
+      # =======================================================================
+      # Operating Expenses
+      # =======================================================================
+      utility_expense:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Utility (electricity, water, gas)"
+
+      maintenance_expense:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Maintenance expense"
+
+      delivery_expense:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Delivery/transport expense"
+
+      other_expense:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Other expenses"
+
+      # =======================================================================
+      # Platform Fees
+      # =======================================================================
+      platform_commission:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Platform commission paid"
+
+      transaction_fees:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Transaction fees paid"
+
+      subscription_fees:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Subscription fees paid"
+
+      # =======================================================================
+      # Calculated Fields
+      # =======================================================================
+      gross_profit:
+        type: decimal
+        attributes: ["@default(0)", "@precision(16,2)"]
+        description: "Gross profit (Revenue - COGS)"
+
+      operating_profit:
+        type: decimal
+        attributes: ["@default(0)", "@precision(16,2)"]
+        description: "Operating profit (Gross Profit - OpEx)"
+
+      net_profit:
+        type: decimal
+        attributes: ["@default(0)", "@precision(16,2)"]
+        description: "Net profit"
+
+      gross_margin_percent:
+        type: decimal?
+        attributes: ["@precision(5,2)"]
+        description: "Gross margin percentage"
+
+      operating_margin_percent:
+        type: decimal?
+        attributes: ["@precision(5,2)"]
+        description: "Operating margin percentage"
+
+      net_margin_percent:
+        type: decimal?
+        attributes: ["@precision(5,2)"]
+        description: "Net margin percentage"
+
+      # =======================================================================
+      # Comparison
+      # =======================================================================
+      revenue_growth_percent:
+        type: decimal?
+        attributes: ["@precision(6,2)"]
+        description: "Revenue growth vs previous period"
+
+      profit_growth_percent:
+        type: decimal?
+        attributes: ["@precision(6,2)"]
+        description: "Profit growth vs previous period"
+
+      # =======================================================================
+      # Metrics
+      # =======================================================================
+      average_order_value:
+        type: decimal?
+        attributes: ["@precision(12,2)", "@non_negative"]
+        description: "Average order value"
+
+      cost_per_kg:
+        type: decimal?
+        attributes: ["@precision(10,2)", "@non_negative"]
+        description: "Cost per kg processed"
+
+      cost_per_order:
+        type: decimal?
+        attributes: ["@precision(10,2)", "@non_negative"]
+        description: "Cost per order"
+
+      profit_per_kg:
+        type: decimal?
+        attributes: ["@precision(10,2)"]
+        description: "Profit per kg"
+
+      profit_per_order:
+        type: decimal?
+        attributes: ["@precision(10,2)"]
+        description: "Profit per order"
+
+      # =======================================================================
+      # Reports
+      # =======================================================================
+      pnl_report_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "P&L report PDF URL"
+
+      report_generated_at:
+        type: datetime?
+        description: "Report generation timestamp"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      status:
+        type: FinancialPeriodStatus
+        attributes: ["@default(open)"]
+        description: "Period status"
+
+      closed_at:
+        type: datetime?
+        description: "When period was closed"
+
+      closed_by:
+        type: uuid?
+        description: "Who closed the period"
+
+      currency:
+        type: string
+        attributes: ["@default('IDR')", "@length(3)"]
+        description: "Currency code"
+
+      notes:
+        type: string?
+        attributes: ["@max(1000)"]
+        description: "Period notes"
+
+      # =======================================================================
+      # Denormalized stats (JSONB)
+      # =======================================================================
+      data:
+        type: json
+        attributes: ["@default('{\"total_orders\":0,\"total_revenue\":0,\"total_weight_kg\":0}')"]
+        description: "Denormalized stats: total_orders, total_revenue, total_weight_kg"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      closed_by_user:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(closed_by)"]
+        description: "User who closed"
+
+    indexes:
+      - type: unique
+        fields: [provider_id, period_type, period_start]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [provider_id, fiscal_year, fiscal_month]
+      - type: index
+        fields: [provider_id, status]
+      - type: index
+        fields: [period_start, period_end]

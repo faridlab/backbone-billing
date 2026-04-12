@@ -1,0 +1,897 @@
+# =============================================================================
+# Domain: Payments
+# Entities: Payment, PaymentGatewayDetail, PaymentFee,
+#           Invoice, InvoiceLineItem, InvoiceParty
+# Description: Payment transaction records and invoice management
+# =============================================================================
+
+models:
+  # ---------------------------------------------------------------------------
+  # Payment - Payment transaction record (normalized)
+  # ---------------------------------------------------------------------------
+  - name: Payment
+    collection: payments
+    description: "Payment transaction record"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique payment identifier"
+
+      payment_number:
+        type: string
+        attributes: ["@required", "@unique", "@max(30)"]
+        description: "Payment reference number (PAY-XXXXXXXX)"
+
+      # =======================================================================
+      # Related Entity
+      # =======================================================================
+      payable_type:
+        type: PayableType
+        attributes: ["@required"]
+        description: "Entity type being paid for"
+
+      payable_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Entity ID"
+
+      order_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.Order.id
+        description: "Order reference (if order payment)"
+
+      # =======================================================================
+      # Payer
+      # =======================================================================
+      payer_type:
+        type: PayerType
+        attributes: ["@required"]
+        description: "Type of payer"
+
+      payer_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Payer entity ID"
+
+      # =======================================================================
+      # Payee (Recipient)
+      # =======================================================================
+      payee_type:
+        type: PayeeType
+        attributes: ["@required"]
+        description: "Type of payee"
+
+      payee_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Payee entity ID"
+
+      # =======================================================================
+      # Amount
+      # =======================================================================
+      currency:
+        type: string
+        attributes: ["@default('IDR')", "@length(3)"]
+        description: "Currency code"
+
+      amount:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)", "@positive"]
+        description: "Payment amount"
+
+      net_amount:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)"]
+        description: "Net amount after fees"
+
+      # =======================================================================
+      # Payment Method
+      # =======================================================================
+      gateway:
+        type: PaymentGateway
+        attributes: ["@default(xendit)"]
+        description: "Payment gateway"
+
+      channel:
+        type: PaymentChannel
+        attributes: ["@required"]
+        description: "Payment channel"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      status:
+        type: PaymentTransactionStatus
+        attributes: ["@default(pending)"]
+        description: "Payment status"
+
+      # =======================================================================
+      # Timestamps
+      # =======================================================================
+      expires_at:
+        type: datetime?
+        description: "Payment link expiry"
+
+      paid_at:
+        type: datetime?
+        description: "Payment completion timestamp"
+
+      failed_at:
+        type: datetime?
+        description: "Failure timestamp"
+
+      cancelled_at:
+        type: datetime?
+        description: "Cancellation timestamp"
+
+      # =======================================================================
+      # Failure Details
+      # =======================================================================
+      failure_code:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Failure code from gateway"
+
+      failure_message:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Failure message"
+
+      # =======================================================================
+      # Settlement
+      # =======================================================================
+      settlement_id:
+        type: uuid?
+        attributes: ["@foreign_key(Settlement.id)"]
+        description: "Settlement reference"
+
+      # =======================================================================
+      # Notes
+      # =======================================================================
+      description:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Payment description"
+
+      notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Internal notes"
+
+      # =======================================================================
+      # Denormalized stats (JSONB)
+      # =======================================================================
+      data:
+        type: json
+        attributes: ["@default('{\"payer_name\":null,\"payer_email\":null,\"payer_phone\":null,\"is_settled\":false,\"settled_at\":null,\"is_refunded\":false,\"refunded_amount\":0}')"]
+        description: "Denormalized stats: payer_name, payer_email, payer_phone, is_settled, settled_at, is_refunded, refunded_amount"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      settlement:
+        type: Settlement?
+        attributes: ["@one", "@foreign_key(settlement_id)"]
+        description: "Settlement batch"
+        inverse: payments
+
+      gateway_detail:
+        type: PaymentGatewayDetail?
+        attributes: ["@one"]
+        description: "Gateway-specific details"
+        inverse: payment
+
+      fees:
+        type: PaymentFee[]
+        attributes: ["@many"]
+        description: "Fee breakdown"
+        inverse: payment
+
+    indexes:
+      - type: unique
+        fields: [payment_number]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [payable_type, payable_id]
+      - type: index
+        fields: [payer_type, payer_id]
+      - type: index
+        fields: [status, created_at]
+      - type: index
+        fields: [gateway, status]
+      - type: index
+        fields: ["(data->>'is_settled')", settlement_id]
+      - type: index
+        fields: [order_id]
+
+  # ---------------------------------------------------------------------------
+  # PaymentGatewayDetail - Gateway-specific payment details
+  # ---------------------------------------------------------------------------
+  - name: PaymentGatewayDetail
+    collection: payment_gateway_details
+    description: "Gateway-specific details for a payment transaction"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique identifier"
+
+      payment_id:
+        type: uuid
+        attributes: ["@required", "@unique", "@foreign_key(Payment.id)"]
+        description: "Payment reference"
+
+      external_id:
+        type: string?
+        attributes: ["@max(100)", "@exclude_from_foreign_key_check"]
+        description: "External payment ID from gateway"
+
+      invoice_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Payment invoice URL"
+
+      checkout_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Checkout URL for payment"
+
+      qr_code_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "QR code URL (for QRIS)"
+
+      virtual_account_number:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Virtual account number"
+
+      virtual_account_bank:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Virtual account bank"
+
+      webhook_payload:
+        type: json?
+        description: "Last webhook payload for debugging"
+
+      webhook_received_at:
+        type: datetime?
+        description: "Last webhook received timestamp"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      payment:
+        type: Payment
+        attributes: ["@one", "@foreign_key(payment_id)"]
+        description: "Parent payment"
+        inverse: gateway_detail
+
+    indexes:
+      - type: unique
+        fields: [payment_id]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [external_id]
+
+  # ---------------------------------------------------------------------------
+  # PaymentFee - Payment fee breakdown
+  # ---------------------------------------------------------------------------
+  - name: PaymentFee
+    collection: payment_fees
+    description: "Individual fee line for a payment"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique identifier"
+
+      payment_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(Payment.id)"]
+        description: "Payment reference"
+
+      fee_type:
+        type: PaymentFeeType
+        attributes: ["@required"]
+        description: "Type of fee"
+
+      amount:
+        type: decimal
+        attributes: ["@required", "@precision(10,2)", "@non_negative"]
+        description: "Fee amount"
+
+      description:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Fee description"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      payment:
+        type: Payment
+        attributes: ["@one", "@foreign_key(payment_id)"]
+        description: "Parent payment"
+        inverse: fees
+
+    indexes:
+      - type: index
+        fields: [payment_id]
+      - type: index
+        fields: [fee_type]
+
+  # ---------------------------------------------------------------------------
+  # Invoice - Invoice record (normalized)
+  # ---------------------------------------------------------------------------
+  - name: Invoice
+    collection: invoices
+    description: "Invoice for orders, subscriptions, and settlements"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique invoice identifier"
+
+      invoice_number:
+        type: string
+        attributes: ["@required", "@unique", "@max(30)"]
+        description: "Invoice number (INV-YYYYMM-XXXXX)"
+
+      # =======================================================================
+      # Invoice Type
+      # =======================================================================
+      invoice_type:
+        type: InvoiceType
+        attributes: ["@default(order)"]
+        description: "Type of invoice"
+
+      # =======================================================================
+      # Related Entity (polymorphic)
+      # =======================================================================
+      invoiceable_type:
+        type: InvoiceableType
+        attributes: ["@required"]
+        description: "Type of entity being invoiced"
+
+      invoiceable_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Entity ID"
+
+      order_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.Order.id
+        description: "Order reference"
+
+      settlement_id:
+        type: uuid?
+        attributes: ["@foreign_key(Settlement.id)"]
+        description: "Settlement reference"
+
+      # =======================================================================
+      # Dates
+      # =======================================================================
+      issue_date:
+        type: date
+        attributes: ["@required"]
+        description: "Invoice issue date"
+
+      due_date:
+        type: date?
+        description: "Payment due date"
+
+      # =======================================================================
+      # Amounts
+      # =======================================================================
+      currency:
+        type: string
+        attributes: ["@default('IDR')", "@length(3)"]
+        description: "Currency code"
+
+      subtotal:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)", "@non_negative"]
+        description: "Subtotal before tax/discount"
+
+      discount_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Discount amount"
+
+      tax_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Tax amount"
+
+      tax_rate:
+        type: decimal?
+        attributes: ["@precision(5,2)"]
+        description: "Tax rate percentage"
+
+      total_amount:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)", "@non_negative"]
+        description: "Total amount due"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      status:
+        type: InvoiceStatus
+        attributes: ["@default(draft)"]
+        description: "Invoice status"
+
+      sent_via:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Channel (email, whatsapp)"
+
+      # =======================================================================
+      # Payment
+      # =======================================================================
+      paid_at:
+        type: datetime?
+        description: "Full payment timestamp"
+
+      payment_id:
+        type: uuid?
+        attributes: ["@foreign_key(Payment.id)"]
+        description: "Payment reference"
+
+      # =======================================================================
+      # Document
+      # =======================================================================
+      pdf_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Generated PDF URL"
+
+      pdf_generated_at:
+        type: datetime?
+        description: "PDF generation timestamp"
+
+      # =======================================================================
+      # Notes
+      # =======================================================================
+      notes:
+        type: string?
+        attributes: ["@max(1000)"]
+        description: "Invoice notes"
+
+      terms:
+        type: string?
+        attributes: ["@max(1000)"]
+        description: "Payment terms"
+
+      footer:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Footer text"
+
+      # =======================================================================
+      # Denormalized stats (JSONB)
+      # =======================================================================
+      data:
+        type: json
+        attributes: ["@default('{\"paid_amount\":0,\"balance_due\":0,\"sent_at\":null,\"viewed_at\":null}')"]
+        description: "Denormalized stats: paid_amount, balance_due, sent_at, viewed_at"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      settlement:
+        type: Settlement?
+        attributes: ["@one", "@foreign_key(settlement_id)"]
+        description: "Related settlement"
+        inverse: invoices
+
+      payment:
+        type: Payment?
+        attributes: ["@one", "@foreign_key(payment_id)"]
+        description: "Payment received"
+        inverse: invoices
+
+      parties:
+        type: InvoiceParty[]
+        attributes: ["@many"]
+        description: "Invoice parties (issuer and recipient)"
+        inverse: invoice
+
+      line_items:
+        type: InvoiceLineItem[]
+        attributes: ["@many"]
+        description: "Invoice line items"
+        inverse: invoice
+
+    indexes:
+      - type: unique
+        fields: [invoice_number]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [invoiceable_type, invoiceable_id]
+      - type: index
+        fields: [status, due_date]
+      - type: index
+        fields: [issue_date]
+      - type: index
+        fields: [invoice_type, status]
+
+  # ---------------------------------------------------------------------------
+  # InvoiceParty - Invoice issuer or recipient (normalized)
+  # ---------------------------------------------------------------------------
+  - name: InvoiceParty
+    collection: invoice_parties
+    description: "Party involved in an invoice (issuer or recipient)"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique identifier"
+
+      invoice_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(Invoice.id)"]
+        description: "Invoice reference"
+
+      role:
+        type: InvoicePartyRole
+        attributes: ["@required"]
+        description: "Party role (issuer or recipient)"
+
+      party_type:
+        type: InvoicePartyType
+        attributes: ["@required"]
+        description: "Entity type (platform, provider, customer, corporate)"
+
+      party_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Entity ID"
+
+      name:
+        type: string
+        attributes: ["@required", "@max(255)"]
+        description: "Party name"
+
+      email:
+        type: email?
+        description: "Party email"
+
+      address:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Party address"
+
+      tax_id:
+        type: string?
+        attributes: ["@max(50)", "@exclude_from_foreign_key_check"]
+        description: "Tax ID / NPWP"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      invoice:
+        type: Invoice
+        attributes: ["@one", "@foreign_key(invoice_id)"]
+        description: "Parent invoice"
+        inverse: parties
+
+    indexes:
+      - type: unique
+        fields: [invoice_id, role]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [party_type, party_id]
+
+  # ---------------------------------------------------------------------------
+  # InvoiceLineItem - Invoice line item (normalized from JSON)
+  # ---------------------------------------------------------------------------
+  - name: InvoiceLineItem
+    collection: invoice_line_items
+    description: "Individual line item on an invoice"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique identifier"
+
+      invoice_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(Invoice.id)"]
+        description: "Invoice reference"
+
+      sort_order:
+        type: integer
+        attributes: ["@default(0)"]
+        description: "Display order"
+
+      description:
+        type: string
+        attributes: ["@required", "@max(500)"]
+        description: "Line item description"
+
+      quantity:
+        type: decimal
+        attributes: ["@required", "@precision(10,2)", "@positive"]
+        description: "Quantity"
+
+      unit_price:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)", "@non_negative"]
+        description: "Unit price"
+
+      amount:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)", "@non_negative"]
+        description: "Line total (quantity x unit_price)"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      invoice:
+        type: Invoice
+        attributes: ["@one", "@foreign_key(invoice_id)"]
+        description: "Parent invoice"
+        inverse: line_items
+
+    indexes:
+      - type: index
+        fields: [invoice_id, sort_order]
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  # ---------------------------------------------------------------------------
+  # Payable Type
+  # ---------------------------------------------------------------------------
+  - name: PayableType
+    description: "Type of entity being paid for"
+    variants:
+      - name: order
+        description: "Order payment"
+        default: true
+      - name: subscription
+        description: "Subscription payment"
+      - name: registration
+        description: "Registration fee payment"
+      - name: corporate_invoice
+        description: "Corporate invoice payment"
+
+  # ---------------------------------------------------------------------------
+  # Payer Type
+  # ---------------------------------------------------------------------------
+  - name: PayerType
+    description: "Type of payer making the payment"
+    variants:
+      - name: customer
+        description: "Customer payer"
+        default: true
+      - name: corporate
+        description: "Corporate payer"
+      - name: provider
+        description: "Provider payer"
+
+  # ---------------------------------------------------------------------------
+  # Payee Type
+  # ---------------------------------------------------------------------------
+  - name: PayeeType
+    description: "Type of payee receiving the payment"
+    variants:
+      - name: provider
+        description: "Service provider"
+        default: true
+      - name: platform
+        description: "Platform"
+
+  # ---------------------------------------------------------------------------
+  # Payment Transaction Status
+  # ---------------------------------------------------------------------------
+  - name: PaymentTransactionStatus
+    description: "Payment transaction status"
+    variants:
+      - name: pending
+        description: "Awaiting payment"
+        default: true
+      - name: processing
+        description: "Being processed"
+      - name: completed
+        description: "Successfully completed"
+      - name: failed
+        description: "Payment failed"
+      - name: expired
+        description: "Payment link expired"
+      - name: cancelled
+        description: "Cancelled"
+      - name: refunded
+        description: "Refunded"
+      - name: partially_refunded
+        description: "Partially refunded"
+
+  # ---------------------------------------------------------------------------
+  # Payment Gateway
+  # ---------------------------------------------------------------------------
+  - name: PaymentGateway
+    description: "Payment gateway providers"
+    variants:
+      - name: xendit
+        description: "Xendit"
+        default: true
+      - name: midtrans
+        description: "Midtrans"
+      - name: doku
+        description: "DOKU"
+      - name: stripe
+        description: "Stripe"
+      - name: manual
+        description: "Manual payment"
+
+  # ---------------------------------------------------------------------------
+  # Payment Channel
+  # ---------------------------------------------------------------------------
+  - name: PaymentChannel
+    description: "Specific payment channels"
+    variants:
+      - name: qris
+        description: "QRIS"
+        default: true
+      - name: va_bca
+        description: "Virtual Account BCA"
+      - name: va_bni
+        description: "Virtual Account BNI"
+      - name: va_bri
+        description: "Virtual Account BRI"
+      - name: va_mandiri
+        description: "Virtual Account Mandiri"
+      - name: va_permata
+        description: "Virtual Account Permata"
+      - name: va_cimb
+        description: "Virtual Account CIMB"
+      - name: ovo
+        description: "OVO e-wallet"
+      - name: gopay
+        description: "GoPay e-wallet"
+      - name: dana
+        description: "DANA e-wallet"
+      - name: shopeepay
+        description: "ShopeePay e-wallet"
+      - name: linkaja
+        description: "LinkAja e-wallet"
+      - name: credit_card
+        description: "Credit card"
+      - name: debit_card
+        description: "Debit card"
+      - name: cash
+        description: "Cash"
+      - name: bank_transfer
+        description: "Manual bank transfer"
+
+  # ---------------------------------------------------------------------------
+  # Payment Fee Type
+  # ---------------------------------------------------------------------------
+  - name: PaymentFeeType
+    description: "Type of payment fee"
+    variants:
+      - name: service_fee
+        description: "Service fee"
+        default: true
+      - name: gateway_fee
+        description: "Payment gateway fee"
+      - name: tax
+        description: "Tax"
+
+  # ---------------------------------------------------------------------------
+  # Invoiceable Type
+  # ---------------------------------------------------------------------------
+  - name: InvoiceableType
+    description: "Type of entity being invoiced"
+    variants:
+      - name: order
+        description: "Order invoice"
+        default: true
+      - name: settlement
+        description: "Settlement invoice"
+      - name: subscription
+        description: "Subscription invoice"
+      - name: corporate_invoice
+        description: "Corporate invoice"
+
+  # ---------------------------------------------------------------------------
+  # Invoice Type
+  # ---------------------------------------------------------------------------
+  - name: InvoiceType
+    description: "Type of invoice"
+    variants:
+      - name: order
+        description: "Order invoice"
+        default: true
+      - name: subscription
+        description: "Subscription invoice"
+      - name: registration
+        description: "Registration fee invoice"
+      - name: settlement
+        description: "Settlement invoice"
+      - name: corporate
+        description: "Corporate invoice"
+
+  # ---------------------------------------------------------------------------
+  # Invoice Status
+  # ---------------------------------------------------------------------------
+  - name: InvoiceStatus
+    description: "Invoice status"
+    variants:
+      - name: draft
+        description: "Draft"
+        default: true
+      - name: sent
+        description: "Sent to customer"
+      - name: viewed
+        description: "Viewed by customer"
+      - name: paid
+        description: "Paid"
+      - name: partially_paid
+        description: "Partially paid"
+      - name: overdue
+        description: "Past due date"
+      - name: cancelled
+        description: "Cancelled"
+      - name: void
+        description: "Voided"
+
+  # ---------------------------------------------------------------------------
+  # Invoice Party Role
+  # ---------------------------------------------------------------------------
+  - name: InvoicePartyRole
+    description: "Role of a party on an invoice"
+    variants:
+      - name: issuer
+        description: "Invoice issuer (from)"
+        default: true
+      - name: recipient
+        description: "Invoice recipient (to)"
+
+  # ---------------------------------------------------------------------------
+  # Invoice Party Type
+  # ---------------------------------------------------------------------------
+  - name: InvoicePartyType
+    description: "Entity type of an invoice party"
+    variants:
+      - name: platform
+        description: "Platform"
+        default: true
+      - name: provider
+        description: "Service provider"
+      - name: customer
+        description: "Customer"
+      - name: corporate
+        description: "Corporate"

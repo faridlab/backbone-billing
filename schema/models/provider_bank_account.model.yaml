@@ -1,0 +1,272 @@
+# =============================================================================
+# Module: Payments
+# Entity: ProviderBankAccount
+# Description: Provider bank accounts for settlements
+# =============================================================================
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  - name: BankAccountType
+    description: "Type of bank account"
+    variants:
+      - name: checking
+        description: "Checking account"
+        default: true
+      - name: savings
+        description: "Savings account"
+      - name: business
+        description: "Business account"
+
+  - name: BankAccountStatus
+    description: "Bank account status"
+    variants:
+      - name: pending
+        description: "Pending verification"
+        default: true
+      - name: verified
+        description: "Verified"
+      - name: rejected
+        description: "Rejected"
+      - name: suspended
+        description: "Suspended"
+      - name: inactive
+        description: "Inactive"
+
+  - name: VerificationMethod
+    description: "Account verification method"
+    variants:
+      - name: micro_deposit
+        description: "Micro deposit verification"
+        default: true
+      - name: document
+        description: "Document verification"
+      - name: instant
+        description: "Instant verification"
+      - name: manual
+        description: "Manual verification"
+
+# =============================================================================
+# Models
+# =============================================================================
+
+models:
+  - name: ProviderBankAccount
+    collection: provider_bank_accounts
+    description: "Provider bank account for settlements"
+    config:
+      generators:
+        disabled: [handler, usecase, cqrs, projection, bulk-operations]
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique bank account identifier"
+
+      provider_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        # logical FK to bersihir.Provider.id
+        description: "Account owner provider"
+
+      # =======================================================================
+      # Bank Details
+      # =======================================================================
+      bank_code:
+        type: string
+        attributes: ["@required", "@max(20)"]
+        description: "Bank code (e.g., BCA, BNI, MANDIRI)"
+
+      bank_name:
+        type: string
+        attributes: ["@required", "@max(100)"]
+        description: "Bank name"
+
+      account_number:
+        type: string
+        attributes: ["@required", "@max(50)", "@sensitive"]
+        description: "Bank account number"
+
+      account_name:
+        type: string
+        attributes: ["@required", "@max(100)"]
+        description: "Account holder name"
+
+      account_type:
+        type: BankAccountType
+        attributes: ["@default(checking)"]
+        description: "Type of account"
+
+      # =======================================================================
+      # Branch Info (optional)
+      # =======================================================================
+      branch_name:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Branch name"
+
+      branch_code:
+        type: string?
+        attributes: ["@max(20)"]
+        description: "Branch code"
+
+      swift_code:
+        type: string?
+        attributes: ["@max(20)"]
+        description: "SWIFT/BIC code"
+
+      # =======================================================================
+      # Verification
+      # =======================================================================
+      status:
+        type: BankAccountStatus
+        attributes: ["@default(pending)"]
+        description: "Account status"
+
+      is_verified:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Account has been verified"
+
+      verified_at:
+        type: datetime?
+        description: "Verification timestamp"
+
+      verified_by:
+        type: uuid?
+        description: "Verified by admin"
+
+      verification_method:
+        type: VerificationMethod?
+        description: "Verification method used"
+
+      verification_notes:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Verification notes"
+
+      # =======================================================================
+      # Rejection
+      # =======================================================================
+      rejection_reason:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Rejection reason"
+
+      rejected_at:
+        type: datetime?
+        description: "Rejection timestamp"
+
+      rejected_by:
+        type: uuid?
+        description: "Rejected by admin"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      is_primary:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Primary account for settlements"
+
+      is_active:
+        type: bool
+        attributes: ["@default(true)"]
+        description: "Account is active"
+
+      # =======================================================================
+      # Gateway Integration
+      # =======================================================================
+      gateway_account_id:
+        type: string?
+        attributes: ["@max(100)", "@exclude_from_foreign_key_check"]
+        description: "Payment gateway registered account ID"
+
+      gateway_status:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Status in payment gateway"
+
+      gateway_metadata:
+        type: json
+        attributes: ["@default('{}')"]
+        description: "Gateway-specific metadata"
+
+      # =======================================================================
+      # Document
+      # =======================================================================
+      document_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Bank statement/proof document"
+
+      document_type:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Document type"
+
+      # =======================================================================
+      # Statistics
+      # =======================================================================
+      total_settlements:
+        type: int
+        attributes: ["@default(0)", "@non_negative"]
+        description: "Total settlements received"
+
+      total_amount_received:
+        type: decimal
+        attributes: ["@default(0)", "@precision(16,2)", "@non_negative"]
+        description: "Total amount received"
+
+      last_settlement_at:
+        type: datetime?
+        description: "Last settlement timestamp"
+
+      last_settlement_amount:
+        type: decimal?
+        attributes: ["@precision(14,2)", "@non_negative"]
+        description: "Last settlement amount"
+
+      # =======================================================================
+      # Notes
+      # =======================================================================
+      notes:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Internal notes"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      verified_by_user:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(verified_by)"]
+        description: "Verified by"
+
+      rejected_by_user:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(rejected_by)"]
+        description: "Rejected by"
+
+      settlements:
+        type: Settlement[]
+        attributes: ["@one_to_many"]
+        description: "Settlements to this bank account"
+        inverse: bank_account
+
+    indexes:
+      - type: index
+        fields: [provider_id, is_primary, is_active]
+      - type: index
+        fields: [provider_id, is_verified]
+      - type: index
+        fields: [provider_id, status]
+      - type: unique
+        fields: [provider_id, bank_code, account_number]
+        where: "deleted_at IS NULL"
