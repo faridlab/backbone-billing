@@ -463,6 +463,129 @@ impl BillingWriteService {
         Ok(())
     }
 
+    /// Apply a settlement against an invoice (driven by payment's `PaymentSettled` via an ACL) — the
+    /// cash-loop seam target. **Billing's invariant (CLAMP, council 2026-07-05):** it knocks off only
+    /// what is owed — `applied = min(requested, outstanding)` — and returns `applied`. It never
+    /// rejects an over-settlement: the cash physically arrived, so the caller books the unapplied
+    /// remainder (`requested − applied`) as an on-account party credit (already sitting on the A/R
+    /// control from the settlement post). This keeps the GL A/R and the billing subledger in
+    /// agreement even when two payments race the same invoice. Draws outstanding down, advances
+    /// payment schedules fill-in-order, flips status → `partially_paid` / `paid`. One transaction,
+    /// `FOR UPDATE` on the invoice + its schedules.
+    pub async fn apply_settlement(&self, invoice_ref: Uuid, kind: &str, amount: Decimal) -> Result<Decimal, BillingError> {
+        let table = match kind {
+            "sales" => "billing.sales_invoices",
+            "purchase" => "billing.purchase_invoices",
+            _ => return Err(BillingError::NotDraft(format!("unknown invoice kind {kind}"))),
+        };
+        if amount < Decimal::ZERO { return Err(BillingError::NegativeAmount); }
+        let amount = money(amount);
+        if amount.is_zero() { return Ok(Decimal::ZERO); }
+
+        let mut tx = self.db_pool.begin().await?;
+        let sql = format!(
+            "SELECT outstanding_amount FROM {table} WHERE id=$1 AND (metadata->>'deleted_at') IS NULL FOR UPDATE",
+        );
+        let row = sqlx::query(&sql).bind(invoice_ref).fetch_optional(&mut *tx).await?
+            .ok_or(BillingError::InvoiceNotFound(invoice_ref))?;
+        let outstanding: Decimal = row.get("outstanding_amount");
+        // Clamp to what is owed; the remainder is the caller's on-account credit.
+        let applied = if amount < outstanding { amount } else { outstanding };
+        if applied.is_zero() {
+            tx.commit().await?;
+            return Ok(Decimal::ZERO);
+        }
+        let new_out = outstanding - applied;
+        let new_status = if new_out.is_zero() { "paid" } else { "partially_paid" };
+        let usql = format!(
+            "UPDATE {table} SET outstanding_amount=$2, status=$3::invoice_status WHERE id=$1",
+        );
+        sqlx::query(&usql).bind(invoice_ref).bind(new_out).bind(new_status).execute(&mut *tx).await?;
+
+        // Draw down payment schedules fill-in-order (earliest installment first) by the applied amount.
+        let scheds = sqlx::query(
+            "SELECT id, amount, paid_amount FROM billing.payment_schedules WHERE invoice_ref=$1 AND invoice_kind=$2::invoice_kind AND (metadata->>'deleted_at') IS NULL ORDER BY installment_no FOR UPDATE",
+        ).bind(invoice_ref).bind(kind).fetch_all(&mut *tx).await?;
+        let mut remaining = applied;
+        for s in &scheds {
+            if remaining.is_zero() { break; }
+            let sid: Uuid = s.get("id");
+            let samt: Decimal = s.get("amount");
+            let paid: Decimal = s.get("paid_amount");
+            let capacity = samt - paid;
+            if capacity <= Decimal::ZERO { continue; }
+            let take = if capacity < remaining { capacity } else { remaining };
+            let new_paid = paid + take;
+            let sstatus = if new_paid >= samt { "paid" } else { "partially_paid" };
+            sqlx::query("UPDATE billing.payment_schedules SET paid_amount=$2, status=$3::payment_schedule_status WHERE id=$1")
+                .bind(sid).bind(new_paid).bind(sstatus).execute(&mut *tx).await?;
+            remaining -= take;
+        }
+        tx.commit().await?;
+        Ok(applied)
+    }
+
+    /// Reverse a settlement against an invoice (driven by payment's `PaymentCancelled` via an ACL) —
+    /// the paired mirror of `apply_settlement` (council 2026-07-05). **Restores** `outstanding_amount`
+    /// by `restored = min(amount, grand_total − outstanding)` (never above the invoice total — the
+    /// bound that makes a repeat/redelivered reverse safe), rewinds payment schedules last-installment
+    /// first (the inverse of fill-in-order), and flips status → `partially_paid` / `submitted`
+    /// (re-owed). Without this, a refunded/bounced payment would leave the invoice permanently `paid`.
+    /// Returns the amount actually restored. One transaction, `FOR UPDATE`.
+    pub async fn reverse_settlement(&self, invoice_ref: Uuid, kind: &str, amount: Decimal) -> Result<Decimal, BillingError> {
+        let table = match kind {
+            "sales" => "billing.sales_invoices",
+            "purchase" => "billing.purchase_invoices",
+            _ => return Err(BillingError::NotDraft(format!("unknown invoice kind {kind}"))),
+        };
+        if amount < Decimal::ZERO { return Err(BillingError::NegativeAmount); }
+        let amount = money(amount);
+        if amount.is_zero() { return Ok(Decimal::ZERO); }
+
+        let mut tx = self.db_pool.begin().await?;
+        let sql = format!(
+            "SELECT outstanding_amount, grand_total FROM {table} WHERE id=$1 AND (metadata->>'deleted_at') IS NULL FOR UPDATE",
+        );
+        let row = sqlx::query(&sql).bind(invoice_ref).fetch_optional(&mut *tx).await?
+            .ok_or(BillingError::InvoiceNotFound(invoice_ref))?;
+        let outstanding: Decimal = row.get("outstanding_amount");
+        let grand: Decimal = row.get("grand_total");
+        // Restore at most what was actually settled — never push outstanding above the invoice total.
+        let headroom = grand - outstanding;
+        let restored = if amount < headroom { amount } else { headroom };
+        if restored.is_zero() {
+            tx.commit().await?;
+            return Ok(Decimal::ZERO);
+        }
+        let new_out = outstanding + restored;
+        let new_status = if new_out >= grand { "submitted" } else { "partially_paid" };
+        let usql = format!(
+            "UPDATE {table} SET outstanding_amount=$2, status=$3::invoice_status WHERE id=$1",
+        );
+        sqlx::query(&usql).bind(invoice_ref).bind(new_out).bind(new_status).execute(&mut *tx).await?;
+
+        // Rewind schedules last-installment first (inverse of the fill-in-order drawdown).
+        let scheds = sqlx::query(
+            "SELECT id, amount, paid_amount FROM billing.payment_schedules WHERE invoice_ref=$1 AND invoice_kind=$2::invoice_kind AND (metadata->>'deleted_at') IS NULL ORDER BY installment_no DESC FOR UPDATE",
+        ).bind(invoice_ref).bind(kind).fetch_all(&mut *tx).await?;
+        let mut remaining = restored;
+        for s in &scheds {
+            if remaining.is_zero() { break; }
+            let sid: Uuid = s.get("id");
+            let samt: Decimal = s.get("amount");
+            let paid: Decimal = s.get("paid_amount");
+            if paid <= Decimal::ZERO { continue; }
+            let take = if paid < remaining { paid } else { remaining };
+            let new_paid = paid - take;
+            let sstatus = if new_paid.is_zero() { "unpaid" } else if new_paid >= samt { "paid" } else { "partially_paid" };
+            sqlx::query("UPDATE billing.payment_schedules SET paid_amount=$2, status=$3::payment_schedule_status WHERE id=$1")
+                .bind(sid).bind(new_paid).bind(sstatus).execute(&mut *tx).await?;
+            remaining -= take;
+        }
+        tx.commit().await?;
+        Ok(restored)
+    }
+
     // ---- shared -------------------------------------------------------------
 
     async fn short_circuit_posted(&self, table: &str, invoice_id: Uuid) -> Result<Option<PostOutcome>, BillingError> {
