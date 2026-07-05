@@ -1,228 +1,179 @@
-# Billing Module
+# Backbone Module Skeleton
 
-A complete Domain-Driven Design (DDD) bounded context module built on the **Backbone Framework**. This module follows Clean Architecture principles with a **schema-first** approach where YAML schema files are the single source of truth.
+A minimal, copy-ready starting point for new Backbone Framework modules.
+It ships with exactly **one** reference entity (`Example`) wired end-to-end
+so you can rename it to your own domain concept and start generating.
 
-## Architecture Overview
+## What you get
+
+- A single schema model at `schema/models/example.model.yaml`
+- Two migrations (`001_create_enums.up.sql`, `002_create_example_table.up.sql`)
+- A complete DDD layer cake for `Example`:
+  - Domain entity + repository trait
+  - Application service (type alias over `GenericCrudService`)
+  - Application DTOs (Create / Update / Patch / Response)
+  - Infrastructure repository (thin newtype over `GenericCrudRepository`)
+  - Presentation HTTP handler
+  - Routes
+  - Seeder
+- A `Module` struct wiring the service into the framework
+
+## Directory layout
+
+The tree below shows the **complete canonical Backbone module structure**.
+This skeleton ships only the minimum viable subset (one `Example` entity,
+two migrations, the core DDD layers); every other folder is documented here
+so you know where to add the optional layers when you need them.
 
 ```
-billing/
-├── schema/                          # SCHEMA DEFINITIONS (Single Source of Truth)
-│   ├── models/                     # Entity schema definitions
-│   │   ├── index.model.yaml       # Module configuration and shared types
-│   │   └── {entity}.model.yaml    # Entity definitions
-│   ├── hooks/                      # Event hooks and triggers
-│   │   └── index.hook.yaml        # Events and scheduled jobs
-│   ├── workflows/                  # Business workflows
-│   │   └── README.md              # Workflow documentation
-│   └── openapi/                    # OpenAPI specifications
-│       └── index.openapi.yaml     # API documentation
+backbone-module/
 │
-├── src/                            # SOURCE CODE (Generated + Custom)
-│   ├── domain/                    # Domain Layer (generated)
-│   │   ├── entity/               # Entity implementations
-│   │   ├── value_object/         # Value objects
-│   │   ├── event/                # Domain events
-│   │   └── mod.rs
-│   │
-│   ├── application/               # Application Layer (generated)
-│   │   ├── {entity}_services.rs  # Application services
-│   │   └── mod.rs
-│   │
-│   ├── infrastructure/            # Infrastructure Layer (generated)
-│   │   ├── persistence/          # Repository implementations
-│   │   │   └── postgres/
-│   │   └── mod.rs
-│   │
-│   ├── presentation/              # Presentation Layer (generated)
-│   │   ├── http/                 # REST handlers
-│   │   ├── grpc/                 # gRPC services
-│   │   └── mod.rs
-│   │
-│   └── lib.rs                    # Module entry point
+├── schema/                              # SCHEMA DEFINITIONS — Single Source of Truth
+│   ├── models/                          # Entity schema definitions
+│   │   └── example.model.yaml           # The one reference entity (rename me)
+│   ├── hooks/                           # Lifecycle hooks and triggers
+│   ├── workflows/                       # Business workflow definitions
+│   └── openapi/                         # OpenAPI / Swagger specifications
 │
-├── migrations/                    # DATABASE MIGRATIONS
-│   └── postgres/                 # PostgreSQL migrations (generated)
+├── migrations/                          # DATABASE MIGRATIONS (PostgreSQL)
+│   ├── 001_create_enums.up.sql          # Enum types (e.g. example_status)
+│   ├── 001_create_enums.down.sql
+│   ├── 002_create_example_table.up.sql  # CREATE TABLE for the example entity
+│   └── 002_create_example_table.down.sql
 │
-├── Cargo.toml                    # Dependencies
-└── README.md                     # This file
+├── src/                                 # SOURCE CODE (generated + custom)
+│   │
+│   ├── lib.rs                           # Module entry point + re-exports
+│   ├── module.rs                        # `Module` struct — wires service into framework
+│   │
+│   ├── domain/                          # Domain Layer — pure business model
+│   │   ├── entity/                      # Entity structs + trait impls
+│   │   │   └── example.rs
+│   │   ├── repositories/                # Repository traits (ports)
+│   │   │   └── example_repository.rs
+│   │   ├── value_objects/               # Value objects
+│   │   ├── event/                       # Domain events
+│   │   ├── state_machine/               # State transition definitions
+│   │   ├── services/                    # Domain services
+│   │   ├── specifications/              # Specification pattern
+│   │   └── permission/                  # Permission rules
+│   │
+│   ├── application/                     # Application Layer — use cases & orchestration
+│   │   ├── dto/                         # Create / Update / Patch / Response DTOs
+│   │   │   └── example_dto.rs
+│   │   ├── service/                     # Application services
+│   │   │   ├── example_service.rs       # Type alias over GenericCrudService
+│   │   │   └── error.rs                 # Service-level error types
+│   │   ├── usecases/                    # Use case implementations
+│   │   ├── commands/                    # CQRS commands
+│   │   ├── queries/                     # CQRS queries
+│   │   ├── validator/                   # Input validation
+│   │   ├── workflows/                   # Workflow orchestration
+│   │   ├── triggers/                    # Database trigger handlers
+│   │   ├── bulk_operations/             # Bulk import/export
+│   │   ├── auth/                        # Module-specific auth
+│   │   ├── middleware/                  # Application middleware
+│   │   └── subscriptions/               # Event subscriptions
+│   │
+│   ├── infrastructure/                  # Infrastructure Layer — adapters
+│   │   ├── persistence/                 # Repository implementations
+│   │   │   └── example_repository_impl.rs   # Postgres repo via GenericCrudRepository
+│   │   ├── event_store/                 # Event sourcing storage
+│   │   ├── projections/                 # CQRS read-model projections
+│   │   ├── cache/                       # Caching adapters
+│   │   ├── rate_limiter/                # Rate limiting
+│   │   ├── jobs/                        # Background jobs
+│   │   ├── messaging/                   # Message bus adapters
+│   │   ├── external/                    # Third-party integrations
+│   │   ├── metrics/                     # Prometheus metrics
+│   │   └── health/                      # Health check endpoints
+│   │
+│   ├── presentation/                    # Presentation Layer — transport
+│   │   ├── http/                        # REST / Axum handlers
+│   │   │   └── example_handler.rs       # BackboneCrudHandler wiring
+│   │   ├── grpc/                        # gRPC services
+│   │   ├── graphql/                     # GraphQL resolvers
+│   │   ├── cli/                         # CLI subcommands
+│   │   ├── dto/                         # Wire-format DTOs
+│   │   ├── middleware/                  # Transport middleware
+│   │   └── versioning/                  # API versioning
+│   │
+│   ├── routes/                          # Route composition
+│   │   └── example_routes.rs
+│   │
+│   ├── seeders/                         # Sample data for `backbone seed run`
+│   │   └── example_seeder.rs
+│   │
+│   ├── handlers/                        # Custom handler entry points
+│   ├── integration/                     # Inter-module integration adapters
+│   └── exports/                         # Public API exports
+│
+├── proto/                               # PROTOBUF DEFINITIONS (generated from schema)
+│   ├── domain/
+│   │   └── entity/                      # Entity messages
+│   └── services/                        # Service definitions
+│
+├── tests/
+│   ├── integration_tests.rs             # Stub — replace with your own test suite
+│   └── integration/                     # Integration test fixtures
+│
+├── config/                              # MODULE CONFIGURATION
+│   ├── application.yml                  # Default runtime config (db, server, log)
+│   ├── application-dev.yml              # Development overrides
+│   └── application-prod.yml             # Production overrides
+│
+├── docs/                                # Module-specific documentation
+├── benches/                             # Criterion benchmarks
+│
+├── buf.yaml                             # Protobuf lint config
+├── Cargo.toml                           # Trimmed deps — update `path = "..."` after copying
+└── README.md                            # This file
 ```
 
-## Quick Start
+> **What ships in this skeleton:** `schema/models/example.model.yaml`, the two
+> example migrations, `Cargo.toml`, `README.md`, `buf.yaml`, `config/application.yml`,
+> `tests/integration_tests.rs`, and the `src/` layers `domain/{entity,repositories}`,
+> `application/{dto,service}`, `infrastructure/persistence`, `presentation/http`,
+> `routes`, `seeders`, plus `lib.rs` and `module.rs`.
+> Everything else in the tree above is a **placeholder for layers you can add later**.
 
-### 1. Define Your Schema
+## Getting started
 
-Create entity schema files in `schema/models/`:
+1. **Copy** this directory to wherever your new module should live.
+2. **Name your crate** in `Cargo.toml` — set `[package].name`. The `backbone-*`
+   crates are **git dependencies** pinned to `branch = "main"`, so the skeleton
+   builds anywhere on disk with no path fix-up. For a release, pin them to a
+   tag or commit (`tag = "vX.Y.Z"` or `rev = "<sha>"`) for a reproducible build.
+3. **Rename** `example` to your entity name throughout:
+   - `schema/models/example.model.yaml` → `<your_entity>.model.yaml`
+   - Inside the YAML, change `Example`, `examples`, `ExampleStatus`
+   - The matching `src/` files and `migrations/*_example_*.sql`
+4. **Regenerate** with `metaphor`:
 
-```yaml
-# schema/models/example.model.yaml
-name: Example
-table_name: examples
-collection: examples
+   ```bash
+   metaphor schema schema generate <module_name> --target all --force
+   ```
 
-fields:
-  id:
-    type: uuid
-    attributes: ["@id", "@default(uuid)"]
-  name:
-    type: string
-    attributes: ["@required"]
-    validation:
-      min_length: 1
-      max_length: 255
-  description:
-    type: text
-    attributes: ["@nullable"]
-  status:
-    type: enum
-    enum_values: [active, inactive, pending]
-    attributes: ["@default(active)"]
-  created_at:
-    type: datetime
-    attributes: ["@default(now)"]
-  updated_at:
-    type: datetime
-    attributes: ["@default(now)", "@updated_at"]
-  deleted_at:
-    type: datetime
-    attributes: ["@nullable", "@soft_delete"]
+5. **Run migrations**:
 
-indexes:
-  - name: idx_examples_status
-    fields: [status]
-  - name: idx_examples_created_at
-    fields: [created_at]
+   ```bash
+   DATABASE_URL="postgresql://..." metaphor migration run
+   ```
 
-permissions:
-  create: ["admin", "editor"]
-  read: ["admin", "editor", "viewer"]
-  update: ["admin", "editor"]
-  delete: ["admin"]
-```
+## Custom code (regeneration safety)
 
-### 2. Generate Code
+Anywhere you see a `// <<< CUSTOM` / `// END CUSTOM` marker, the content in
+between is preserved across regeneration. For code outside those markers, use
+the `_custom` suffix convention:
 
-Run the schema generator to create all code from your schema:
+- `order_photo_service_custom.rs` — never rewritten
+- Register in `mod.rs` beneath a `// <<< CUSTOM` marker
+- Wire custom HTTP endpoints via `custom_routes.rs`, not the generated handler
 
-```bash
-# Generate everything
-backbone schema generate billing --target all
+## Going further
 
-# Or generate specific targets
-backbone schema generate billing --target proto,rust,sql
-backbone schema generate billing --target handler,grpc,cqrs
-backbone schema generate billing --target repository,events
-```
-
-### 3. Run Migrations
-
-```bash
-# Run PostgreSQL migrations
-sqlx migrate run --source migrations/postgres
-```
-
-### 4. Use the Module
-
-```rust
-use backbone_billing::BillingModule;
-
-// Create module instance with builder pattern
-let module = BillingModule::builder()
-    .with_database(pool)
-    .build()?;
-
-// Get routes
-let routes = module.routes();
-```
-
-## Schema Generation Targets
-
-| Target | Description | Generated Files |
-|--------|-------------|-----------------|
-| `proto` | Protocol Buffer definitions | `*.proto` files |
-| `rust` | Rust entity structs | `domain/entity/*.rs` |
-| `sql` | PostgreSQL migrations | `migrations/postgres/*.sql` |
-| `repository` | Repository implementations | `infrastructure/persistence/*.rs` |
-| `cqrs` | Commands and queries | `application/commands/*.rs`, `application/queries/*.rs` |
-| `handler` | HTTP handlers | `presentation/http/*.rs` |
-| `grpc` | gRPC services | `presentation/grpc/*.rs` |
-| `events` | Domain events | `domain/event/*.rs` |
-| `value-object` | Value objects | `domain/value_object/*.rs` |
-| `validator` | Validation rules | `domain/validator/*.rs` |
-| `state-machine` | State machines | `domain/state_machine/*.rs` |
-| `permission` | Permission definitions | `domain/permission/*.rs` |
-| `trigger` | Database triggers | `infrastructure/trigger/*.rs` |
-| `openapi` | OpenAPI specifications | `schema/openapi/*.yaml` |
-| `all` | All of the above | Everything |
-
-## Standard CRUD Endpoints
-
-Each entity automatically gets 12 standard endpoints:
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/{collection}` | List with pagination |
-| `POST` | `/api/v1/{collection}` | Create |
-| `GET` | `/api/v1/{collection}/:id` | Get by ID |
-| `PUT` | `/api/v1/{collection}/:id` | Full update |
-| `PATCH` | `/api/v1/{collection}/:id` | Partial update |
-| `DELETE` | `/api/v1/{collection}/:id` | Soft delete |
-| `POST` | `/api/v1/{collection}/bulk` | Bulk create |
-| `POST` | `/api/v1/{collection}/upsert` | Upsert |
-| `GET` | `/api/v1/{collection}/trash` | List deleted |
-| `POST` | `/api/v1/{collection}/:id/restore` | Restore |
-| `DELETE` | `/api/v1/{collection}/empty` | Empty trash |
-| `GET` | `/api/v1/{collection}/count` | Count records |
-
-## Development Workflow
-
-### Adding a New Entity
-
-1. Create schema file: `schema/models/{entity}.model.yaml`
-2. Run generator: `backbone schema generate billing --target all`
-3. Run migrations: `sqlx migrate run`
-4. Test endpoints
-
-### Modifying an Entity
-
-1. Update schema file
-2. Generate migration: `backbone migration alter {Entity} billing -d "description"`
-3. Regenerate code: `backbone schema generate billing --target all`
-4. Run migrations
-
-### Custom Business Logic
-
-Add custom logic in the generated service files. The generator preserves custom code in marked sections.
-
-## Testing
-
-```bash
-# Run all tests
-cargo test --package backbone-billing
-
-# Run with database
-DATABASE_URL=postgresql://... cargo test --package backbone-billing
-```
-
-## Configuration
-
-Environment variables:
-- `DATABASE_URL` - PostgreSQL connection string
-- `RUST_LOG` - Log level (trace, debug, info, warn, error)
-
-## Dependencies
-
-This module depends on:
-- `backbone-core` - Core framework utilities
-- `backbone-orm` - ORM and database traits
-- `backbone-auth` - Authentication and authorization
-- `backbone-messaging` - Event messaging
-
-## Documentation
-
-- [Framework Documentation](../../docs/technical/FRAMEWORK.md)
-- [API Guidelines](../../docs/technical/API_GUIDELINES.md)
-- [Quick Start Guide](../../docs/technical/QUICKSTART.md)
-
-## License
-
-Part of the Backbone Framework.
+This skeleton intentionally excludes the optional layers (event store, cache,
+gRPC, GraphQL, CLI, triggers, validators, workflows, state machines, ...).
+Add them back from the full framework docs as you need them. The directory
+structure mirrors what the generator expects, so adding a new layer is as
+simple as creating the corresponding `mod.rs` and pointing `lib.rs` at it.
