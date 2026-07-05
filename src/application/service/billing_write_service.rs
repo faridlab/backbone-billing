@@ -15,7 +15,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use super::billing_events::{
-    BilledLine, BillingEvent, BillingEventSink, LoggingSink, PurchaseInvoicePosted, SalesInvoicePosted,
+    BilledLine, BillingEvent, BillingEventSink, InvoiceCancelled, LoggingSink, PurchaseInvoicePosted,
+    SalesInvoicePosted,
 };
 use super::billing_gl::{AccountingPostEnvelope, GlPostLine, GlPostSink};
 
@@ -279,7 +280,7 @@ impl BillingWriteService {
         let env = AccountingPostEnvelope {
             idempotency_key: invoice_id.to_string(), company_id: inv.get("company_id"), branch_id: inv.get("branch_id"),
             source_type: "order".into(), source_id: invoice_id, source_reference: Some(invoice_number),
-            posting_date: inv.get("posting_date"), currency, posting_type: "original".into(),
+            posting_date: inv.get("posting_date"), currency, posting_type: "original".into(), reverses_post_id: None,
             description: Some("Sales invoice".into()), lines,
         };
         if !env.is_balanced() { return Err(BillingError::UnbalancedPost); }
@@ -403,7 +404,7 @@ impl BillingWriteService {
         let env = AccountingPostEnvelope {
             idempotency_key: invoice_id.to_string(), company_id: inv.get("company_id"), branch_id: inv.get("branch_id"),
             source_type: "expense".into(), source_id: invoice_id, source_reference: Some(invoice_number),
-            posting_date: inv.get("posting_date"), currency, posting_type: "original".into(),
+            posting_date: inv.get("posting_date"), currency, posting_type: "original".into(), reverses_post_id: None,
             description: Some("Purchase invoice".into()), lines,
         };
         if !env.is_balanced() { return Err(BillingError::UnbalancedPost); }
@@ -587,6 +588,45 @@ impl BillingWriteService {
         }
         tx.commit().await?;
         Ok(restored)
+    }
+
+    /// Credit-note a posted Sales Invoice — REVERSE the revenue recognition (council 2026-07-05, the
+    /// POS returns path). Posts the sign-flipped AR journal (`Dr Revenue · Cr A/R [customer]`,
+    /// `posting_type="reversal"`, linked via `reverses_post_id`), sets `outstanding_amount=0`, flips the
+    /// invoice → `cancelled`, and emits `InvoiceCancelled`. Distinct from `reverse_settlement` (which
+    /// only restores the settlement's outstanding) — this undoes the revenue itself, so a full return
+    /// (credit note + payment refund) nets revenue, cash, and A/R to zero. Idempotent: a re-credit
+    /// short-circuits on `status='cancelled'`.
+    pub async fn reverse_sales_invoice(&self, invoice_id: Uuid, sink: &dyn GlPostSink) -> Result<PostOutcome, BillingError> {
+        let orig_post: Option<Uuid> = sqlx::query_scalar(
+            "SELECT accounting_post_id FROM billing.sales_invoices WHERE id=$1 AND (metadata->>'deleted_at') IS NULL",
+        ).bind(invoice_id).fetch_optional(&self.db_pool).await?.ok_or(BillingError::InvoiceNotFound(invoice_id))?;
+        // The forward revenue post, sign-flipped, is the credit note.
+        let fwd = self.build_ar_post(invoice_id).await?;
+        let lines = fwd.lines.iter().map(|l| GlPostLine {
+            account_id: l.account_id, debit: l.credit, credit: l.debit,
+            party_type: l.party_type.clone(), party_id: l.party_id,
+            description: l.description.as_ref().map(|d| format!("Credit note: {d}")),
+        }).collect();
+        let env = AccountingPostEnvelope {
+            idempotency_key: format!("reversal:{invoice_id}"), posting_type: "reversal".into(),
+            reverses_post_id: orig_post, lines,
+            description: fwd.description.map(|d| format!("Credit note: {d}")),
+            ..fwd
+        };
+        if !env.is_balanced() { return Err(BillingError::UnbalancedPost); }
+        match sink.post(&env).await {
+            Ok(ack) => {
+                let res = sqlx::query(
+                    "UPDATE billing.sales_invoices SET status='cancelled'::invoice_status, outstanding_amount=0 WHERE id=$1 AND status <> 'cancelled'::invoice_status",
+                ).bind(invoice_id).execute(&self.db_pool).await?;
+                if res.rows_affected() == 1 {
+                    self.sink.publish(BillingEvent::InvoiceCancelled(InvoiceCancelled { invoice_id, kind: "sales".into() }));
+                }
+                Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
+            }
+            Err(rej) => Err(BillingError::GlRejected { code: rej.code, message: rej.message }),
+        }
     }
 
     // ---- shared -------------------------------------------------------------

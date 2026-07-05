@@ -50,7 +50,10 @@ pub struct AccountingPostEnvelope {
     pub source_reference: Option<String>,
     pub posting_date: chrono::NaiveDate,
     pub currency: String,
+    /// "original" | "reversal".
     pub posting_type: String,
+    /// The original post this reverses (set only when `posting_type == "reversal"`).
+    pub reverses_post_id: Option<Uuid>,
     pub description: Option<String>,
     pub lines: Vec<GlPostLine>,
 }
