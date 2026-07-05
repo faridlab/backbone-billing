@@ -310,9 +310,12 @@ impl BillingWriteService {
                 let hdr = sqlx::query("SELECT source_so_id, grand_total FROM billing.sales_invoices WHERE id=$1").bind(invoice_id).fetch_one(&self.db_pool).await?;
                 let so: Option<Uuid> = hdr.get("source_so_id");
                 let grand_total: Decimal = hdr.get("grand_total");
+                // Billed lines (item + qty) for the selling seam — advance the source SO's billed_qty.
+                let line_rows = sqlx::query("SELECT item_id, quantity FROM billing.sales_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL").bind(invoice_id).fetch_all(&self.db_pool).await?;
+                let billed_lines: Vec<BilledLine> = line_rows.iter().map(|r| BilledLine { item_id: r.get("item_id"), quantity: r.get("quantity") }).collect();
                 self.sink.publish(BillingEvent::SalesInvoicePosted(SalesInvoicePosted {
                     invoice_id, company_id: env.company_id, journal_id: ack.journal_id, post_id: ack.post_id,
-                    source_so_id: so, grand_total,
+                    source_so_id: so, billed_lines, grand_total,
                 }));
                 Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
             }

@@ -16,6 +16,9 @@ pub struct SalesInvoicePosted {
     pub journal_id: Uuid,
     pub post_id: Uuid,
     pub source_so_id: Option<Uuid>,
+    /// The billed lines (item + qty) — what a downstream SO's `billed_qty` advances by (the
+    /// order-to-cash mirror of `PurchaseInvoicePosted.billed_lines`).
+    pub billed_lines: Vec<BilledLine>,
     pub grand_total: Decimal,
 }
 
