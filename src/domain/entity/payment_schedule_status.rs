@@ -7,44 +7,41 @@ use utoipa::ToSchema;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "invoice_status", rename_all = "snake_case")]
-pub enum InvoiceStatus {
-    Draft,
-    Submitted,
+#[sqlx(type_name = "payment_schedule_status", rename_all = "snake_case")]
+pub enum PaymentScheduleStatus {
+    Unpaid,
     PartiallyPaid,
     Paid,
-    Cancelled,
+    Overdue,
 }
 
-impl std::fmt::Display for InvoiceStatus {
+impl std::fmt::Display for PaymentScheduleStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Draft => write!(f, "draft"),
-            Self::Submitted => write!(f, "submitted"),
+            Self::Unpaid => write!(f, "unpaid"),
             Self::PartiallyPaid => write!(f, "partially_paid"),
             Self::Paid => write!(f, "paid"),
-            Self::Cancelled => write!(f, "cancelled"),
+            Self::Overdue => write!(f, "overdue"),
         }
     }
 }
 
-impl FromStr for InvoiceStatus {
+impl FromStr for PaymentScheduleStatus {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "draft" => Ok(Self::Draft),
-            "submitted" => Ok(Self::Submitted),
+            "unpaid" => Ok(Self::Unpaid),
             "partially_paid" => Ok(Self::PartiallyPaid),
             "paid" => Ok(Self::Paid),
-            "cancelled" => Ok(Self::Cancelled),
-            _ => Err(format!("Unknown InvoiceStatus variant: {}", s)),
+            "overdue" => Ok(Self::Overdue),
+            _ => Err(format!("Unknown PaymentScheduleStatus variant: {}", s)),
         }
     }
 }
 
-impl Default for InvoiceStatus {
+impl Default for PaymentScheduleStatus {
     fn default() -> Self {
-        Self::Draft
+        Self::Unpaid
     }
 }
