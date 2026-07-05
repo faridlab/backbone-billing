@@ -1,17 +1,19 @@
 # =============================================================================
-# Billing Module - Schema Index
+# billing Module - Schema Index
 # =============================================================================
 # Version: 2.0
-# Description: Payments, invoices, settlements, refunds (extracted from bersihir)
-#
-# Run `backbone schema generate billing --target all` to generate code.
+# Description: Module schema index. `module:` and `schema:` are stamped from the
+# module name by `metaphor module create`. `schema:` gives this module its OWN
+# Postgres schema (migrations emit `CREATE SCHEMA billing` and qualify tables
+# as `billing.<table>`) — the convention every backbone module follows
+# (see backbone-sapiens, backbone-bucket). Do not remove it.
 # =============================================================================
 
 module: billing
 version: 2
-description: "Payments, invoices, settlements, refunds (extracted from bersihir)"
+schema: billing
+description: "Billing: region-neutral AR/AP invoicing (Sales + Purchase Invoice) emitting revenue/expense AccountingPosts into backbone-accounting; tax via a removable InvoiceTaxLine overlay; drives buying.mark_billed via PurchaseInvoicePosted."
 
-# Module-level configuration
 config:
   database: postgresql
   soft_delete: true
@@ -22,14 +24,13 @@ config:
       - graphql
       - grpc
       - proto
-      - openapi
 
-# External imports - reuse sapiens for user identity (same pattern as bersihir)
+# Reuse sapiens for user identity (actors) — logical refs, no DB constraint.
 external_imports:
   - module: sapiens
     types: [User]
 
-# Shared types available to all models in this module
+# Shared value-object types available to all models in this module.
 shared_types:
   Timestamps:
     created_at:
@@ -60,11 +61,9 @@ shared_types:
 
   Metadata: [Timestamps, Actors]
 
-# Import all model files
+# Import each entity model (parents before children).
 imports:
-  - payment.model.yaml
-  - settlement.model.yaml
-  - financial_period.model.yaml
-  - agent_earning.model.yaml
-  - refund.model.yaml
-  - provider_bank_account.model.yaml
+  - sales_invoice.model.yaml
+  - purchase_invoice.model.yaml
+  - invoice_tax_line.model.yaml
+  - payment_schedule.model.yaml

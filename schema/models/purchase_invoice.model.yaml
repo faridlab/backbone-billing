@@ -1,0 +1,200 @@
+# =============================================================================
+# Domain: Billing
+# Entity: PurchaseInvoice (+ PurchaseInvoiceLine)
+# Description: REGION-NEUTRAL A/P invoice (symmetric to SalesInvoice). No tax
+# columns; PPN Input + PPh (withholding) land in the InvoiceTaxLine overlay. On
+# post, billing emits a balanced A/P AccountingPost (Dr Expense · Dr PPN Input ·
+# Cr A/P · Cr PPh Payable) and a PurchaseInvoicePosted event that drives
+# backbone-buying's billed watermark (retiring its simulated billing leg).
+# =============================================================================
+
+models:
+  - name: PurchaseInvoice
+    collection: purchase_invoices
+    description: "Region-neutral A/P invoice; emits an A/P AccountingPost + PurchaseInvoicePosted"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique invoice identifier"
+
+      invoice_number:
+        type: string
+        attributes: ["@required", "@max(40)"]
+        description: "Human reference (supplier's bill no.; the post's source_reference)"
+
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Books owner # logical FK to organization.Company.id"
+
+      branch_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Branch # logical FK to organization.Branch.id"
+
+      supplier_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Supplier # logical FK to party.Party.id (the A/P subledger party)"
+
+      source_po_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Source purchase order # logical FK to buying.PurchaseOrder.id (advances its billed_qty)"
+
+      status:
+        type: InvoiceStatus
+        attributes: ["@default(draft)"]
+        description: "Document lifecycle"
+
+      posting_date:
+        type: date
+        attributes: ["@required"]
+        description: "Invoice / posting date"
+
+      due_date:
+        type: date?
+        description: "Payment due date"
+
+      currency:
+        type: string
+        attributes: ["@default(\"IDR\")", "@max(3)"]
+        description: "ISO currency code"
+
+      net_total:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "Σ line net amounts (the expense debit, pre-tax)"
+
+      tax_total:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "Σ overlay input-tax lines (PPN Input)"
+
+      withholding_total:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "Σ overlay withholding lines (PPh — a deduction from A/P)"
+
+      grand_total:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "A/P owed = net_total + tax_total - withholding_total"
+
+      outstanding_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "Unpaid balance (starts = grand_total on post)"
+
+      payable_account_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "A/P control account # logical FK to accounting.Account.id"
+
+      posting_state:
+        type: GlPostingState
+        attributes: ["@default(pending)"]
+        description: "GL reconciliation state"
+
+      journal_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Resulting journal # logical FK to accounting.Journal.id"
+
+      accounting_post_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "The AccountingPost record # logical FK to accounting.AccountingPost.id"
+
+      posted_at:
+        type: datetime?
+        description: "When the GL post was confirmed"
+
+      notes:
+        type: string?
+        attributes: ["@max(1000)"]
+        description: "Free-text notes"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    relations:
+      lines:
+        type: PurchaseInvoiceLine[]
+        attributes: ["@one_to_many"]
+        description: "Expense lines"
+        inverse: invoice
+
+    indexes:
+      - type: unique
+        fields: [invoice_number]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [company_id, supplier_id, status]
+      - type: index
+        fields: [posting_state]
+
+  - name: PurchaseInvoiceLine
+    collection: purchase_invoice_lines
+    description: "One net expense line (no tax — the overlay carries PPN/PPh)"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique line id"
+
+      invoice_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(PurchaseInvoice.id)"]
+        description: "Owning invoice"
+
+      item_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Catalog item # logical FK to catalog.Item.id"
+
+      expense_account_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Expense/asset account # logical FK to accounting.Account.id (often GR/IR clearing)"
+
+      description:
+        type: string?
+        attributes: ["@max(300)"]
+        description: "Line description snapshot"
+
+      quantity:
+        type: decimal
+        attributes: ["@required", "@precision(18,4)", "@non_negative"]
+        description: "Quantity billed"
+
+      unit_price:
+        type: decimal
+        attributes: ["@required", "@precision(18,2)", "@non_negative"]
+        description: "Price per unit"
+
+      net_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "quantity * unit_price (computed; no tax)"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    relations:
+      invoice:
+        type: PurchaseInvoice
+        attributes: ["@one", "@foreign_key(invoice_id)"]
+        description: "Owning invoice"
+        inverse: lines
+
+    indexes:
+      - type: index
+        fields: [invoice_id]

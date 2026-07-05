@@ -1,0 +1,90 @@
+# =============================================================================
+# Domain: Billing
+# Entity: InvoiceTaxLine (the REMOVABLE tax overlay)
+# Description: Tax lines keyed by a LOGICAL invoice ref (no DB FK to the invoice)
+# — localization-standard §1: the base invoice carries no tax columns; PPN/PPh
+# live here and are populated from backbone-tax's TaxResult (supplied for now).
+# Remove this table and invoices still compute + post clean (net only). `basis`
+# distinguishes output (PPN out), input (PPN in), and withholding (PPh).
+# =============================================================================
+
+models:
+  - name: InvoiceTaxLine
+    collection: invoice_tax_lines
+    description: "A tax line attached to an invoice by logical ref (removable overlay)"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique tax-line id"
+
+      invoice_ref:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "The invoice id this tax line belongs to (logical — sales or purchase)"
+
+      invoice_kind:
+        type: InvoiceKind
+        attributes: ["@required"]
+        description: "Which invoice table `invoice_ref` points at"
+
+      account_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Tax account # logical FK to accounting.Account.id (PPN Output/Input or PPh Payable)"
+
+      basis:
+        type: TaxBasis
+        attributes: ["@required"]
+        description: "output (PPN out) | input (PPN in) | withholding (PPh, a deduction)"
+
+      description:
+        type: string?
+        attributes: ["@max(150)"]
+        description: "Tax-line label (e.g. 'PPN Keluaran 11%')"
+
+      taxable_base:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "Base the tax was computed on"
+
+      rate:
+        type: decimal
+        attributes: ["@default(0)", "@precision(9,4)", "@non_negative"]
+        description: "Percentage rate applied (informational; amount is authoritative)"
+
+      tax_amount:
+        type: decimal
+        attributes: ["@required", "@precision(18,2)", "@non_negative"]
+        description: "Tax amount (posted to account_id)"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    indexes:
+      - type: index
+        fields: [invoice_ref, invoice_kind]
+
+enums:
+  - name: InvoiceKind
+    description: "Which invoice a tax line / schedule belongs to"
+    variants:
+      - name: sales
+        description: "Sales invoice (AR)"
+        default: true
+      - name: purchase
+        description: "Purchase invoice (A/P)"
+
+  - name: TaxBasis
+    description: "Kind of tax line"
+    variants:
+      - name: output
+        description: "Output VAT (PPN Keluaran) — credited on a sales invoice"
+        default: true
+      - name: input
+        description: "Input VAT (PPN Masukan) — debited on a purchase invoice"
+      - name: withholding
+        description: "Withholding tax (PPh) — deducted from A/P, credited to PPh Payable"
