@@ -1,0 +1,478 @@
+//! Validated write path + AR/AP posting engine for billing (hand-authored, user-owned).
+//!
+//! Region-neutral: invoices carry NO tax columns; tax lines live in the removable `InvoiceTaxLine`
+//! overlay (supplied for now; `backbone-tax` computes them later). On post, billing assembles the
+//! net lines + overlay tax into ONE balanced `AccountingPost`:
+//!   - **Sales:** `Dr A/R (grand) [customer] · Cr Revenue (net per account) · Cr PPN Output (Σoutput)`
+//!   - **Purchase:** `Dr Expense (net) · Dr PPN Input (Σinput) · Cr A/P (grand) [supplier] · Cr PPh (Σwithholding)`
+//! `grand = net + output` (sales); `grand = net + input − withholding` (purchase, the A/P owed).
+//! Posting is idempotent (source_id = invoice id) + reconciled from the ack, like every seam.
+
+use rust_decimal::{Decimal, RoundingStrategy};
+use sqlx::{PgPool, Row};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use uuid::Uuid;
+
+use super::billing_events::{
+    BilledLine, BillingEvent, BillingEventSink, LoggingSink, PurchaseInvoicePosted, SalesInvoicePosted,
+};
+use super::billing_gl::{AccountingPostEnvelope, GlPostLine, GlPostSink};
+
+fn money(v: Decimal) -> Decimal {
+    v.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+}
+
+// --- input structs -----------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub struct NewInvoiceLine {
+    pub item_id: Uuid,
+    /// Revenue account (sales) or expense/GR-IR account (purchase).
+    pub account_id: Uuid,
+    pub description: Option<String>,
+    pub quantity: Decimal,
+    pub unit_price: Decimal,
+}
+
+/// A supplied tax line for the overlay. `basis`: "output" | "input" | "withholding".
+#[derive(Debug, Clone)]
+pub struct NewTaxLine {
+    pub account_id: Uuid,
+    pub basis: String,
+    pub description: Option<String>,
+    pub rate: Decimal,
+    pub tax_amount: Decimal,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewSalesInvoice {
+    pub invoice_number: String,
+    pub company_id: Uuid,
+    pub branch_id: Option<Uuid>,
+    pub customer_id: Uuid,
+    pub source_so_id: Option<Uuid>,
+    pub posting_date: chrono::NaiveDate,
+    pub due_date: Option<chrono::NaiveDate>,
+    pub currency: Option<String>,
+    pub receivable_account_id: Uuid,
+    pub lines: Vec<NewInvoiceLine>,
+    pub tax_lines: Vec<NewTaxLine>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewPurchaseInvoice {
+    pub invoice_number: String,
+    pub company_id: Uuid,
+    pub branch_id: Option<Uuid>,
+    pub supplier_id: Uuid,
+    pub source_po_id: Option<Uuid>,
+    pub posting_date: chrono::NaiveDate,
+    pub due_date: Option<chrono::NaiveDate>,
+    pub currency: Option<String>,
+    pub payable_account_id: Uuid,
+    pub lines: Vec<NewInvoiceLine>,
+    pub tax_lines: Vec<NewTaxLine>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostOutcome {
+    pub invoice_id: Uuid,
+    pub post_id: Uuid,
+    pub journal_id: Uuid,
+    pub idempotent_reuse: bool,
+}
+
+// --- errors ------------------------------------------------------------------
+
+#[derive(Debug)]
+pub enum BillingError {
+    EmptyDocument,
+    NegativeAmount,
+    UnsupportedCurrency(String),
+    UnbalancedPost,
+    DuplicateNumber(String),
+    InvoiceNotFound(Uuid),
+    NotDraft(String),
+    GlRejected { code: String, message: String },
+    Db(sqlx::Error),
+}
+
+impl BillingError {
+    pub fn code(&self) -> String {
+        match self {
+            BillingError::EmptyDocument => "empty_document".into(),
+            BillingError::NegativeAmount => "negative_amount".into(),
+            BillingError::UnsupportedCurrency(_) => "unsupported_currency".into(),
+            BillingError::UnbalancedPost => "unbalanced_post".into(),
+            BillingError::DuplicateNumber(_) => "duplicate_number".into(),
+            BillingError::InvoiceNotFound(_) => "invoice_not_found".into(),
+            BillingError::NotDraft(_) => "invoice_not_draft".into(),
+            BillingError::GlRejected { code, .. } => code.clone(),
+            BillingError::Db(_) => "internal_error".into(),
+        }
+    }
+    pub fn http_status(&self) -> u16 {
+        match self {
+            BillingError::InvoiceNotFound(_) => 404,
+            BillingError::Db(_) => 500,
+            _ => 422,
+        }
+    }
+}
+impl std::fmt::Display for BillingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BillingError::GlRejected { code, message } => write!(f, "{code}: {message}"),
+            other => write!(f, "{}", other.code()),
+        }
+    }
+}
+impl std::error::Error for BillingError {}
+impl From<sqlx::Error> for BillingError {
+    fn from(e: sqlx::Error) -> Self { BillingError::Db(e) }
+}
+fn is_dup(e: &sqlx::Error) -> bool {
+    e.as_database_error().map(|d| d.is_unique_violation()).unwrap_or(false)
+}
+
+struct PricedLine {
+    item_id: Uuid,
+    account_id: Uuid,
+    description: Option<String>,
+    quantity: Decimal,
+    unit_price: Decimal,
+    net_amount: Decimal,
+}
+
+/// Price lines (`net = money(qty·price)`), reject empty/negative, and total the supplied tax lines
+/// by basis. Returns (priced, net_total, output, input, withholding).
+fn price(lines: &[NewInvoiceLine], tax: &[NewTaxLine]) -> Result<(Vec<PricedLine>, Decimal, Decimal, Decimal, Decimal), BillingError> {
+    if lines.is_empty() {
+        return Err(BillingError::EmptyDocument);
+    }
+    let mut priced = Vec::with_capacity(lines.len());
+    let mut net_total = Decimal::ZERO;
+    for l in lines {
+        if l.quantity < Decimal::ZERO || l.unit_price < Decimal::ZERO {
+            return Err(BillingError::NegativeAmount);
+        }
+        let net = money(l.quantity * l.unit_price);
+        net_total += net;
+        priced.push(PricedLine {
+            item_id: l.item_id, account_id: l.account_id, description: l.description.clone(),
+            quantity: l.quantity, unit_price: l.unit_price, net_amount: net,
+        });
+    }
+    let mut output = Decimal::ZERO; let mut input = Decimal::ZERO; let mut wht = Decimal::ZERO;
+    for t in tax {
+        if t.tax_amount < Decimal::ZERO { return Err(BillingError::NegativeAmount); }
+        match t.basis.as_str() {
+            "output" => output += t.tax_amount,
+            "input" => input += t.tax_amount,
+            "withholding" => wht += t.tax_amount,
+            _ => {}
+        }
+    }
+    Ok((priced, money(net_total), money(output), money(input), money(wht)))
+}
+
+#[derive(Clone)]
+pub struct BillingWriteService {
+    db_pool: PgPool,
+    sink: Arc<dyn BillingEventSink>,
+}
+
+impl BillingWriteService {
+    pub fn new(db_pool: PgPool) -> Self {
+        Self { db_pool, sink: Arc::new(LoggingSink) }
+    }
+    pub fn with_sink(db_pool: PgPool, sink: Arc<dyn BillingEventSink>) -> Self {
+        Self { db_pool, sink }
+    }
+
+    async fn insert_tax_lines(&self, tx: &mut sqlx::PgConnection, invoice_id: Uuid, kind: &str, tax: &[NewTaxLine]) -> Result<(), BillingError> {
+        for t in tax {
+            sqlx::query(
+                r#"INSERT INTO billing.invoice_tax_lines
+                    (id, invoice_ref, invoice_kind, account_id, basis, description, taxable_base, rate, tax_amount)
+                   VALUES ($1,$2,$3::invoice_kind,$4,$5::tax_basis,$6,0,$7,$8)"#,
+            )
+            .bind(Uuid::new_v4()).bind(invoice_id).bind(kind).bind(t.account_id).bind(&t.basis)
+            .bind(&t.description).bind(t.rate).bind(money(t.tax_amount))
+            .execute(&mut *tx).await?;
+        }
+        Ok(())
+    }
+
+    // ---- Sales Invoice (AR) -------------------------------------------------
+
+    pub async fn create_sales_invoice(&self, inv: NewSalesInvoice) -> Result<Uuid, BillingError> {
+        let (priced, net_total, output, _in, _wht) = price(&inv.lines, &inv.tax_lines)?;
+        let grand = net_total + output;
+        let id = Uuid::new_v4();
+        let currency = inv.currency.unwrap_or_else(|| "IDR".into());
+        let mut tx = self.db_pool.begin().await?;
+        let r = sqlx::query(
+            r#"INSERT INTO billing.sales_invoices
+                (id, invoice_number, company_id, branch_id, customer_id, source_so_id, status,
+                 posting_date, due_date, currency, net_total, tax_total, grand_total, outstanding_amount,
+                 receivable_account_id, posting_state)
+               VALUES ($1,$2,$3,$4,$5,$6,'draft'::invoice_status,$7,$8,$9,$10,$11,$12,0,$13,'pending'::gl_posting_state)"#,
+        )
+        .bind(id).bind(&inv.invoice_number).bind(inv.company_id).bind(inv.branch_id).bind(inv.customer_id)
+        .bind(inv.source_so_id).bind(inv.posting_date).bind(inv.due_date).bind(&currency)
+        .bind(net_total).bind(output).bind(grand).bind(inv.receivable_account_id)
+        .execute(&mut *tx).await;
+        if let Err(e) = r {
+            return Err(if is_dup(&e) { BillingError::DuplicateNumber(inv.invoice_number) } else { e.into() });
+        }
+        for p in &priced {
+            sqlx::query(
+                r#"INSERT INTO billing.sales_invoice_lines
+                    (id, invoice_id, item_id, revenue_account_id, description, quantity, unit_price, net_amount)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"#,
+            )
+            .bind(Uuid::new_v4()).bind(id).bind(p.item_id).bind(p.account_id).bind(&p.description)
+            .bind(p.quantity).bind(p.unit_price).bind(p.net_amount).execute(&mut *tx).await?;
+        }
+        self.insert_tax_lines(&mut *tx, id, "sales", &inv.tax_lines).await?;
+        tx.commit().await?;
+        Ok(id)
+    }
+
+    /// Build the balanced revenue post: `Dr A/R (grand) [customer] · Cr Revenue (net per account) ·
+    /// Cr PPN Output (per overlay output line)`.
+    pub async fn build_ar_post(&self, invoice_id: Uuid) -> Result<AccountingPostEnvelope, BillingError> {
+        let inv = sqlx::query(
+            r#"SELECT invoice_number, company_id, branch_id, customer_id, source_so_id, posting_date,
+                      currency, grand_total, receivable_account_id
+               FROM billing.sales_invoices WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
+        )
+        .bind(invoice_id).fetch_optional(&self.db_pool).await?.ok_or(BillingError::InvoiceNotFound(invoice_id))?;
+        let currency: String = inv.get("currency");
+        if currency != "IDR" { return Err(BillingError::UnsupportedCurrency(currency)); }
+        let customer_id: Uuid = inv.get("customer_id");
+        let grand: Decimal = inv.get("grand_total");
+        let invoice_number: String = inv.get("invoice_number");
+
+        // Cr Revenue per income account.
+        let rev_rows = sqlx::query(
+            "SELECT revenue_account_id, net_amount FROM billing.sales_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL",
+        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
+        let mut revenue: BTreeMap<Uuid, Decimal> = BTreeMap::new();
+        for r in &rev_rows {
+            *revenue.entry(r.get("revenue_account_id")).or_insert(Decimal::ZERO) += r.get::<Decimal, _>("net_amount");
+        }
+        // Cr PPN Output per overlay output line.
+        let tax_rows = sqlx::query(
+            "SELECT account_id, tax_amount FROM billing.invoice_tax_lines WHERE invoice_ref=$1 AND invoice_kind='sales'::invoice_kind AND basis='output'::tax_basis AND (metadata->>'deleted_at') IS NULL",
+        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
+
+        let mut lines = vec![
+            GlPostLine::debit(inv.get::<Uuid, _>("receivable_account_id"), grand)
+                .with_party("customer", customer_id).with_description(format!("A/R {invoice_number}")),
+        ];
+        for (acct, amt) in &revenue { lines.push(GlPostLine::credit(*acct, *amt).with_description("Revenue")); }
+        for t in &tax_rows { lines.push(GlPostLine::credit(t.get("account_id"), t.get("tax_amount")).with_description("PPN Output")); }
+
+        let env = AccountingPostEnvelope {
+            idempotency_key: invoice_id.to_string(), company_id: inv.get("company_id"), branch_id: inv.get("branch_id"),
+            source_type: "order".into(), source_id: invoice_id, source_reference: Some(invoice_number),
+            posting_date: inv.get("posting_date"), currency, posting_type: "original".into(),
+            description: Some("Sales invoice".into()), lines,
+        };
+        if !env.is_balanced() { return Err(BillingError::UnbalancedPost); }
+        Ok(env)
+    }
+
+    pub async fn post_sales_invoice(&self, invoice_id: Uuid, sink: &dyn GlPostSink) -> Result<PostOutcome, BillingError> {
+        if let Some(o) = self.short_circuit_posted("sales_invoices", invoice_id).await? { return Ok(o); }
+        let env = self.build_ar_post(invoice_id).await?;
+        match sink.post(&env).await {
+            Ok(ack) => {
+                // Gate the reconcile + seam event on THIS invocation actually performing the
+                // pending→posted transition. Two concurrent posts both clear short_circuit and both
+                // get a (deduped) ack from accounting; only the one whose UPDATE hits a row may emit
+                // `SalesInvoicePosted` — otherwise the event double-fires to downstream consumers.
+                let res = sqlx::query(
+                    r#"UPDATE billing.sales_invoices SET posting_state='posted'::gl_posting_state,
+                        status='submitted'::invoice_status, journal_id=$2, accounting_post_id=$3,
+                        posted_at=now(), outstanding_amount=grand_total
+                       WHERE id=$1 AND posting_state <> 'posted'::gl_posting_state"#,
+                ).bind(invoice_id).bind(ack.journal_id).bind(ack.post_id).execute(&self.db_pool).await?;
+                if res.rows_affected() == 0 {
+                    // Lost the race: a concurrent post already transitioned + emitted. Reconcile
+                    // from the persisted row; do NOT re-publish the seam event.
+                    return self.short_circuit_posted("sales_invoices", invoice_id).await?
+                        .ok_or(BillingError::InvoiceNotFound(invoice_id));
+                }
+                let hdr = sqlx::query("SELECT source_so_id, grand_total FROM billing.sales_invoices WHERE id=$1").bind(invoice_id).fetch_one(&self.db_pool).await?;
+                let so: Option<Uuid> = hdr.get("source_so_id");
+                let grand_total: Decimal = hdr.get("grand_total");
+                self.sink.publish(BillingEvent::SalesInvoicePosted(SalesInvoicePosted {
+                    invoice_id, company_id: env.company_id, journal_id: ack.journal_id, post_id: ack.post_id,
+                    source_so_id: so, grand_total,
+                }));
+                Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
+            }
+            Err(rej) => {
+                let _ = sqlx::query("UPDATE billing.sales_invoices SET posting_state='failed'::gl_posting_state WHERE id=$1").bind(invoice_id).execute(&self.db_pool).await;
+                Err(BillingError::GlRejected { code: rej.code, message: rej.message })
+            }
+        }
+    }
+
+    // ---- Purchase Invoice (A/P) ---------------------------------------------
+
+    pub async fn create_purchase_invoice(&self, inv: NewPurchaseInvoice) -> Result<Uuid, BillingError> {
+        let (priced, net_total, _out, input, wht) = price(&inv.lines, &inv.tax_lines)?;
+        let grand = net_total + input - wht; // A/P owed
+        // Withholding is a deduction from the payable, never more than the base: a negative A/P would
+        // persist a negative outstanding + emit a negative-A/P seam event (fails open). Refuse it.
+        if grand < Decimal::ZERO { return Err(BillingError::NegativeAmount); }
+        let id = Uuid::new_v4();
+        let currency = inv.currency.unwrap_or_else(|| "IDR".into());
+        let mut tx = self.db_pool.begin().await?;
+        let r = sqlx::query(
+            r#"INSERT INTO billing.purchase_invoices
+                (id, invoice_number, company_id, branch_id, supplier_id, source_po_id, status,
+                 posting_date, due_date, currency, net_total, tax_total, withholding_total, grand_total,
+                 outstanding_amount, payable_account_id, posting_state)
+               VALUES ($1,$2,$3,$4,$5,$6,'draft'::invoice_status,$7,$8,$9,$10,$11,$12,$13,0,$14,'pending'::gl_posting_state)"#,
+        )
+        .bind(id).bind(&inv.invoice_number).bind(inv.company_id).bind(inv.branch_id).bind(inv.supplier_id)
+        .bind(inv.source_po_id).bind(inv.posting_date).bind(inv.due_date).bind(&currency)
+        .bind(net_total).bind(input).bind(wht).bind(grand).bind(inv.payable_account_id)
+        .execute(&mut *tx).await;
+        if let Err(e) = r {
+            return Err(if is_dup(&e) { BillingError::DuplicateNumber(inv.invoice_number) } else { e.into() });
+        }
+        for p in &priced {
+            sqlx::query(
+                r#"INSERT INTO billing.purchase_invoice_lines
+                    (id, invoice_id, item_id, expense_account_id, description, quantity, unit_price, net_amount)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"#,
+            )
+            .bind(Uuid::new_v4()).bind(id).bind(p.item_id).bind(p.account_id).bind(&p.description)
+            .bind(p.quantity).bind(p.unit_price).bind(p.net_amount).execute(&mut *tx).await?;
+        }
+        self.insert_tax_lines(&mut *tx, id, "purchase", &inv.tax_lines).await?;
+        tx.commit().await?;
+        Ok(id)
+    }
+
+    /// Build the balanced A/P post: `Dr Expense (net per account) · Dr PPN Input (per input line) ·
+    /// Cr A/P (grand) [supplier] · Cr PPh Payable (per withholding line)`.
+    pub async fn build_ap_post(&self, invoice_id: Uuid) -> Result<AccountingPostEnvelope, BillingError> {
+        let inv = sqlx::query(
+            r#"SELECT invoice_number, company_id, branch_id, supplier_id, posting_date, currency,
+                      grand_total, payable_account_id
+               FROM billing.purchase_invoices WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
+        )
+        .bind(invoice_id).fetch_optional(&self.db_pool).await?.ok_or(BillingError::InvoiceNotFound(invoice_id))?;
+        let currency: String = inv.get("currency");
+        if currency != "IDR" { return Err(BillingError::UnsupportedCurrency(currency)); }
+        let supplier_id: Uuid = inv.get("supplier_id");
+        let grand: Decimal = inv.get("grand_total");
+        let invoice_number: String = inv.get("invoice_number");
+
+        let exp_rows = sqlx::query(
+            "SELECT expense_account_id, net_amount FROM billing.purchase_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL",
+        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
+        let mut expense: BTreeMap<Uuid, Decimal> = BTreeMap::new();
+        for r in &exp_rows {
+            *expense.entry(r.get("expense_account_id")).or_insert(Decimal::ZERO) += r.get::<Decimal, _>("net_amount");
+        }
+        let input_rows = sqlx::query(
+            "SELECT account_id, tax_amount FROM billing.invoice_tax_lines WHERE invoice_ref=$1 AND invoice_kind='purchase'::invoice_kind AND basis='input'::tax_basis AND (metadata->>'deleted_at') IS NULL",
+        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
+        let wht_rows = sqlx::query(
+            "SELECT account_id, tax_amount FROM billing.invoice_tax_lines WHERE invoice_ref=$1 AND invoice_kind='purchase'::invoice_kind AND basis='withholding'::tax_basis AND (metadata->>'deleted_at') IS NULL",
+        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
+
+        let mut lines: Vec<GlPostLine> = Vec::new();
+        for (acct, amt) in &expense { lines.push(GlPostLine::debit(*acct, *amt).with_description("Expense/GR-IR")); }
+        for t in &input_rows { lines.push(GlPostLine::debit(t.get("account_id"), t.get("tax_amount")).with_description("PPN Input")); }
+        lines.push(GlPostLine::credit(inv.get::<Uuid, _>("payable_account_id"), grand).with_party("supplier", supplier_id).with_description(format!("A/P {invoice_number}")));
+        for t in &wht_rows { lines.push(GlPostLine::credit(t.get("account_id"), t.get("tax_amount")).with_description("PPh Payable")); }
+
+        let env = AccountingPostEnvelope {
+            idempotency_key: invoice_id.to_string(), company_id: inv.get("company_id"), branch_id: inv.get("branch_id"),
+            source_type: "expense".into(), source_id: invoice_id, source_reference: Some(invoice_number),
+            posting_date: inv.get("posting_date"), currency, posting_type: "original".into(),
+            description: Some("Purchase invoice".into()), lines,
+        };
+        if !env.is_balanced() { return Err(BillingError::UnbalancedPost); }
+        Ok(env)
+    }
+
+    pub async fn post_purchase_invoice(&self, invoice_id: Uuid, sink: &dyn GlPostSink) -> Result<PostOutcome, BillingError> {
+        if let Some(o) = self.short_circuit_posted("purchase_invoices", invoice_id).await? { return Ok(o); }
+        let env = self.build_ap_post(invoice_id).await?;
+        match sink.post(&env).await {
+            Ok(ack) => {
+                // Gate the reconcile + seam event on THIS invocation performing the pending→posted
+                // transition — the A/P seam routes `PurchaseInvoicePosted.billed_lines` into
+                // buying::mark_billed, so a double-emit would double-advance the PO's billed_qty and
+                // corrupt the 3-way match. Only the winner of the UPDATE race publishes.
+                let res = sqlx::query(
+                    r#"UPDATE billing.purchase_invoices SET posting_state='posted'::gl_posting_state,
+                        status='submitted'::invoice_status, journal_id=$2, accounting_post_id=$3,
+                        posted_at=now(), outstanding_amount=grand_total
+                       WHERE id=$1 AND posting_state <> 'posted'::gl_posting_state"#,
+                ).bind(invoice_id).bind(ack.journal_id).bind(ack.post_id).execute(&self.db_pool).await?;
+                if res.rows_affected() == 0 {
+                    return self.short_circuit_posted("purchase_invoices", invoice_id).await?
+                        .ok_or(BillingError::InvoiceNotFound(invoice_id));
+                }
+                // Billed lines (item + qty) for the buying seam.
+                let hdr = sqlx::query("SELECT source_po_id, grand_total FROM billing.purchase_invoices WHERE id=$1").bind(invoice_id).fetch_one(&self.db_pool).await?;
+                let po: Option<Uuid> = hdr.get("source_po_id");
+                let grand_total: Decimal = hdr.get("grand_total");
+                let line_rows = sqlx::query("SELECT item_id, quantity FROM billing.purchase_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL").bind(invoice_id).fetch_all(&self.db_pool).await?;
+                let billed_lines: Vec<BilledLine> = line_rows.iter().map(|r| BilledLine { item_id: r.get("item_id"), quantity: r.get("quantity") }).collect();
+                self.sink.publish(BillingEvent::PurchaseInvoicePosted(PurchaseInvoicePosted {
+                    invoice_id, company_id: env.company_id, journal_id: ack.journal_id, post_id: ack.post_id,
+                    source_po_id: po, billed_lines, grand_total,
+                }));
+                Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
+            }
+            Err(rej) => {
+                let _ = sqlx::query("UPDATE billing.purchase_invoices SET posting_state='failed'::gl_posting_state WHERE id=$1").bind(invoice_id).execute(&self.db_pool).await;
+                Err(BillingError::GlRejected { code: rej.code, message: rej.message })
+            }
+        }
+    }
+
+    // ---- Payment schedule ---------------------------------------------------
+
+    /// Attach installment due dates to an invoice (AR or A/P). Lean — settlement is payments' job.
+    pub async fn add_payment_schedule(&self, invoice_ref: Uuid, kind: &str, company_id: Uuid, installments: &[(chrono::NaiveDate, Decimal)]) -> Result<(), BillingError> {
+        let mut tx = self.db_pool.begin().await?;
+        for (i, (due, amt)) in installments.iter().enumerate() {
+            sqlx::query(
+                r#"INSERT INTO billing.payment_schedules
+                    (id, invoice_ref, invoice_kind, company_id, installment_no, due_date, amount, status)
+                   VALUES ($1,$2,$3::invoice_kind,$4,$5,$6,$7,'unpaid'::payment_schedule_status)"#,
+            )
+            .bind(Uuid::new_v4()).bind(invoice_ref).bind(kind).bind(company_id).bind((i + 1) as i32).bind(due).bind(money(*amt))
+            .execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    // ---- shared -------------------------------------------------------------
+
+    async fn short_circuit_posted(&self, table: &str, invoice_id: Uuid) -> Result<Option<PostOutcome>, BillingError> {
+        let sql = format!("SELECT posting_state::text AS ps, journal_id, accounting_post_id FROM billing.{table} WHERE id=$1 AND (metadata->>'deleted_at') IS NULL");
+        let row = sqlx::query(&sql).bind(invoice_id).fetch_optional(&self.db_pool).await?.ok_or(BillingError::InvoiceNotFound(invoice_id))?;
+        if row.get::<String, _>("ps") == "posted" {
+            if let (Some(j), Some(p)) = (row.get::<Option<Uuid>, _>("journal_id"), row.get::<Option<Uuid>, _>("accounting_post_id")) {
+                return Ok(Some(PostOutcome { invoice_id, post_id: p, journal_id: j, idempotent_reuse: true }));
+            }
+        }
+        Ok(None)
+    }
+}
