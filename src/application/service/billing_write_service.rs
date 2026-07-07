@@ -477,6 +477,49 @@ impl BillingWriteService {
     /// payment schedules fill-in-order, flips status → `partially_paid` / `paid`. One transaction,
     /// `FOR UPDATE` on the invoice + its schedules.
     pub async fn apply_settlement(&self, invoice_ref: Uuid, kind: &str, amount: Decimal) -> Result<Decimal, BillingError> {
+        let mut tx = self.db_pool.begin().await?;
+        let applied = self.apply_settlement_in_tx(&mut tx, invoice_ref, kind, amount).await?;
+        tx.commit().await?;
+        Ok(applied)
+    }
+
+    /// **Go-live exactly-once settlement consumer.** Apply every allocation of one `PaymentSettled`
+    /// under a single inbox dedup on the bus `event_id`, all in one transaction — so an at-least-once
+    /// redelivery of the event is a no-op (the drawdown already committed with the dedup mark). This is
+    /// the redelivery-safe entry the payment council parked; the relay calls it with the event's id.
+    /// Returns the total amount applied (0 on a redelivery). Requires `backbone_outbox::outbox::migrate`
+    /// to have created `billing.inbox_consumed`.
+    pub async fn apply_settlements_once(
+        &self,
+        event_id: Uuid,
+        consumer: &str,
+        allocations: &[(Uuid, String, Decimal)],
+    ) -> Result<Decimal, BillingError> {
+        let mut tx = self.db_pool.begin().await?;
+        let first = backbone_outbox::inbox::once(&mut *tx, "billing", consumer, event_id)
+            .await
+            .map_err(|e| BillingError::Db(sqlx::Error::Protocol(e.to_string())))?;
+        if !first {
+            tx.commit().await?; // already consumed — exactly-once no-op
+            return Ok(Decimal::ZERO);
+        }
+        let mut total = Decimal::ZERO;
+        for (invoice_ref, kind, amount) in allocations {
+            total += self.apply_settlement_in_tx(&mut tx, *invoice_ref, kind, *amount).await?;
+        }
+        tx.commit().await?;
+        Ok(total)
+    }
+
+    /// The drawdown core, on a caller-supplied transaction (shared by `apply_settlement` and the
+    /// exactly-once `apply_settlements_once`). Clamps to what is owed; the remainder is on-account.
+    async fn apply_settlement_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        invoice_ref: Uuid,
+        kind: &str,
+        amount: Decimal,
+    ) -> Result<Decimal, BillingError> {
         let table = match kind {
             "sales" => "billing.sales_invoices",
             "purchase" => "billing.purchase_invoices",
@@ -486,17 +529,15 @@ impl BillingWriteService {
         let amount = money(amount);
         if amount.is_zero() { return Ok(Decimal::ZERO); }
 
-        let mut tx = self.db_pool.begin().await?;
         let sql = format!(
             "SELECT outstanding_amount FROM {table} WHERE id=$1 AND (metadata->>'deleted_at') IS NULL FOR UPDATE",
         );
-        let row = sqlx::query(&sql).bind(invoice_ref).fetch_optional(&mut *tx).await?
+        let row = sqlx::query(&sql).bind(invoice_ref).fetch_optional(&mut **tx).await?
             .ok_or(BillingError::InvoiceNotFound(invoice_ref))?;
         let outstanding: Decimal = row.get("outstanding_amount");
         // Clamp to what is owed; the remainder is the caller's on-account credit.
         let applied = if amount < outstanding { amount } else { outstanding };
         if applied.is_zero() {
-            tx.commit().await?;
             return Ok(Decimal::ZERO);
         }
         let new_out = outstanding - applied;
@@ -504,12 +545,12 @@ impl BillingWriteService {
         let usql = format!(
             "UPDATE {table} SET outstanding_amount=$2, status=$3::invoice_status WHERE id=$1",
         );
-        sqlx::query(&usql).bind(invoice_ref).bind(new_out).bind(new_status).execute(&mut *tx).await?;
+        sqlx::query(&usql).bind(invoice_ref).bind(new_out).bind(new_status).execute(&mut **tx).await?;
 
         // Draw down payment schedules fill-in-order (earliest installment first) by the applied amount.
         let scheds = sqlx::query(
             "SELECT id, amount, paid_amount FROM billing.payment_schedules WHERE invoice_ref=$1 AND invoice_kind=$2::invoice_kind AND (metadata->>'deleted_at') IS NULL ORDER BY installment_no FOR UPDATE",
-        ).bind(invoice_ref).bind(kind).fetch_all(&mut *tx).await?;
+        ).bind(invoice_ref).bind(kind).fetch_all(&mut **tx).await?;
         let mut remaining = applied;
         for s in &scheds {
             if remaining.is_zero() { break; }
@@ -522,10 +563,9 @@ impl BillingWriteService {
             let new_paid = paid + take;
             let sstatus = if new_paid >= samt { "paid" } else { "partially_paid" };
             sqlx::query("UPDATE billing.payment_schedules SET paid_amount=$2, status=$3::payment_schedule_status WHERE id=$1")
-                .bind(sid).bind(new_paid).bind(sstatus).execute(&mut *tx).await?;
+                .bind(sid).bind(new_paid).bind(sstatus).execute(&mut **tx).await?;
             remaining -= take;
         }
-        tx.commit().await?;
         Ok(applied)
     }
 
