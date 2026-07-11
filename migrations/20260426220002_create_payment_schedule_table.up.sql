@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS billing.payment_schedules (
     company_id UUID NOT NULL,
     installment_no INTEGER NOT NULL,
     due_date DATE NOT NULL,
-    amount NUMERIC NOT NULL,
-    paid_amount NUMERIC NOT NULL DEFAULT 0,
+    amount NUMERIC(18, 2) NOT NULL CHECK (amount >= 0),
+    paid_amount NUMERIC(18, 2) NOT NULL DEFAULT 0 CHECK (paid_amount >= 0),
     status payment_schedule_status NOT NULL DEFAULT 'unpaid',
     metadata JSONB NOT NULL DEFAULT '{"created_at":null,"updated_at":null,"deleted_at":null,"created_by":null,"updated_by":null,"deleted_by":null}'::jsonb,
     PRIMARY KEY (id)

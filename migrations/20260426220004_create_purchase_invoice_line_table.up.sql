@@ -9,9 +9,9 @@ CREATE TABLE IF NOT EXISTS billing.purchase_invoice_lines (
     item_id UUID NOT NULL,
     expense_account_id UUID NOT NULL,
     description TEXT,
-    quantity NUMERIC NOT NULL,
-    unit_price NUMERIC NOT NULL,
-    net_amount NUMERIC NOT NULL DEFAULT 0,
+    quantity NUMERIC(18, 4) NOT NULL CHECK (quantity >= 0),
+    unit_price NUMERIC(18, 2) NOT NULL CHECK (unit_price >= 0),
+    net_amount NUMERIC(18, 2) NOT NULL DEFAULT 0 CHECK (net_amount >= 0),
     metadata JSONB NOT NULL DEFAULT '{"created_at":null,"updated_at":null,"deleted_at":null,"created_by":null,"updated_by":null,"deleted_by":null}'::jsonb,
     PRIMARY KEY (id)
 );

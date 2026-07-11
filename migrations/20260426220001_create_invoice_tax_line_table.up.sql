@@ -28,9 +28,9 @@ CREATE TABLE IF NOT EXISTS billing.invoice_tax_lines (
     account_id UUID NOT NULL,
     basis tax_basis NOT NULL,
     description TEXT,
-    taxable_base NUMERIC NOT NULL DEFAULT 0,
-    rate NUMERIC NOT NULL DEFAULT 0,
-    tax_amount NUMERIC NOT NULL,
+    taxable_base NUMERIC(18, 2) NOT NULL DEFAULT 0 CHECK (taxable_base >= 0),
+    rate NUMERIC(9, 4) NOT NULL DEFAULT 0 CHECK (rate >= 0),
+    tax_amount NUMERIC(18, 2) NOT NULL CHECK (tax_amount >= 0),
     metadata JSONB NOT NULL DEFAULT '{"created_at":null,"updated_at":null,"deleted_at":null,"created_by":null,"updated_by":null,"deleted_by":null}'::jsonb,
     PRIMARY KEY (id)
 );
