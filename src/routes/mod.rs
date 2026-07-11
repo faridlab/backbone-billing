@@ -12,11 +12,17 @@ use std::sync::Arc;
 // Import handlers
 use crate::presentation::http::{
     create_invoice_tax_line_routes,
+    create_invoice_tax_line_read_routes,
     create_payment_schedule_routes,
+    create_payment_schedule_read_routes,
     create_purchase_invoice_routes,
+    create_purchase_invoice_read_routes,
     create_purchase_invoice_line_routes,
+    create_purchase_invoice_line_read_routes,
     create_sales_invoice_routes,
-    create_sales_invoice_line_routes
+    create_sales_invoice_read_routes,
+    create_sales_invoice_line_routes,
+    create_sales_invoice_line_read_routes
 };
 
 // Import AppState for stateful routes
@@ -46,6 +52,21 @@ pub fn create_stateless_routes(module: &crate::BillingModule) -> Router<()> {
         .merge(create_purchase_invoice_line_routes(module.purchase_invoice_line_service.clone()))
         .merge(create_sales_invoice_routes(module.sales_invoice_service.clone()))
         .merge(create_sales_invoice_line_routes(module.sales_invoice_line_service.clone()))
+}
+
+/// Read-only routes for the Billing module — every entity mounted READ-ONLY (the guarded base).
+///
+/// The generic `create_stateless_routes` exposes full mutable CRUD with no domain
+/// validation; this exposes only reads, so generic mutation can't bypass a write
+/// service's invariants. Extend it: `create_readonly_billing_routes(m).merge(my_validated_writes)`.
+pub fn create_readonly_billing_routes(module: &crate::BillingModule) -> Router<()> {
+    Router::new()
+        .merge(create_invoice_tax_line_read_routes(module.invoice_tax_line_service.clone()))
+        .merge(create_payment_schedule_read_routes(module.payment_schedule_service.clone()))
+        .merge(create_purchase_invoice_read_routes(module.purchase_invoice_service.clone()))
+        .merge(create_purchase_invoice_line_read_routes(module.purchase_invoice_line_service.clone()))
+        .merge(create_sales_invoice_read_routes(module.sales_invoice_service.clone()))
+        .merge(create_sales_invoice_line_read_routes(module.sales_invoice_line_service.clone()))
 }
 
 /// Get all routes (stateless) for the Billing module.
