@@ -23,8 +23,10 @@ customer/supplier→party, item→catalog, company/branch→organization, accoun
   `source_po_id` + `billed_lines`), `InvoiceCancelled`} + `BillingEventSink` + `LoggingSink`.
 
 ## HTTP surface (presentation/http/guarded_routes.rs)
-`create_guarded_billing_routes(&BillingModule, pool)` — read documents + validated `POST
-/sales-invoices` + `POST /purchase-invoices`. No generic mutation. Posting needs a `GlPostSink`
+`create_guarded_billing_routes(&BillingModule, pool, TenantVerifier)` — read documents + validated
+`POST /sales-invoices` + `POST /purchase-invoices`. No generic mutation. Both writes are behind
+`tenant_auth`: the tenant (`company_id`/`branch_id`) is derived from the signed Bearer token, never
+from the request body — a body-supplied `companyId` is ignored. Posting needs a `GlPostSink`
 composition layer, so it is service/job-driven, not an HTTP route.
 
 ## State machines

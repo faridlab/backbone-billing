@@ -1,11 +1,24 @@
 //! Integrity probes for billing — the invariants that must hold against a REAL Postgres, beyond the
 //! golden math. Requires DATABASE_URL (:5433/backbone_billing).
+//!
+//! IP-1..IP-4    the posting/recovery/balance/seam invariants (service level).
+//! IGT-1..IGT-3  the tenancy invariants on the guarded HTTP surface — every write derives its tenant
+//!               from a signed token, never from the request body (mirrors selling's IGT-* cases).
 
 use std::sync::{Arc, Mutex};
 
+use axum::body::Body;
+use axum::http::{header, Request, StatusCode};
+use backbone_auth::tenant::TenantVerifier;
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use rust_decimal::Decimal;
+use serde::Serialize;
 use sqlx::PgPool;
+use tower::ServiceExt;
 use uuid::Uuid;
+
+use backbone_billing::presentation::http::create_guarded_billing_routes;
+use backbone_billing::BillingModule;
 
 use backbone_billing::application::service::billing_events::{BillingEvent, BillingEventSink};
 use backbone_billing::application::service::billing_gl::{
@@ -165,4 +178,111 @@ async fn concurrent_post_emits_the_seam_event_once() {
 
     let emitted = rec.events.lock().unwrap().iter().filter(|e| matches!(e, BillingEvent::PurchaseInvoicePosted(p) if p.invoice_id == inv)).count();
     assert_eq!(emitted, 1, "the seam event must fire exactly once, even under a concurrent double-post");
+}
+
+// ── guarded HTTP surface: tenancy ────────────────────────────────────────────
+
+const SECRET: &[u8] = b"billing-integrity-probe-secret";
+
+#[derive(Serialize)]
+struct TestClaims {
+    sub: String,
+    exp: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    company_id: Option<Uuid>,
+}
+
+/// Mint an HS256 access token. `company_id = None` models a token that authenticates a user but
+/// carries no tenant — it must not be allowed to write.
+fn token(company_id: Option<Uuid>) -> String {
+    let claims = TestClaims { sub: "probe-user".into(), exp: 9_999_999_999, company_id };
+    encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(SECRET)).unwrap()
+}
+
+async fn module(pool: &PgPool) -> BillingModule {
+    BillingModule::builder().with_database(pool.clone()).build().unwrap()
+}
+fn app(pool: &PgPool, m: &BillingModule) -> axum::Router {
+    create_guarded_billing_routes(m, pool.clone(), TenantVerifier::hs256(SECRET))
+}
+
+/// Send a request with an optional bearer token.
+async fn req_with(
+    app: axum::Router,
+    method: &str,
+    uri: &str,
+    body: Option<String>,
+    bearer: Option<String>,
+) -> (StatusCode, String) {
+    let b = body.map(Body::from).unwrap_or(Body::empty());
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("content-type", "application/json");
+    if let Some(t) = bearer {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {t}"));
+    }
+    let resp = app.oneshot(builder.body(b).unwrap()).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024).await.unwrap();
+    (status, String::from_utf8_lossy(&bytes).to_string())
+}
+
+/// A well-formed sales-invoice body. `extra` injects raw JSON fields (e.g. a smuggled `companyId`).
+fn sales_body(number: &str, extra: &str) -> String {
+    format!(
+        r#"{{"invoiceNumber":"{}",{}"customerId":"{}","postingDate":"2026-07-05",
+             "receivableAccountId":"{}",
+             "lines":[{{"itemId":"{}","accountId":"{}","quantity":"1","unitPrice":"100000"}}]}}"#,
+        number, extra, Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(),
+    )
+}
+
+// IGT-1: an unauthenticated write is rejected. Before the tenant guard this create succeeded and
+// stamped whatever `companyId` the caller put in the body.
+#[tokio::test]
+async fn guarded_write_rejects_unauthenticated() {
+    let pool = pool().await;
+    let m = module(&pool).await;
+    let (status, _) =
+        req_with(app(&pool, &m), "POST", "/sales-invoices", Some(sales_body(&uq("SI"), "")), None)
+            .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "an unauthenticated write must not reach the service");
+}
+
+// IGT-2: a token that authenticates a user but carries no `company_id` claim is rejected — a writer
+// that cannot name its tenant must never run.
+#[tokio::test]
+async fn guarded_write_rejects_token_without_company_id() {
+    let pool = pool().await;
+    let m = module(&pool).await;
+    let (status, _) = req_with(
+        app(&pool, &m), "POST", "/purchase-invoices", Some(sales_body(&uq("PI"), "")), Some(token(None)),
+    ).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "a token with no tenant must not write");
+}
+
+// IGT-3: a `companyId` smuggled in the body is ignored — the persisted tenant is the token's. This is
+// the regression that motivated the change: the body must not be able to name the tenant.
+#[tokio::test]
+async fn body_company_id_cannot_override_the_token_tenant() {
+    let pool = pool().await;
+    let m = module(&pool).await;
+    let token_company = Uuid::new_v4();
+    let attacker_company = Uuid::new_v4();
+    let number = uq("SI");
+    let body = sales_body(&number, &format!(r#""companyId":"{attacker_company}","branchId":"{}","#, Uuid::new_v4()));
+    let (status, resp) = req_with(
+        app(&pool, &m), "POST", "/sales-invoices", Some(body), Some(token(Some(token_company))),
+    ).await;
+    assert_eq!(status, StatusCode::CREATED, "got: {resp}");
+
+    let persisted: Uuid =
+        sqlx::query_scalar("SELECT company_id FROM billing.sales_invoices WHERE invoice_number = $1")
+            .bind(&number)
+            .fetch_one(&pool)
+            .await
+            .expect("invoice row");
+    assert_eq!(persisted, token_company, "tenant must come from the token, not the body");
+    assert_ne!(persisted, attacker_company, "the body's companyId must be ignored");
 }

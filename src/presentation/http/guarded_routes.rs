@@ -3,13 +3,19 @@
 //! Hand-authored (user-owned). Read documents + **validated create** (sales-invoice /
 //! purchase-invoice); generic create/update/delete CRUD is NOT mounted, so a caller cannot
 //! write an invoice with inconsistent totals or bypass the AR/AP posting path.
+//! Every write derives its tenant from a **signed** Bearer token (`TenantContext`) rather than the
+//! request body, so a caller cannot stamp an invoice with a company it does not belong to.
 //! `BillingWriteService` is built from the pool (regen-safe). Posting (`post_sales_invoice` /
 //! `post_purchase_invoice`) needs a `GlPostSink` composition layer, so it is service/job-driven,
 //! not an HTTP route.
 
 use std::sync::Arc;
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
+use axum::{
+    extract::State, http::StatusCode, middleware::from_fn_with_state, response::IntoResponse,
+    routing::post, Json, Router,
+};
+use backbone_auth::tenant::{tenant_auth, TenantContext, TenantVerifier};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -65,8 +71,9 @@ impl From<TaxLineBody> for NewTaxLine {
 #[serde(rename_all = "camelCase")]
 struct CreateSalesInvoiceBody {
     invoice_number: String,
-    company_id: Uuid,
-    #[serde(default)] branch_id: Option<Uuid>,
+    // No `company_id` / `branch_id`: the tenant is derived from the signed token via
+    // `TenantContext`, never from the request body — a client must not be able to name the tenant
+    // it writes into.
     customer_id: Uuid,
     #[serde(default)] source_so_id: Option<Uuid>,
     posting_date: chrono::NaiveDate,
@@ -76,9 +83,13 @@ struct CreateSalesInvoiceBody {
     lines: Vec<LineBody>,
     #[serde(default)] tax_lines: Vec<TaxLineBody>,
 }
-async fn create_sales_invoice(State(svc): State<Arc<BillingWriteService>>, Json(b): Json<CreateSalesInvoiceBody>) -> axum::response::Response {
+async fn create_sales_invoice(
+    State(svc): State<Arc<BillingWriteService>>,
+    tenant: TenantContext,
+    Json(b): Json<CreateSalesInvoiceBody>,
+) -> axum::response::Response {
     let inv = NewSalesInvoice {
-        invoice_number: b.invoice_number, company_id: b.company_id, branch_id: b.branch_id,
+        invoice_number: b.invoice_number, company_id: tenant.company_id, branch_id: tenant.branch_id,
         customer_id: b.customer_id, source_so_id: b.source_so_id, posting_date: b.posting_date,
         due_date: b.due_date, currency: b.currency, receivable_account_id: b.receivable_account_id,
         lines: b.lines.into_iter().map(Into::into).collect(),
@@ -94,8 +105,7 @@ async fn create_sales_invoice(State(svc): State<Arc<BillingWriteService>>, Json(
 #[serde(rename_all = "camelCase")]
 struct CreatePurchaseInvoiceBody {
     invoice_number: String,
-    company_id: Uuid,
-    #[serde(default)] branch_id: Option<Uuid>,
+    // Tenant comes from the signed token (`TenantContext`), not the body.
     supplier_id: Uuid,
     #[serde(default)] source_po_id: Option<Uuid>,
     posting_date: chrono::NaiveDate,
@@ -105,9 +115,13 @@ struct CreatePurchaseInvoiceBody {
     lines: Vec<LineBody>,
     #[serde(default)] tax_lines: Vec<TaxLineBody>,
 }
-async fn create_purchase_invoice(State(svc): State<Arc<BillingWriteService>>, Json(b): Json<CreatePurchaseInvoiceBody>) -> axum::response::Response {
+async fn create_purchase_invoice(
+    State(svc): State<Arc<BillingWriteService>>,
+    tenant: TenantContext,
+    Json(b): Json<CreatePurchaseInvoiceBody>,
+) -> axum::response::Response {
     let inv = NewPurchaseInvoice {
-        invoice_number: b.invoice_number, company_id: b.company_id, branch_id: b.branch_id,
+        invoice_number: b.invoice_number, company_id: tenant.company_id, branch_id: tenant.branch_id,
         supplier_id: b.supplier_id, source_po_id: b.source_po_id, posting_date: b.posting_date,
         due_date: b.due_date, currency: b.currency, payable_account_id: b.payable_account_id,
         lines: b.lines.into_iter().map(Into::into).collect(),
@@ -119,19 +133,34 @@ async fn create_purchase_invoice(State(svc): State<Arc<BillingWriteService>>, Js
     }
 }
 
-fn write_routes(svc: Arc<BillingWriteService>) -> Router {
+fn write_routes(svc: Arc<BillingWriteService>, verifier: TenantVerifier) -> Router {
     Router::new()
         .route("/sales-invoices", post(create_sales_invoice))
         .route("/purchase-invoices", post(create_purchase_invoice))
+        // Every write above is tenant-scoped: `tenant_auth` rejects a request whose token is absent,
+        // invalid, or carries no `company_id`, so a handler only ever runs with a proven tenant.
+        //
+        // `route_layer`, not `layer`: `layer` would also wrap this router's fallback, so once merged
+        // every *unmatched* path (e.g. the generic CRUD paths this surface deliberately does not
+        // mount) would answer 401 instead of 404 — leaking "auth required" for routes that do not
+        // exist, and masking the CRUD-bypass probes.
+        .route_layer(from_fn_with_state(verifier, tenant_auth))
         .with_state(svc)
 }
 
-/// Mount the billing module: read documents + validated creates. Generic mutation is not mounted.
-/// **Prefer this over `BillingModule::all_crud_routes()` for any real deployment.**
-pub fn create_guarded_billing_routes(m: &BillingModule, pool: PgPool) -> Router {
+/// Mount the billing module: read documents + validated, tenant-scoped creates. Generic mutation is
+/// not mounted. **Prefer this over `BillingModule::all_crud_routes()` for any real deployment.**
+///
+/// The composing service builds one [`TenantVerifier`] from its JWT secret and passes it here; the
+/// write surface derives `company_id` from the token, so no tenant crosses the wire in a body.
+pub fn create_guarded_billing_routes(
+    m: &BillingModule,
+    pool: PgPool,
+    verifier: TenantVerifier,
+) -> Router {
     let write = Arc::new(BillingWriteService::new(pool));
     Router::new()
         .merge(create_sales_invoice_read_routes(m.sales_invoice_service.clone()))
         .merge(create_purchase_invoice_read_routes(m.purchase_invoice_service.clone()))
-        .merge(write_routes(write))
+        .merge(write_routes(write, verifier))
 }
