@@ -14,6 +14,11 @@ user_owned:
   - "src/application/service/billing_events.rs"
   - "src/application/service/billing_gl.rs"
   - "src/application/service/billing_write_service.rs"
+  # Focused siblings of billing_write_service — one BillingWriteService inherent impl split by
+  # concern (A/R ledger, A/P ledger, the cash loop).
+  - "src/application/service/billing_purchase.rs"
+  - "src/application/service/billing_sales.rs"
+  - "src/application/service/billing_settlement.rs"
   # Own the hand-written AR/AP SQL (the draft header + line + tax-overlay inserts, the post builders'
   # projections, the pending→posted reconcile, the credit note, and the settlement drawdown) that the
   # write service orchestrates. Declared here — not renamed with a `_custom` suffix — so the generator

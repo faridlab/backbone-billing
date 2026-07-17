@@ -18,6 +18,11 @@ pub mod sales_invoice_line_service;
 pub mod billing_events;
 pub mod billing_gl;
 pub mod billing_write_service;
+// Focused siblings of `billing_write_service` — one `BillingWriteService` inherent impl, split by
+// concern (A/R ledger, A/P ledger, the cash loop). Each is declared `user_owned`.
+pub mod billing_purchase;
+pub mod billing_sales;
+pub mod billing_settlement;
 // END CUSTOM
 
 pub use invoice_tax_line_service::InvoiceTaxLineService;
