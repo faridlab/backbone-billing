@@ -8,6 +8,7 @@
 //! `grand = net + output` (sales); `grand = net + input − withholding` (purchase, the A/P owed).
 //! Posting is idempotent (source_id = invoice id) + reconciled from the ack, like every seam.
 
+use backbone_orm::company_scope;
 use rust_decimal::{Decimal, RoundingStrategy};
 use sqlx::{PgPool, Row};
 use std::collections::BTreeMap;
@@ -214,6 +215,8 @@ impl BillingWriteService {
         let id = Uuid::new_v4();
         let currency = inv.currency.unwrap_or_else(|| "IDR".into());
         let mut tx = self.db_pool.begin().await?;
+        // RLS scope (ADR-0008): company on the DTO.
+        company_scope::bind_company_on(&mut tx, inv.company_id).await?;
         let r = sqlx::query(
             r#"INSERT INTO billing.sales_invoices
                 (id, invoice_number, company_id, branch_id, customer_id, source_so_id, status,
@@ -250,7 +253,10 @@ impl BillingWriteService {
                       currency, grand_total, receivable_account_id
                FROM billing.sales_invoices WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(invoice_id).fetch_optional(&self.db_pool).await?.ok_or(BillingError::InvoiceNotFound(invoice_id))?;
+        .bind(invoice_id);
+        // RLS scope (ADR-0008), ID-only: fenced by the request/inherited scope.
+        let inv = company_scope::fetch_optional_row_scoped(&self.db_pool, inv).await?
+            .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         let currency: String = inv.get("currency");
         if currency != "IDR" { return Err(BillingError::UnsupportedCurrency(currency)); }
         let customer_id: Uuid = inv.get("customer_id");
@@ -258,17 +264,21 @@ impl BillingWriteService {
         let invoice_number: String = inv.get("invoice_number");
 
         // Cr Revenue per income account.
-        let rev_rows = sqlx::query(
-            "SELECT revenue_account_id, net_amount FROM billing.sales_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL",
-        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
+        let rev_rows = company_scope::with_company_scope(Some(inv.get::<Uuid, _>("company_id")), company_scope::fetch_all_rows_scoped(
+            &self.db_pool,
+            sqlx::query("SELECT revenue_account_id, net_amount FROM billing.sales_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL")
+                .bind(invoice_id),
+        )).await?;
         let mut revenue: BTreeMap<Uuid, Decimal> = BTreeMap::new();
         for r in &rev_rows {
             *revenue.entry(r.get("revenue_account_id")).or_insert(Decimal::ZERO) += r.get::<Decimal, _>("net_amount");
         }
         // Cr PPN Output per overlay output line.
-        let tax_rows = sqlx::query(
-            "SELECT account_id, tax_amount FROM billing.invoice_tax_lines WHERE invoice_ref=$1 AND invoice_kind='sales'::invoice_kind AND basis='output'::tax_basis AND (metadata->>'deleted_at') IS NULL",
-        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
+        let tax_rows = company_scope::with_company_scope(Some(inv.get::<Uuid, _>("company_id")), company_scope::fetch_all_rows_scoped(
+            &self.db_pool,
+            sqlx::query("SELECT account_id, tax_amount FROM billing.invoice_tax_lines WHERE invoice_ref=$1 AND invoice_kind='sales'::invoice_kind AND basis='output'::tax_basis AND (metadata->>'deleted_at') IS NULL")
+                .bind(invoice_id),
+        )).await?;
 
         let mut lines = vec![
             GlPostLine::debit(inv.get::<Uuid, _>("receivable_account_id"), grand)
@@ -301,18 +311,26 @@ impl BillingWriteService {
                         status='submitted'::invoice_status, journal_id=$2, accounting_post_id=$3,
                         posted_at=now(), outstanding_amount=grand_total
                        WHERE id=$1 AND posting_state <> 'posted'::gl_posting_state"#,
-                ).bind(invoice_id).bind(ack.journal_id).bind(ack.post_id).execute(&self.db_pool).await?;
+                ).bind(invoice_id).bind(ack.journal_id).bind(ack.post_id);
+                let res = company_scope::with_company_scope(Some(env.company_id),
+                    company_scope::execute_scoped(&self.db_pool, res)).await?;
                 if res.rows_affected() == 0 {
                     // Lost the race: a concurrent post already transitioned + emitted. Reconcile
                     // from the persisted row; do NOT re-publish the seam event.
                     return self.short_circuit_posted("sales_invoices", invoice_id).await?
                         .ok_or(BillingError::InvoiceNotFound(invoice_id));
                 }
-                let hdr = sqlx::query("SELECT source_so_id, grand_total FROM billing.sales_invoices WHERE id=$1").bind(invoice_id).fetch_one(&self.db_pool).await?;
+                let hdr = company_scope::with_company_scope(Some(env.company_id), company_scope::fetch_one_row_scoped(
+                    &self.db_pool,
+                    sqlx::query("SELECT source_so_id, grand_total FROM billing.sales_invoices WHERE id=$1").bind(invoice_id),
+                )).await?;
                 let so: Option<Uuid> = hdr.get("source_so_id");
                 let grand_total: Decimal = hdr.get("grand_total");
                 // Billed lines (item + qty) for the selling seam — advance the source SO's billed_qty.
-                let line_rows = sqlx::query("SELECT item_id, quantity FROM billing.sales_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL").bind(invoice_id).fetch_all(&self.db_pool).await?;
+                let line_rows = company_scope::with_company_scope(Some(env.company_id), company_scope::fetch_all_rows_scoped(
+                    &self.db_pool,
+                    sqlx::query("SELECT item_id, quantity FROM billing.sales_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL").bind(invoice_id),
+                )).await?;
                 let billed_lines: Vec<BilledLine> = line_rows.iter().map(|r| BilledLine { item_id: r.get("item_id"), quantity: r.get("quantity") }).collect();
                 self.sink.publish(BillingEvent::SalesInvoicePosted(SalesInvoicePosted {
                     invoice_id, company_id: env.company_id, journal_id: ack.journal_id, post_id: ack.post_id,
@@ -321,7 +339,10 @@ impl BillingWriteService {
                 Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
             }
             Err(rej) => {
-                let _ = sqlx::query("UPDATE billing.sales_invoices SET posting_state='failed'::gl_posting_state WHERE id=$1").bind(invoice_id).execute(&self.db_pool).await;
+                let _ = company_scope::with_company_scope(Some(env.company_id), company_scope::execute_scoped(
+                    &self.db_pool,
+                    sqlx::query("UPDATE billing.sales_invoices SET posting_state='failed'::gl_posting_state WHERE id=$1").bind(invoice_id),
+                )).await;
                 Err(BillingError::GlRejected { code: rej.code, message: rej.message })
             }
         }
@@ -338,6 +359,8 @@ impl BillingWriteService {
         let id = Uuid::new_v4();
         let currency = inv.currency.unwrap_or_else(|| "IDR".into());
         let mut tx = self.db_pool.begin().await?;
+        // RLS scope (ADR-0008): company on the DTO.
+        company_scope::bind_company_on(&mut tx, inv.company_id).await?;
         let r = sqlx::query(
             r#"INSERT INTO billing.purchase_invoices
                 (id, invoice_number, company_id, branch_id, supplier_id, source_po_id, status,
@@ -374,26 +397,35 @@ impl BillingWriteService {
                       grand_total, payable_account_id
                FROM billing.purchase_invoices WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(invoice_id).fetch_optional(&self.db_pool).await?.ok_or(BillingError::InvoiceNotFound(invoice_id))?;
+        .bind(invoice_id);
+        // RLS scope (ADR-0008), ID-only: fenced by the request/inherited scope.
+        let inv = company_scope::fetch_optional_row_scoped(&self.db_pool, inv).await?
+            .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         let currency: String = inv.get("currency");
         if currency != "IDR" { return Err(BillingError::UnsupportedCurrency(currency)); }
         let supplier_id: Uuid = inv.get("supplier_id");
         let grand: Decimal = inv.get("grand_total");
         let invoice_number: String = inv.get("invoice_number");
 
-        let exp_rows = sqlx::query(
-            "SELECT expense_account_id, net_amount FROM billing.purchase_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL",
-        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
+        let exp_rows = company_scope::with_company_scope(Some(inv.get::<Uuid, _>("company_id")), company_scope::fetch_all_rows_scoped(
+            &self.db_pool,
+            sqlx::query("SELECT expense_account_id, net_amount FROM billing.purchase_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL")
+                .bind(invoice_id),
+        )).await?;
         let mut expense: BTreeMap<Uuid, Decimal> = BTreeMap::new();
         for r in &exp_rows {
             *expense.entry(r.get("expense_account_id")).or_insert(Decimal::ZERO) += r.get::<Decimal, _>("net_amount");
         }
-        let input_rows = sqlx::query(
-            "SELECT account_id, tax_amount FROM billing.invoice_tax_lines WHERE invoice_ref=$1 AND invoice_kind='purchase'::invoice_kind AND basis='input'::tax_basis AND (metadata->>'deleted_at') IS NULL",
-        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
-        let wht_rows = sqlx::query(
-            "SELECT account_id, tax_amount FROM billing.invoice_tax_lines WHERE invoice_ref=$1 AND invoice_kind='purchase'::invoice_kind AND basis='withholding'::tax_basis AND (metadata->>'deleted_at') IS NULL",
-        ).bind(invoice_id).fetch_all(&self.db_pool).await?;
+        let input_rows = company_scope::with_company_scope(Some(inv.get::<Uuid, _>("company_id")), company_scope::fetch_all_rows_scoped(
+            &self.db_pool,
+            sqlx::query("SELECT account_id, tax_amount FROM billing.invoice_tax_lines WHERE invoice_ref=$1 AND invoice_kind='purchase'::invoice_kind AND basis='input'::tax_basis AND (metadata->>'deleted_at') IS NULL")
+                .bind(invoice_id),
+        )).await?;
+        let wht_rows = company_scope::with_company_scope(Some(inv.get::<Uuid, _>("company_id")), company_scope::fetch_all_rows_scoped(
+            &self.db_pool,
+            sqlx::query("SELECT account_id, tax_amount FROM billing.invoice_tax_lines WHERE invoice_ref=$1 AND invoice_kind='purchase'::invoice_kind AND basis='withholding'::tax_basis AND (metadata->>'deleted_at') IS NULL")
+                .bind(invoice_id),
+        )).await?;
 
         let mut lines: Vec<GlPostLine> = Vec::new();
         for (acct, amt) in &expense { lines.push(GlPostLine::debit(*acct, *amt).with_description("Expense/GR-IR")); }
@@ -425,16 +457,24 @@ impl BillingWriteService {
                         status='submitted'::invoice_status, journal_id=$2, accounting_post_id=$3,
                         posted_at=now(), outstanding_amount=grand_total
                        WHERE id=$1 AND posting_state <> 'posted'::gl_posting_state"#,
-                ).bind(invoice_id).bind(ack.journal_id).bind(ack.post_id).execute(&self.db_pool).await?;
+                ).bind(invoice_id).bind(ack.journal_id).bind(ack.post_id);
+                let res = company_scope::with_company_scope(Some(env.company_id),
+                    company_scope::execute_scoped(&self.db_pool, res)).await?;
                 if res.rows_affected() == 0 {
                     return self.short_circuit_posted("purchase_invoices", invoice_id).await?
                         .ok_or(BillingError::InvoiceNotFound(invoice_id));
                 }
                 // Billed lines (item + qty) for the buying seam.
-                let hdr = sqlx::query("SELECT source_po_id, grand_total FROM billing.purchase_invoices WHERE id=$1").bind(invoice_id).fetch_one(&self.db_pool).await?;
+                let hdr = company_scope::with_company_scope(Some(env.company_id), company_scope::fetch_one_row_scoped(
+                    &self.db_pool,
+                    sqlx::query("SELECT source_po_id, grand_total FROM billing.purchase_invoices WHERE id=$1").bind(invoice_id),
+                )).await?;
                 let po: Option<Uuid> = hdr.get("source_po_id");
                 let grand_total: Decimal = hdr.get("grand_total");
-                let line_rows = sqlx::query("SELECT item_id, quantity FROM billing.purchase_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL").bind(invoice_id).fetch_all(&self.db_pool).await?;
+                let line_rows = company_scope::with_company_scope(Some(env.company_id), company_scope::fetch_all_rows_scoped(
+                    &self.db_pool,
+                    sqlx::query("SELECT item_id, quantity FROM billing.purchase_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL").bind(invoice_id),
+                )).await?;
                 let billed_lines: Vec<BilledLine> = line_rows.iter().map(|r| BilledLine { item_id: r.get("item_id"), quantity: r.get("quantity") }).collect();
                 self.sink.publish(BillingEvent::PurchaseInvoicePosted(PurchaseInvoicePosted {
                     invoice_id, company_id: env.company_id, journal_id: ack.journal_id, post_id: ack.post_id,
@@ -443,7 +483,10 @@ impl BillingWriteService {
                 Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
             }
             Err(rej) => {
-                let _ = sqlx::query("UPDATE billing.purchase_invoices SET posting_state='failed'::gl_posting_state WHERE id=$1").bind(invoice_id).execute(&self.db_pool).await;
+                let _ = company_scope::with_company_scope(Some(env.company_id), company_scope::execute_scoped(
+                    &self.db_pool,
+                    sqlx::query("UPDATE billing.purchase_invoices SET posting_state='failed'::gl_posting_state WHERE id=$1").bind(invoice_id),
+                )).await;
                 Err(BillingError::GlRejected { code: rej.code, message: rej.message })
             }
         }
@@ -454,6 +497,8 @@ impl BillingWriteService {
     /// Attach installment due dates to an invoice (AR or A/P). Lean — settlement is payments' job.
     pub async fn add_payment_schedule(&self, invoice_ref: Uuid, kind: &str, company_id: Uuid, installments: &[(chrono::NaiveDate, Decimal)]) -> Result<(), BillingError> {
         let mut tx = self.db_pool.begin().await?;
+        // RLS scope (ADR-0008): company is an explicit argument.
+        company_scope::bind_company_on(&mut tx, company_id).await?;
         for (i, (due, amt)) in installments.iter().enumerate() {
             sqlx::query(
                 r#"INSERT INTO billing.payment_schedules
@@ -478,6 +523,12 @@ impl BillingWriteService {
     /// `FOR UPDATE` on the invoice + its schedules.
     pub async fn apply_settlement(&self, invoice_ref: Uuid, kind: &str, amount: Decimal) -> Result<Decimal, BillingError> {
         let mut tx = self.db_pool.begin().await?;
+        // RLS scope (ADR-0008): this seam carries no company argument — it is driven by payment's
+        // `PaymentSettled` via an ACL. The CALLER must establish the scope
+        // (`with_company_scope(Some(event.company_id))`); we bind whatever it set onto our tx. With no
+        // ambient scope the drawdown fails closed (InvoiceNotFound) rather than touching another
+        // company's invoice.
+        company_scope::bind_current_company(&mut tx).await?;
         let applied = self.apply_settlement_in_tx(&mut tx, invoice_ref, kind, amount).await?;
         tx.commit().await?;
         Ok(applied)
@@ -496,6 +547,8 @@ impl BillingWriteService {
         allocations: &[(Uuid, String, Decimal)],
     ) -> Result<Decimal, BillingError> {
         let mut tx = self.db_pool.begin().await?;
+        // RLS scope: as `apply_settlement` — the relay/ACL must wrap this in the event's company scope.
+        company_scope::bind_current_company(&mut tx).await?;
         let first = backbone_outbox::inbox::once(&mut *tx, "billing", consumer, event_id)
             .await
             .map_err(|e| BillingError::Db(sqlx::Error::Protocol(e.to_string())))?;
@@ -587,6 +640,10 @@ impl BillingWriteService {
         if amount.is_zero() { return Ok(Decimal::ZERO); }
 
         let mut tx = self.db_pool.begin().await?;
+        // RLS scope (ADR-0008): as `apply_settlement` — driven by payment's `PaymentCancelled` via an
+        // ACL and carries no company argument, so the CALLER must establish the scope
+        // (`with_company_scope(Some(event.company_id))`). Fails closed without one.
+        company_scope::bind_current_company(&mut tx).await?;
         let sql = format!(
             "SELECT outstanding_amount, grand_total FROM {table} WHERE id=$1 AND (metadata->>'deleted_at') IS NULL FOR UPDATE",
         );
@@ -638,9 +695,12 @@ impl BillingWriteService {
     /// (credit note + payment refund) nets revenue, cash, and A/R to zero. Idempotent: a re-credit
     /// short-circuits on `status='cancelled'`.
     pub async fn reverse_sales_invoice(&self, invoice_id: Uuid, sink: &dyn GlPostSink) -> Result<PostOutcome, BillingError> {
-        let orig_post: Option<Uuid> = sqlx::query_scalar(
+        let orig_post_q = sqlx::query_scalar(
             "SELECT accounting_post_id FROM billing.sales_invoices WHERE id=$1 AND (metadata->>'deleted_at') IS NULL",
-        ).bind(invoice_id).fetch_optional(&self.db_pool).await?.ok_or(BillingError::InvoiceNotFound(invoice_id))?;
+        ).bind(invoice_id);
+        // RLS scope (ADR-0008), ID-only: fenced by the request/inherited scope.
+        let orig_post: Option<Uuid> = company_scope::fetch_optional_scalar_scoped(&self.db_pool, orig_post_q).await?
+            .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         // The forward revenue post, sign-flipped, is the credit note.
         let fwd = self.build_ar_post(invoice_id).await?;
         let lines = fwd.lines.iter().map(|l| GlPostLine {
@@ -659,7 +719,9 @@ impl BillingWriteService {
             Ok(ack) => {
                 let res = sqlx::query(
                     "UPDATE billing.sales_invoices SET status='cancelled'::invoice_status, outstanding_amount=0 WHERE id=$1 AND status <> 'cancelled'::invoice_status",
-                ).bind(invoice_id).execute(&self.db_pool).await?;
+                ).bind(invoice_id);
+                let res = company_scope::with_company_scope(Some(env.company_id),
+                    company_scope::execute_scoped(&self.db_pool, res)).await?;
                 if res.rows_affected() == 1 {
                     self.sink.publish(BillingEvent::InvoiceCancelled(InvoiceCancelled { invoice_id, kind: "sales".into() }));
                 }
@@ -673,7 +735,9 @@ impl BillingWriteService {
 
     async fn short_circuit_posted(&self, table: &str, invoice_id: Uuid) -> Result<Option<PostOutcome>, BillingError> {
         let sql = format!("SELECT posting_state::text AS ps, journal_id, accounting_post_id FROM billing.{table} WHERE id=$1 AND (metadata->>'deleted_at') IS NULL");
-        let row = sqlx::query(&sql).bind(invoice_id).fetch_optional(&self.db_pool).await?.ok_or(BillingError::InvoiceNotFound(invoice_id))?;
+        let row = company_scope::fetch_optional_row_scoped(
+            &self.db_pool, sqlx::query(&sql).bind(invoice_id),
+        ).await?.ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         if row.get::<String, _>("ps") == "posted" {
             if let (Some(j), Some(p)) = (row.get::<Option<Uuid>, _>("journal_id"), row.get::<Option<Uuid>, _>("accounting_post_id")) {
                 return Ok(Some(PostOutcome { invoice_id, post_id: p, journal_id: j, idempotent_reuse: true }));
