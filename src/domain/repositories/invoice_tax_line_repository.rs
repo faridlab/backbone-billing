@@ -46,6 +46,7 @@ pub struct InvoiceTaxLinePaginatedResult {
 pub struct InvoiceTaxLineFilter {
     pub invoice_ref: Option<Uuid>,
     pub invoice_kind: Option<InvoiceKind>,
+    pub company_id: Option<Uuid>,
     pub account_id: Option<Uuid>,
     pub basis: Option<TaxBasis>,
     pub description: Option<String>,
@@ -54,7 +55,7 @@ pub struct InvoiceTaxLineFilter {
 impl InvoiceTaxLineFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.invoice_ref.is_some() || self.invoice_kind.is_some() || self.account_id.is_some() || self.basis.is_some() || self.description.is_some()
+        self.invoice_ref.is_some() || self.invoice_kind.is_some() || self.company_id.is_some() || self.account_id.is_some() || self.basis.is_some() || self.description.is_some()
     }
 }
 

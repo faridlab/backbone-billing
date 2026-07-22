@@ -2229,6 +2229,7 @@ components:
         - id
         - invoice_ref
         - invoice_kind
+        - company_id
         - account_id
         - basis
         - taxable_base
@@ -2244,6 +2245,9 @@ components:
           format: uuid
         invoice_kind:
           type: string
+        company_id:
+          type: string
+          format: uuid
         account_id:
           type: string
           format: uuid
@@ -2280,6 +2284,7 @@ components:
       required:
         - invoice_ref
         - invoice_kind
+        - company_id
         - account_id
         - basis
         - taxable_base
@@ -2292,6 +2297,9 @@ components:
           format: uuid
         invoice_kind:
           type: string
+        company_id:
+          type: string
+          format: uuid
         account_id:
           type: string
           format: uuid
@@ -2315,6 +2323,7 @@ components:
       required:
         - invoice_ref
         - invoice_kind
+        - company_id
         - account_id
         - basis
         - taxable_base
@@ -2327,6 +2336,9 @@ components:
           format: uuid
         invoice_kind:
           type: string
+        company_id:
+          type: string
+          format: uuid
         account_id:
           type: string
           format: uuid
@@ -2353,6 +2365,9 @@ components:
           format: uuid
         invoice_kind:
           type: string
+        company_id:
+          type: string
+          format: uuid
         account_id:
           type: string
           format: uuid
@@ -2883,6 +2898,7 @@ components:
       required:
         - id
         - invoice_id
+        - company_id
         - item_id
         - expense_account_id
         - quantity
@@ -2894,6 +2910,9 @@ components:
           type: string
           format: uuid
         invoice_id:
+          type: string
+          format: uuid
+        company_id:
           type: string
           format: uuid
         item_id:
@@ -2932,6 +2951,7 @@ components:
       type: object
       required:
         - invoice_id
+        - company_id
         - item_id
         - expense_account_id
         - quantity
@@ -2940,6 +2960,9 @@ components:
         - metadata
       properties:
         invoice_id:
+          type: string
+          format: uuid
+        company_id:
           type: string
           format: uuid
         item_id:
@@ -2965,6 +2988,7 @@ components:
       type: object
       required:
         - invoice_id
+        - company_id
         - item_id
         - expense_account_id
         - quantity
@@ -2973,6 +2997,9 @@ components:
         - metadata
       properties:
         invoice_id:
+          type: string
+          format: uuid
+        company_id:
           type: string
           format: uuid
         item_id:
@@ -2998,6 +3025,9 @@ components:
       type: object
       properties:
         invoice_id:
+          type: string
+          format: uuid
+        company_id:
           type: string
           format: uuid
         item_id:
@@ -3359,6 +3389,7 @@ components:
       required:
         - id
         - invoice_id
+        - company_id
         - item_id
         - revenue_account_id
         - quantity
@@ -3370,6 +3401,9 @@ components:
           type: string
           format: uuid
         invoice_id:
+          type: string
+          format: uuid
+        company_id:
           type: string
           format: uuid
         item_id:
@@ -3408,6 +3442,7 @@ components:
       type: object
       required:
         - invoice_id
+        - company_id
         - item_id
         - revenue_account_id
         - quantity
@@ -3416,6 +3451,9 @@ components:
         - metadata
       properties:
         invoice_id:
+          type: string
+          format: uuid
+        company_id:
           type: string
           format: uuid
         item_id:
@@ -3441,6 +3479,7 @@ components:
       type: object
       required:
         - invoice_id
+        - company_id
         - item_id
         - revenue_account_id
         - quantity
@@ -3449,6 +3488,9 @@ components:
         - metadata
       properties:
         invoice_id:
+          type: string
+          format: uuid
+        company_id:
           type: string
           format: uuid
         item_id:
@@ -3474,6 +3516,9 @@ components:
       type: object
       properties:
         invoice_id:
+          type: string
+          format: uuid
+        company_id:
           type: string
           format: uuid
         item_id:

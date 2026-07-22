@@ -50,6 +50,7 @@ impl std::ops::Deref for PurchaseInvoiceLineId {
 pub struct PurchaseInvoiceLine {
     pub id: Uuid,
     pub invoice_id: Uuid,
+    pub company_id: Uuid,
     pub item_id: Uuid,
     pub expense_account_id: Uuid,
     pub description: Option<String>,
@@ -68,10 +69,11 @@ impl PurchaseInvoiceLine {
     }
 
     /// Create a new PurchaseInvoiceLine with required fields
-    pub fn new(invoice_id: Uuid, item_id: Uuid, expense_account_id: Uuid, quantity: Decimal, unit_price: Decimal, net_amount: Decimal) -> Self {
+    pub fn new(invoice_id: Uuid, company_id: Uuid, item_id: Uuid, expense_account_id: Uuid, quantity: Decimal, unit_price: Decimal, net_amount: Decimal) -> Self {
         Self {
             id: Uuid::new_v4(),
             invoice_id,
+            company_id,
             item_id,
             expense_account_id,
             description: None,
@@ -154,6 +156,9 @@ impl PurchaseInvoiceLine {
                 "invoice_id" => {
                     if let Ok(v) = serde_json::from_value(value) { self.invoice_id = v; }
                 }
+                "company_id" => {
+                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
+                }
                 "item_id" => {
                     if let Ok(v) = serde_json::from_value(value) { self.item_id = v; }
                 }
@@ -227,12 +232,16 @@ impl backbone_orm::EntityRepoMeta for PurchaseInvoiceLine {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
         m.insert("invoice_id".to_string(), "uuid".to_string());
+        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("item_id".to_string(), "uuid".to_string());
         m.insert("expense_account_id".to_string(), "uuid".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
         &[]
+    }
+    fn company_field() -> Option<&'static str> {
+        Some("company_id")
     }
     fn relations() -> &'static [(&'static str, &'static str, &'static str)] {
         &[("invoice", "purchase_invoices", "invoiceId")]
@@ -246,6 +255,7 @@ impl backbone_orm::EntityRepoMeta for PurchaseInvoiceLine {
 #[derive(Debug, Clone, Default)]
 pub struct PurchaseInvoiceLineBuilder {
     invoice_id: Option<Uuid>,
+    company_id: Option<Uuid>,
     item_id: Option<Uuid>,
     expense_account_id: Option<Uuid>,
     description: Option<String>,
@@ -258,6 +268,12 @@ impl PurchaseInvoiceLineBuilder {
     /// Set the invoice_id field (required)
     pub fn invoice_id(mut self, value: Uuid) -> Self {
         self.invoice_id = Some(value);
+        self
+    }
+
+    /// Set the company_id field (required)
+    pub fn company_id(mut self, value: Uuid) -> Self {
+        self.company_id = Some(value);
         self
     }
 
@@ -302,6 +318,7 @@ impl PurchaseInvoiceLineBuilder {
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<PurchaseInvoiceLine, String> {
         let invoice_id = self.invoice_id.ok_or_else(|| "invoice_id is required".to_string())?;
+        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
         let item_id = self.item_id.ok_or_else(|| "item_id is required".to_string())?;
         let expense_account_id = self.expense_account_id.ok_or_else(|| "expense_account_id is required".to_string())?;
         let quantity = self.quantity.ok_or_else(|| "quantity is required".to_string())?;
@@ -310,6 +327,7 @@ impl PurchaseInvoiceLineBuilder {
         Ok(PurchaseInvoiceLine {
             id: Uuid::new_v4(),
             invoice_id,
+            company_id,
             item_id,
             expense_account_id,
             description: self.description,

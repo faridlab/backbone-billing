@@ -51,6 +51,7 @@ pub struct InvoiceTaxLineDto {
     pub id: InvoiceTaxLineId,
     pub invoice_ref: Uuid,
     pub invoice_kind: InvoiceKind,
+    pub company_id: Uuid,
     pub account_id: Uuid,
     pub basis: TaxBasis,
     pub description: Option<String>,
@@ -247,6 +248,7 @@ impl From<PurchaseInvoiceLineId> for Uuid {
 pub struct PurchaseInvoiceLineDto {
     pub id: PurchaseInvoiceLineId,
     pub invoice_id: Uuid,
+    pub company_id: Uuid,
     pub item_id: Uuid,
     pub expense_account_id: Uuid,
     pub description: Option<String>,
@@ -380,6 +382,7 @@ impl From<SalesInvoiceLineId> for Uuid {
 pub struct SalesInvoiceLineDto {
     pub id: SalesInvoiceLineId,
     pub invoice_id: Uuid,
+    pub company_id: Uuid,
     pub item_id: Uuid,
     pub revenue_account_id: Uuid,
     pub description: Option<String>,

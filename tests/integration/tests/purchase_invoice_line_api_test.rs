@@ -25,6 +25,7 @@ impl TestDataGenerator for PurchaseInvoiceLineTestData {
         json!({
             "id": Uuid::new_v4().to_string(),
             "invoice_id": Uuid::new_v4().to_string(),
+            "company_id": Uuid::new_v4().to_string(),
             "item_id": Uuid::new_v4().to_string(),
             "expense_account_id": Uuid::new_v4().to_string(),
             "description": null,
@@ -40,6 +41,7 @@ impl TestDataGenerator for PurchaseInvoiceLineTestData {
         json!({
             "id": id,
             "invoice_id": Uuid::new_v4().to_string(),
+            "company_id": Uuid::new_v4().to_string(),
             "item_id": Uuid::new_v4().to_string(),
             "expense_account_id": Uuid::new_v4().to_string(),
             "description": null,

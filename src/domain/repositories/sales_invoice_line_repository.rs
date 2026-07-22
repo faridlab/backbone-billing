@@ -45,6 +45,7 @@ pub struct SalesInvoiceLinePaginatedResult {
 #[derive(Debug, Clone, Default)]
 pub struct SalesInvoiceLineFilter {
     pub invoice_id: Option<Uuid>,
+    pub company_id: Option<Uuid>,
     pub item_id: Option<Uuid>,
     pub revenue_account_id: Option<Uuid>,
     pub description: Option<String>,
@@ -53,7 +54,7 @@ pub struct SalesInvoiceLineFilter {
 impl SalesInvoiceLineFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.invoice_id.is_some() || self.item_id.is_some() || self.revenue_account_id.is_some() || self.description.is_some()
+        self.invoice_id.is_some() || self.company_id.is_some() || self.item_id.is_some() || self.revenue_account_id.is_some() || self.description.is_some()
     }
 }
 

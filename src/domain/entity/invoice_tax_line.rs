@@ -54,6 +54,7 @@ pub struct InvoiceTaxLine {
     pub id: Uuid,
     pub invoice_ref: Uuid,
     pub invoice_kind: InvoiceKind,
+    pub company_id: Uuid,
     pub account_id: Uuid,
     pub basis: TaxBasis,
     pub description: Option<String>,
@@ -72,11 +73,12 @@ impl InvoiceTaxLine {
     }
 
     /// Create a new InvoiceTaxLine with required fields
-    pub fn new(invoice_ref: Uuid, invoice_kind: InvoiceKind, account_id: Uuid, basis: TaxBasis, taxable_base: Decimal, rate: Decimal, tax_amount: Decimal) -> Self {
+    pub fn new(invoice_ref: Uuid, invoice_kind: InvoiceKind, company_id: Uuid, account_id: Uuid, basis: TaxBasis, taxable_base: Decimal, rate: Decimal, tax_amount: Decimal) -> Self {
         Self {
             id: Uuid::new_v4(),
             invoice_ref,
             invoice_kind,
+            company_id,
             account_id,
             basis,
             description: None,
@@ -162,6 +164,9 @@ impl InvoiceTaxLine {
                 "invoice_kind" => {
                     if let Ok(v) = serde_json::from_value(value) { self.invoice_kind = v; }
                 }
+                "company_id" => {
+                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
+                }
                 "account_id" => {
                     if let Ok(v) = serde_json::from_value(value) { self.account_id = v; }
                 }
@@ -234,6 +239,7 @@ impl backbone_orm::EntityRepoMeta for InvoiceTaxLine {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
+        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("account_id".to_string(), "uuid".to_string());
         m.insert("invoice_kind".to_string(), "invoice_kind".to_string());
         m.insert("basis".to_string(), "tax_basis".to_string());
@@ -241,6 +247,9 @@ impl backbone_orm::EntityRepoMeta for InvoiceTaxLine {
     }
     fn search_fields() -> &'static [&'static str] {
         &[]
+    }
+    fn company_field() -> Option<&'static str> {
+        Some("company_id")
     }
 }
 
@@ -252,6 +261,7 @@ impl backbone_orm::EntityRepoMeta for InvoiceTaxLine {
 pub struct InvoiceTaxLineBuilder {
     invoice_ref: Option<Uuid>,
     invoice_kind: Option<InvoiceKind>,
+    company_id: Option<Uuid>,
     account_id: Option<Uuid>,
     basis: Option<TaxBasis>,
     description: Option<String>,
@@ -270,6 +280,12 @@ impl InvoiceTaxLineBuilder {
     /// Set the invoice_kind field (required)
     pub fn invoice_kind(mut self, value: InvoiceKind) -> Self {
         self.invoice_kind = Some(value);
+        self
+    }
+
+    /// Set the company_id field (required)
+    pub fn company_id(mut self, value: Uuid) -> Self {
+        self.company_id = Some(value);
         self
     }
 
@@ -315,6 +331,7 @@ impl InvoiceTaxLineBuilder {
     pub fn build(self) -> Result<InvoiceTaxLine, String> {
         let invoice_ref = self.invoice_ref.ok_or_else(|| "invoice_ref is required".to_string())?;
         let invoice_kind = self.invoice_kind.ok_or_else(|| "invoice_kind is required".to_string())?;
+        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
         let account_id = self.account_id.ok_or_else(|| "account_id is required".to_string())?;
         let basis = self.basis.ok_or_else(|| "basis is required".to_string())?;
         let tax_amount = self.tax_amount.ok_or_else(|| "tax_amount is required".to_string())?;
@@ -323,6 +340,7 @@ impl InvoiceTaxLineBuilder {
             id: Uuid::new_v4(),
             invoice_ref,
             invoice_kind,
+            company_id,
             account_id,
             basis,
             description: self.description,
