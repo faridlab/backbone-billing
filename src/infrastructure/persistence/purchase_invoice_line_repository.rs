@@ -49,6 +49,9 @@ impl PurchaseInvoiceLineRepository {
 pub struct NewPurchaseInvoiceLineRow<'a> {
     pub id: Uuid,
     pub invoice_id: Uuid,
+    /// Bound to the `company_id` column (denormalized from the header so the row passes the
+    /// ADR-0008 RLS fence on its own). Required since migration 20260426220010.
+    pub company_id: Uuid,
     pub item_id: Uuid,
     /// Bound to the `expense_account_id` column.
     pub account_id: Uuid,
@@ -78,10 +81,10 @@ impl PurchaseInvoiceLineRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO billing.purchase_invoice_lines
-                (id, invoice_id, item_id, expense_account_id, description, quantity, unit_price, net_amount)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"#,
+                (id, invoice_id, company_id, item_id, expense_account_id, description, quantity, unit_price, net_amount)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)"#,
         )
-        .bind(l.id).bind(l.invoice_id).bind(l.item_id).bind(l.account_id).bind(l.description)
+        .bind(l.id).bind(l.invoice_id).bind(l.company_id).bind(l.item_id).bind(l.account_id).bind(l.description)
         .bind(l.quantity).bind(l.unit_price).bind(l.net_amount)
         .execute(conn)
         .await?;

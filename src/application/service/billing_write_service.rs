@@ -229,12 +229,13 @@ impl BillingWriteService {
         }
     }
 
-    pub(super) async fn insert_tax_lines(&self, tx: &mut sqlx::PgConnection, invoice_id: Uuid, kind: &str, tax: &[NewTaxLine]) -> Result<(), BillingError> {
+    pub(super) async fn insert_tax_lines(&self, tx: &mut sqlx::PgConnection, invoice_id: Uuid, company_id: Uuid, kind: &str, tax: &[NewTaxLine]) -> Result<(), BillingError> {
         for t in tax {
             self.tax_lines.insert_tax_line(&mut *tx, &NewInvoiceTaxLineRow {
                 id: Uuid::new_v4(),
                 invoice_ref: invoice_id,
                 kind,
+                company_id,
                 account_id: t.account_id,
                 basis: &t.basis,
                 description: t.description.as_deref(),

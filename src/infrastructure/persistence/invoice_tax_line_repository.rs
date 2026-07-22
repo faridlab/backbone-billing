@@ -53,6 +53,10 @@ pub struct NewInvoiceTaxLineRow<'a> {
     pub invoice_ref: Uuid,
     /// Bound to the `invoice_kind` column — "sales" | "purchase".
     pub kind: &'a str,
+    /// Bound to the `company_id` column (denormalized from the parent invoice — resolved by
+    /// kind+invoice_ref — so the overlay row passes the ADR-0008 RLS fence on its own).
+    /// Required since migration 20260426220010.
+    pub company_id: Uuid,
     pub account_id: Uuid,
     /// "output" | "input" | "withholding".
     pub basis: &'a str,
@@ -81,10 +85,10 @@ impl InvoiceTaxLineRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO billing.invoice_tax_lines
-                (id, invoice_ref, invoice_kind, account_id, basis, description, taxable_base, rate, tax_amount)
-               VALUES ($1,$2,$3::invoice_kind,$4,$5::tax_basis,$6,0,$7,$8)"#,
+                (id, invoice_ref, invoice_kind, company_id, account_id, basis, description, taxable_base, rate, tax_amount)
+               VALUES ($1,$2,$3::invoice_kind,$4,$5,$6::tax_basis,$7,0,$8,$9)"#,
         )
-        .bind(t.id).bind(t.invoice_ref).bind(t.kind).bind(t.account_id).bind(t.basis)
+        .bind(t.id).bind(t.invoice_ref).bind(t.kind).bind(t.company_id).bind(t.account_id).bind(t.basis)
         .bind(t.description).bind(t.rate).bind(t.tax_amount)
         .execute(conn)
         .await?;

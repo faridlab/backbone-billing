@@ -153,6 +153,11 @@ models:
         attributes: ["@required", "@foreign_key(PurchaseInvoice.id)"]
         description: "Owning invoice"
 
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Books owner # logical FK to organization.Company.id (denormalized from the header so the line row passes the ADR-0008 RLS fence on its own)"
+
       item_id:
         type: uuid
         attributes: ["@required", "@exclude_from_foreign_key_check"]

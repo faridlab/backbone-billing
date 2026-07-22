@@ -60,6 +60,7 @@ impl BillingWriteService {
             self.purchase_lines.insert_line(&mut tx, &NewPurchaseInvoiceLineRow {
                 id: Uuid::new_v4(),
                 invoice_id: id,
+                company_id: inv.company_id,
                 item_id: p.item_id,
                 account_id: p.account_id,
                 description: p.description.as_deref(),
@@ -68,7 +69,7 @@ impl BillingWriteService {
                 net_amount: p.net_amount,
             }).await?;
         }
-        self.insert_tax_lines(&mut tx, id, "purchase", &inv.tax_lines).await?;
+        self.insert_tax_lines(&mut tx, id, inv.company_id, "purchase", &inv.tax_lines).await?;
         tx.commit().await?;
         Ok(id)
     }
