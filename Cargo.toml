@@ -1,6 +1,6 @@
 [package]
 name = "backbone-billing"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 description = "Billing: region-neutral AR/AP invoicing (Sales + Purchase Invoice) -> AccountingPost; tax via removable overlay; drives buying.mark_billed via PurchaseInvoicePosted"
 
@@ -24,10 +24,12 @@ backbone-gl-posting = { git = "https://github.com/faridlab/backbone-framework", 
 backbone-orm = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.1" }
 backbone-auth = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.1", features = ["axum"] }
 backbone-messaging = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.1" }
-# Go-live durable bus (transactional outbox + inbox). Path for hermetic local builds so it doesn't force a
-# framework git-rev bump; production swaps to the git framework dep like the others at release. Only
-# sqlx/serde transitively, so it never conflicts with the git-pinned framework crates.
-backbone-outbox = { path = "../backbone-framework/backbone-outbox" }
+# Go-live durable bus (transactional outbox + inbox). Same dual-mode wiring as the sibling modules:
+# the committed source is the framework git dep (so billing is consumable from git / standalone / CI);
+# .cargo/config.toml (gitignored) patches it back to ../backbone-framework/backbone-outbox for local
+# hermetic builds so it doesn't force a framework git-rev bump. Only sqlx/serde transitively, so it
+# never conflicts with the git-pinned framework crates. See .cargo/config.toml.example.
+backbone-outbox = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.1" }
 
 # Core async runtime and serialization
 tokio = { version = "1.0", features = ["full"] }

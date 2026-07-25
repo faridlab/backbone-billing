@@ -1,0 +1,6 @@
+# Copy this file to .cargo/config.toml (which is gitignored) to build backbone-billing against the
+# LOCAL backbone-outbox checkout at ../backbone-framework/backbone-outbox. Without this file, Cargo
+# builds backbone-outbox from its pinned framework git tag (the prod/CI path). See Cargo.toml.
+
+[patch."https://github.com/faridlab/backbone-framework"]
+backbone-outbox = { path = "../backbone-framework/backbone-outbox" }
