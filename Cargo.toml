@@ -1,6 +1,6 @@
 [package]
 name = "backbone-billing"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Billing: region-neutral AR/AP invoicing (Sales + Purchase Invoice) -> AccountingPost; tax via removable overlay; drives buying.mark_billed via PurchaseInvoicePosted"
 
