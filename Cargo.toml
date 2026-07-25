@@ -1,6 +1,6 @@
 [package]
 name = "backbone-billing"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "Billing: region-neutral AR/AP invoicing (Sales + Purchase Invoice) -> AccountingPost; tax via removable overlay; drives buying.mark_billed via PurchaseInvoicePosted"
 
@@ -97,6 +97,9 @@ rand = "0.8"
 # through in-test ACL adapters (PurchaseInvoicePosted → buying::mark_billed; the AR/AP post →
 # accounting::PostingService). Dev-dependencies ONLY — the shipped billing library has ZERO normal
 # edges (verify: `cargo tree -e normal -i backbone-buying` / `-i backbone-accounting` are empty).
-backbone-accounting = { path = "../backbone-accounting" }
-backbone-buying = { path = "../backbone-buying" }
+#
+# Dual-mode: committed source is the git tag (prod/standalone/CI); .cargo/config.toml (gitignored)
+# patches them to ../backbone-* for local workspace dev. See .cargo/config.toml.example.
+backbone-accounting = { git = "https://github.com/faridlab/backbone-accounting", tag = "v0.4.0" }
+backbone-buying = { git = "https://github.com/faridlab/backbone-buying", tag = "v0.2.1" }
 async-trait = "0.1"
