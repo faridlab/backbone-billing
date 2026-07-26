@@ -9,6 +9,14 @@
 -- @exclude_from_foreign_key_check in the schema YAML and emitted as a bare `UUID` column
 -- with no DB constraint. We keep that convention here for consistency; cross-module
 -- hard-FKs are explicitly avoided (modules own their own schema).
+--
+-- REVERSIBILITY (council 2026-07-26): this migration has NO .down.sql — the company_id RLS fence
+-- is intentionally one-way (rolling it back would drop the tenant column + policy child rows now
+-- depend on). The create migrations (...20001/20004/20006) were folded to emit company_id at birth,
+-- so on a FRESH DB this .up is a redundant-but-idempotent guard; on a DB that ran the older creates
+-- (no company_id), this .up back-fills it. sqlx tracks migrations by version, not content, so
+-- editing these files does NOT re-run them — to reconcile a DB that ran a prior revision, re-apply
+-- the fence by hand or recreate the schema from the current migrations.
 
 -- =============================================================================
 -- 1) billing.sales_invoice_lines  (parent: billing.sales_invoices via invoice_id)
