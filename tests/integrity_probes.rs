@@ -149,10 +149,14 @@ impl BillingEventSink for Recorder {
     fn publish(&self, e: BillingEvent) { self.events.lock().unwrap().push(e); }
 }
 
-// IP-4 (council 2026-07-05, skeptic): the seam event is emitted EXACTLY once even under a concurrent
-// double-post. Without gating the publish on the pending→posted UPDATE's rows_affected, both racers
-// would publish `PurchaseInvoicePosted`, double-advancing the source PO's billed_qty via
-// buying::mark_billed and corrupting the 3-way match billing exists to close.
+// IP-4 (council 2026-07-05; threat model corrected 2026-07-26): the seam event is emitted EXACTLY
+// once even under a concurrent double-post. Without gating the publish on the pending→posted
+// UPDATE's rows_affected, both racers would publish `PurchaseInvoicePosted`, and the duplicate
+// would reach buying::mark_billed — where buying's own `allocate` cap refuses it with `OverBilling`
+// + a ThreeWayMatchFailed{over_billing} broadcast (billed_qty is NOT silently double-advanced; the
+// receiver defends in depth). The gate still matters: it kills that noisy, misleading procurement
+// signal at the source. The receiver-side containment is proven separately in
+// backbone-buying/tests/funnel_and_events.rs; this probe proves only billing's emit-once.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn concurrent_post_emits_the_seam_event_once() {
     let pool = pool().await;

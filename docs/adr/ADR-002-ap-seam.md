@@ -34,10 +34,15 @@ called directly in the test). This ADR records the symmetric **A/P seam**: a rea
    concurrent double-post both callers clear `short_circuit_posted` (both see `pending`) and both get
    a deduped ack from accounting. `post_sales_invoice`/`post_purchase_invoice` therefore bind the
    `pending→posted` UPDATE result and **only publish when `rows_affected() == 1`**; the loser
-   reconciles from the persisted row and returns idempotently without re-emitting. Without this, a
-   double `PurchaseInvoicePosted` would double-advance the PO's `billed_qty` via `mark_billed` — the
-   GL stays balanced while procurement state is silently corrupted. Proven by `IP-4` (2 emissions
-   without the gate, 1 with).
+   reconciles from the persisted row and returns idempotently without re-emitting. Without this, a duplicate `PurchaseInvoicePosted` would reach `buying::mark_billed` twice — and
+   though buying's own `allocate` cap (`billed_qty ≤ received_qty`) refuses the second with `OverBilling`
+   + a `ThreeWayMatchFailed{kind:"over_billing"}` broadcast (so `billed_qty` is **not** silently
+   double-advanced — the receiver defends in depth), each duplicate still surfaces as a noisy, misleading
+   procurement-side failure against a valid PO plus wasted retry churn. The gate removes that noise at
+   the source. *(Threat model corrected council 2026-07-26: the earlier "silently corrupts `billed_qty`"
+   framing was wrong — the real cost is the spurious `OverBilling` signal.)* Proven sender-side by `IP-4`
+   (the emit is exactly-once), and receiver-side by `backbone-buying/tests/funnel_and_events.rs` (a
+   duplicate `mark_billed` traps at `OverBilling` and leaves `billed_qty` unchanged).
 
 ## Consequences
 

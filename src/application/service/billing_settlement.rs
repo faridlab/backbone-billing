@@ -19,6 +19,18 @@ use crate::infrastructure::persistence::{parse_invoice_kind, NewPaymentScheduleR
 
 use super::billing_write_service::{money, BillingError, BillingWriteService};
 
+/// The result of applying a settlement to an invoice (council 2026-07-26, rec #3).
+///
+/// `applied` is what was knocked off the invoice's outstanding (clamped to what was owed).
+/// `remainder` is the unapplied portion (`requested − applied`) — overpaid cash the CALLER must
+/// book as an on-account party credit (billing keeps no customer-credit concept). Surfacing it in
+/// the return type makes the caller's booking obligation a compile-time fact, not a docstring.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SettlementOutcome {
+    pub applied: Decimal,
+    pub remainder: Decimal,
+}
+
 /// Resolve the settlement seam's wire `kind` into the closed enum the repository dispatches on.
 /// Unknown kinds keep their original domain error.
 fn invoice_kind(kind: &str) -> Result<InvoiceKind, BillingError> {
@@ -57,17 +69,22 @@ impl BillingWriteService {
     /// agreement even when two payments race the same invoice. Draws outstanding down, advances
     /// payment schedules fill-in-order, flips status → `partially_paid` / `paid`. One transaction,
     /// `FOR UPDATE` on the invoice + its schedules.
-    pub async fn apply_settlement(&self, invoice_ref: Uuid, kind: &str, amount: Decimal) -> Result<Decimal, BillingError> {
+    pub async fn apply_settlement(
+        &self,
+        company_id: Uuid,
+        invoice_ref: Uuid,
+        kind: &str,
+        amount: Decimal,
+    ) -> Result<SettlementOutcome, BillingError> {
         let mut tx = self.db_pool.begin().await?;
-        // RLS scope (ADR-0008): this seam carries no company argument — it is driven by payment's
-        // `PaymentSettled` via an ACL. The CALLER must establish the scope
-        // (`with_company_scope(Some(event.company_id))`); we bind whatever it set onto our tx. With no
-        // ambient scope the drawdown fails closed (InvoiceNotFound) rather than touching another
-        // company's invoice.
-        company_scope::bind_current_company(&mut tx).await?;
+        // RLS scope (ADR-0008): the tenant is now an EXPLICIT argument (council 2026-07-26, rec #2) —
+        // previously this seam relied on an ambient `with_company_scope` the caller was trusted to set,
+        // which left a "forget the wrapper and you get InvoiceNotFound" trap. `bind_company_on` sets the
+        // same tx-local `app.company_id` the repo's RLS policy reads.
+        company_scope::bind_company_on(&mut tx, company_id).await?;
         let applied = self.apply_settlement_in_tx(&mut tx, invoice_ref, kind, amount).await?;
         tx.commit().await?;
-        Ok(applied)
+        Ok(SettlementOutcome { applied, remainder: money(amount) - applied })
     }
 
     /// **Go-live exactly-once settlement consumer.** Apply every allocation of one `PaymentSettled`
@@ -80,24 +97,28 @@ impl BillingWriteService {
         &self,
         event_id: Uuid,
         consumer: &str,
+        company_id: Uuid,
         allocations: &[(Uuid, String, Decimal)],
-    ) -> Result<Decimal, BillingError> {
+    ) -> Result<SettlementOutcome, BillingError> {
         let mut tx = self.db_pool.begin().await?;
-        // RLS scope: as `apply_settlement` — the relay/ACL must wrap this in the event's company scope.
-        company_scope::bind_current_company(&mut tx).await?;
+        // RLS scope (ADR-0008): explicit `company_id` (council 2026-07-26, rec #2) — the relay/ACL
+        // passes the event's company; previously this relied on an ambient scope.
+        company_scope::bind_company_on(&mut tx, company_id).await?;
         let first = backbone_outbox::inbox::once(&mut *tx, "billing", consumer, event_id)
             .await
             .map_err(|e| BillingError::Db(sqlx::Error::Protocol(e.to_string())))?;
         if !first {
             tx.commit().await?; // already consumed — exactly-once no-op
-            return Ok(Decimal::ZERO);
+            return Ok(SettlementOutcome { applied: Decimal::ZERO, remainder: Decimal::ZERO });
         }
-        let mut total = Decimal::ZERO;
+        let mut applied_total = Decimal::ZERO;
+        let mut requested_total = Decimal::ZERO;
         for (invoice_ref, kind, amount) in allocations {
-            total += self.apply_settlement_in_tx(&mut tx, *invoice_ref, kind, *amount).await?;
+            requested_total += money(*amount);
+            applied_total += self.apply_settlement_in_tx(&mut tx, *invoice_ref, kind, *amount).await?;
         }
         tx.commit().await?;
-        Ok(total)
+        Ok(SettlementOutcome { applied: applied_total, remainder: requested_total - applied_total })
     }
 
     /// The drawdown core, on a caller-supplied transaction (shared by `apply_settlement` and the
@@ -151,17 +172,22 @@ impl BillingWriteService {
     /// first (the inverse of fill-in-order), and flips status → `partially_paid` / `submitted`
     /// (re-owed). Without this, a refunded/bounced payment would leave the invoice permanently `paid`.
     /// Returns the amount actually restored. One transaction, `FOR UPDATE`.
-    pub async fn reverse_settlement(&self, invoice_ref: Uuid, kind: &str, amount: Decimal) -> Result<Decimal, BillingError> {
+    pub async fn reverse_settlement(
+        &self,
+        company_id: Uuid,
+        invoice_ref: Uuid,
+        kind: &str,
+        amount: Decimal,
+    ) -> Result<Decimal, BillingError> {
         let ikind = invoice_kind(kind)?;
         if amount < Decimal::ZERO { return Err(BillingError::NegativeAmount); }
         let amount = money(amount);
         if amount.is_zero() { return Ok(Decimal::ZERO); }
 
         let mut tx = self.db_pool.begin().await?;
-        // RLS scope (ADR-0008): as `apply_settlement` — driven by payment's `PaymentCancelled` via an
-        // ACL and carries no company argument, so the CALLER must establish the scope
-        // (`with_company_scope(Some(event.company_id))`). Fails closed without one.
-        company_scope::bind_current_company(&mut tx).await?;
+        // RLS scope (ADR-0008): explicit `company_id` (council 2026-07-26, rec #2) — driven by
+        // payment's `PaymentCancelled` via an ACL; previously relied on an ambient scope.
+        company_scope::bind_company_on(&mut tx, company_id).await?;
         let row = self.settlement.lock_outstanding(&mut tx, ikind, invoice_ref).await?
             .ok_or(BillingError::InvoiceNotFound(invoice_ref))?;
         let outstanding = row.outstanding_amount;

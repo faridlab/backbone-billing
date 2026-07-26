@@ -43,4 +43,5 @@ pub use billing_write_service::{
     BillingError, BillingWriteService, NewInvoiceLine, NewPurchaseInvoice, NewSalesInvoice,
     NewTaxLine, PostOutcome,
 };
+pub use billing_settlement::SettlementOutcome;
 // END CUSTOM
