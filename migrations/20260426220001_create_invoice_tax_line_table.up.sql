@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS billing.invoice_tax_lines (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     invoice_ref UUID NOT NULL,
     invoice_kind invoice_kind NOT NULL,
+    company_id UUID NOT NULL,
     account_id UUID NOT NULL,
     basis tax_basis NOT NULL,
     description TEXT,

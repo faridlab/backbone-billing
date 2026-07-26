@@ -6,6 +6,7 @@ CREATE SCHEMA IF NOT EXISTS billing;
 CREATE TABLE IF NOT EXISTS billing.sales_invoice_lines (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     invoice_id UUID NOT NULL,
+    company_id UUID NOT NULL,
     item_id UUID NOT NULL,
     revenue_account_id UUID NOT NULL,
     description TEXT,

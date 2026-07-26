@@ -8,6 +8,7 @@
 --     id,
 --     invoice_ref,
 --     invoice_kind,
+--     company_id,
 --     account_id,
 --     basis,
 --     description,

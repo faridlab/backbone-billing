@@ -7,6 +7,7 @@
 -- INSERT INTO billing.sales_invoice_lines (
 --     id,
 --     invoice_id,
+--     company_id,
 --     item_id,
 --     revenue_account_id,
 --     description,
