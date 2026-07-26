@@ -102,7 +102,7 @@ async fn purchase_invoice_bills_po_across_three_modules() {
     let buying = BuyingWriteService::new(pool.clone());
     let recorder = RecordingBillSink::default();
     let billing = BillingWriteService::with_sink(pool.clone(), Arc::new(recorder.clone()));
-    let gl = GlAdapter { svc: PostingService::new(pool.clone()) };
+    let gl = GlAdapter { svc: PostingService::new(Arc::new(backbone_accounting::infrastructure::persistence::SqlxPostingRepository::new(pool.clone()))) };
 
     // 1) buying: PO for 10 @ 90,000, confirm, record receipt → to_bill.
     let po = buying.create_purchase_order(NewPurchaseOrder {
