@@ -116,26 +116,8 @@ impl SalesInvoiceLineRepository {
         }).collect())
     }
 
-    /// Read the live lines' item + qty for the selling seam. Caller supplies the company scope, as
-    /// [`Self::fetch_revenue_amounts`].
-    pub async fn fetch_billed_lines(
-        &self,
-        pool: &PgPool,
-        invoice_id: Uuid,
-    ) -> Result<Vec<BilledLineRow>, sqlx::Error> {
-        let rows = company_scope::fetch_all_rows_scoped(
-            pool,
-            sqlx::query("SELECT item_id, quantity FROM billing.sales_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL")
-                .bind(invoice_id),
-        )
-        .await?;
-        Ok(rows.iter().map(|r| BilledLineRow {
-            item_id: r.get("item_id"), quantity: r.get("quantity"),
-        }).collect())
-    }
-
-    /// Transaction-accepting twin of [`Self::fetch_billed_lines`] (outbox fence) — reads the
-    /// billed lines on the shared transition transaction so the staged event matches the commit.
+    /// Read the live lines' item + qty for the selling seam on the shared transition transaction
+    /// (outbox fence) so the staged event matches the commit.
     pub async fn fetch_billed_lines_on(
         &self,
         conn: &mut sqlx::PgConnection,

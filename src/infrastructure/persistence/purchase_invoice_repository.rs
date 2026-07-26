@@ -165,35 +165,8 @@ impl PurchaseInvoiceRepository {
         }))
     }
 
-    /// Reconcile the invoice from the GL ack — the pending→posted transition. Guarded on
-    /// `posting_state <> 'posted'` so exactly one of two concurrent posts wins; returns rows affected
-    /// (0 = lost the race). The guard matters here: `PurchaseInvoicePosted.billed_lines` drives
-    /// buying::mark_billed, so a double-emit would double-advance the PO's billed_qty.
-    ///
-    /// Runs `execute_scoped` on the pool; the caller wraps it in `with_company_scope(Some(company))`
-    /// (the company comes off the post envelope) so the UPDATE passes the RLS fence (ADR-0008).
-    pub async fn mark_posted(
-        &self,
-        pool: &PgPool,
-        invoice_id: Uuid,
-        journal_id: Uuid,
-        post_id: Uuid,
-    ) -> Result<u64, sqlx::Error> {
-        let done = company_scope::execute_scoped(
-            pool,
-            sqlx::query(
-                r#"UPDATE billing.purchase_invoices SET posting_state='posted'::gl_posting_state,
-                    status='submitted'::invoice_status, journal_id=$2, accounting_post_id=$3,
-                    posted_at=now(), outstanding_amount=grand_total
-                   WHERE id=$1 AND posting_state <> 'posted'::gl_posting_state"#,
-            )
-            .bind(invoice_id).bind(journal_id).bind(post_id),
-        )
-        .await?;
-        Ok(done.rows_affected())
-    }
-
-    /// Record a GL rejection. Caller supplies the company scope, as [`Self::mark_posted`].
+    /// Record a GL rejection on the pool. The GL-rejected path runs outside the post transaction, so
+    /// this stays pool-based (caller wraps it in `with_company_scope(Some(company))`).
     pub async fn mark_posting_failed(
         &self,
         pool: &PgPool,
@@ -206,23 +179,6 @@ impl PurchaseInvoiceRepository {
         )
         .await?;
         Ok(())
-    }
-
-    /// Read the PO seam's projection after a winning transition. Caller supplies the company scope.
-    pub async fn fetch_seam_header(
-        &self,
-        pool: &PgPool,
-        invoice_id: Uuid,
-    ) -> Result<PurchaseSeamHeaderRow, sqlx::Error> {
-        let row = company_scope::fetch_one_row_scoped(
-            pool,
-            sqlx::query("SELECT source_po_id, grand_total FROM billing.purchase_invoices WHERE id=$1")
-                .bind(invoice_id),
-        )
-        .await?;
-        Ok(PurchaseSeamHeaderRow {
-            source_po_id: row.get("source_po_id"), grand_total: row.get("grand_total"),
-        })
     }
 
     // --- Transaction-accepting twins (outbox fence) -------------------------------------------
