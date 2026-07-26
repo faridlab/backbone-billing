@@ -264,6 +264,61 @@ impl SalesInvoiceRepository {
         .await?;
         Ok(done.rows_affected())
     }
+
+    // --- Transaction-accepting twins (outbox fence) -------------------------------------------
+    // The caller has already bound the company scope onto `conn` (RLS), so these run the SAME SQL as
+    // their pool counterparts directly on the shared transition transaction — staging the seam event
+    // into the outbox atomically with the state change (mirrors backbone-payment).
+
+    /// Transaction-accepting twin of [`Self::mark_posted`] — returns rows affected (1 = winner).
+    pub async fn mark_posted_on(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        invoice_id: Uuid,
+        journal_id: Uuid,
+        post_id: Uuid,
+    ) -> Result<u64, sqlx::Error> {
+        let done = sqlx::query(
+            r#"UPDATE billing.sales_invoices SET posting_state='posted'::gl_posting_state,
+                status='submitted'::invoice_status, journal_id=$2, accounting_post_id=$3,
+                posted_at=now(), outstanding_amount=grand_total
+               WHERE id=$1 AND posting_state <> 'posted'::gl_posting_state"#,
+        )
+        .bind(invoice_id).bind(journal_id).bind(post_id)
+        .execute(conn)
+        .await?;
+        Ok(done.rows_affected())
+    }
+
+    /// Transaction-accepting twin of [`Self::fetch_seam_header`].
+    pub async fn fetch_seam_header_on(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        invoice_id: Uuid,
+    ) -> Result<SalesSeamHeaderRow, sqlx::Error> {
+        let row = sqlx::query("SELECT source_so_id, grand_total FROM billing.sales_invoices WHERE id=$1")
+            .bind(invoice_id)
+            .fetch_one(conn)
+            .await?;
+        Ok(SalesSeamHeaderRow {
+            source_so_id: row.get("source_so_id"), grand_total: row.get("grand_total"),
+        })
+    }
+
+    /// Transaction-accepting twin of [`Self::mark_cancelled`] — returns rows affected (1 = did it).
+    pub async fn mark_cancelled_on(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        invoice_id: Uuid,
+    ) -> Result<u64, sqlx::Error> {
+        let done = sqlx::query(
+            "UPDATE billing.sales_invoices SET status='cancelled'::invoice_status, outstanding_amount=0 WHERE id=$1 AND status <> 'cancelled'::invoice_status",
+        )
+        .bind(invoice_id)
+        .execute(conn)
+        .await?;
+        Ok(done.rows_affected())
+    }
 }
 
 backbone_core::impl_crud_repository!(SalesInvoiceRepository, SalesInvoice, soft_delete);

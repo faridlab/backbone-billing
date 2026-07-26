@@ -128,6 +128,23 @@ impl PurchaseInvoiceLineRepository {
             item_id: r.get("item_id"), quantity: r.get("quantity"),
         }).collect())
     }
+
+    /// Transaction-accepting twin of [`Self::fetch_billed_lines`] (outbox fence).
+    pub async fn fetch_billed_lines_on(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        invoice_id: Uuid,
+    ) -> Result<Vec<BilledLineRow>, sqlx::Error> {
+        let rows: Vec<sqlx::postgres::PgRow> = sqlx::query(
+            "SELECT item_id, quantity FROM billing.purchase_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL",
+        )
+        .bind(invoice_id)
+        .fetch_all(conn)
+        .await?;
+        Ok(rows.iter().map(|r| BilledLineRow {
+            item_id: r.get("item_id"), quantity: r.get("quantity"),
+        }).collect())
+    }
 }
 
 backbone_core::impl_crud_repository!(PurchaseInvoiceLineRepository, PurchaseInvoiceLine, soft_delete);

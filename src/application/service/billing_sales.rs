@@ -116,35 +116,36 @@ impl BillingWriteService {
         let env = self.build_ar_post(invoice_id).await?;
         match sink.post(&env).await {
             Ok(ack) => {
-                // Gate the reconcile + seam event on THIS invocation actually performing the
-                // pending→posted transition. Two concurrent posts both clear short_circuit and both
-                // get a (deduped) ack from accounting; only the one whose UPDATE hits a row may emit
-                // `SalesInvoicePosted` — otherwise the event double-fires to downstream consumers.
-                let affected = company_scope::with_company_scope(
-                    Some(env.company_id),
-                    self.sales.mark_posted(&self.db_pool, invoice_id, ack.journal_id, ack.post_id),
-                ).await?;
+                // The pending→posted transition AND the durable outbox stage commit in ONE tx, so a
+                // crash after the transition can never lose the `SalesInvoicePosted` event (go-live
+                // durable bus — mirrors backbone-payment::post_payment). Only the winner of a
+                // concurrent double-post (rows_affected == 1) stages + publishes; the loser reconciles
+                // from the persisted row without re-emitting.
+                let mut tx = self.db_pool.begin().await?;
+                company_scope::bind_company_on(&mut tx, env.company_id).await?;
+                let affected = self.sales
+                    .mark_posted_on(&mut *tx, invoice_id, ack.journal_id, ack.post_id).await?;
                 if affected == 0 {
-                    // Lost the race: a concurrent post already transitioned + emitted. Reconcile
-                    // from the persisted row; do NOT re-publish the seam event.
+                    tx.rollback().await?;
                     return self.short_circuit_sales_posted(invoice_id).await?
                         .ok_or(BillingError::InvoiceNotFound(invoice_id));
                 }
-                let hdr = company_scope::with_company_scope(
-                    Some(env.company_id),
-                    self.sales.fetch_seam_header(&self.db_pool, invoice_id),
-                ).await?;
+                let hdr = self.sales.fetch_seam_header_on(&mut *tx, invoice_id).await?;
                 // Billed lines (item + qty) for the selling seam — advance the source SO's billed_qty.
-                let line_rows = company_scope::with_company_scope(
-                    Some(env.company_id),
-                    self.sales_lines.fetch_billed_lines(&self.db_pool, invoice_id),
-                ).await?;
+                let line_rows = self.sales_lines.fetch_billed_lines_on(&mut *tx, invoice_id).await?;
                 let billed_lines: Vec<BilledLine> = line_rows.iter()
                     .map(|r| BilledLine { item_id: r.item_id, quantity: r.quantity }).collect();
-                self.sink.publish(BillingEvent::SalesInvoicePosted(SalesInvoicePosted {
+                let event = SalesInvoicePosted {
                     invoice_id, company_id: env.company_id, journal_id: ack.journal_id, post_id: ack.post_id,
                     source_so_id: hdr.source_so_id, billed_lines, grand_total: hdr.grand_total,
-                }));
+                };
+                if let Some(schema) = self.outbox_schema.clone() {
+                    self.stage_outbox_event(
+                        &mut *tx, &schema, "SalesInvoicePosted", "SalesInvoice", invoice_id, &event,
+                    ).await?;
+                }
+                tx.commit().await?;
+                self.sink.publish(BillingEvent::SalesInvoicePosted(event));
                 Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
             }
             Err(rej) => {
@@ -185,12 +186,23 @@ impl BillingWriteService {
         if !env.is_balanced() { return Err(BillingError::UnbalancedPost); }
         match sink.post(&env).await {
             Ok(ack) => {
-                let affected = company_scope::with_company_scope(
-                    Some(env.company_id),
-                    self.sales.mark_cancelled(&self.db_pool, invoice_id),
-                ).await?;
+                // The cancelled transition AND the durable outbox stage commit in ONE tx (mirrors the
+                // post path + backbone-payment). Only the call that flips → cancelled (affected == 1)
+                // stages + publishes; an idempotent re-credit commits without re-emitting.
+                let mut tx = self.db_pool.begin().await?;
+                company_scope::bind_company_on(&mut tx, env.company_id).await?;
+                let affected = self.sales.mark_cancelled_on(&mut *tx, invoice_id).await?;
                 if affected == 1 {
-                    self.sink.publish(BillingEvent::InvoiceCancelled(InvoiceCancelled { invoice_id, kind: "sales".into() }));
+                    let event = InvoiceCancelled { invoice_id, kind: "sales".into() };
+                    if let Some(schema) = self.outbox_schema.clone() {
+                        self.stage_outbox_event(
+                            &mut *tx, &schema, "InvoiceCancelled", "SalesInvoice", invoice_id, &event,
+                        ).await?;
+                    }
+                    tx.commit().await?;
+                    self.sink.publish(BillingEvent::InvoiceCancelled(event));
+                } else {
+                    tx.commit().await?;
                 }
                 Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
             }

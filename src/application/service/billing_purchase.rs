@@ -123,33 +123,38 @@ impl BillingWriteService {
         let env = self.build_ap_post(invoice_id).await?;
         match sink.post(&env).await {
             Ok(ack) => {
-                // Gate the reconcile + seam event on THIS invocation performing the pending→posted
-                // transition — the A/P seam routes `PurchaseInvoicePosted.billed_lines` into
-                // buying::mark_billed, so a double-emit would double-advance the PO's billed_qty and
-                // corrupt the 3-way match. Only the winner of the UPDATE race publishes.
-                let affected = company_scope::with_company_scope(
-                    Some(env.company_id),
-                    self.purchases.mark_posted(&self.db_pool, invoice_id, ack.journal_id, ack.post_id),
-                ).await?;
+                // The pending→posted transition AND the durable outbox stage commit in ONE tx, so a
+                // crash after the transition can never lose the `PurchaseInvoicePosted` event (go-live
+                // durable bus — mirrors backbone-payment::post_payment). Only the winner of a
+                // concurrent double-post (rows_affected == 1) stages + publishes. The receiver defends
+                // in depth too — buying's allocate cap rejects a duplicate at OverBilling (ADR-002 §4) —
+                // so the gate's cost-avoidance is the noisy ThreeWayMatchFailed signal, not silent
+                // billed_qty corruption.
+                let mut tx = self.db_pool.begin().await?;
+                company_scope::bind_company_on(&mut tx, env.company_id).await?;
+                let affected = self.purchases
+                    .mark_posted_on(&mut *tx, invoice_id, ack.journal_id, ack.post_id).await?;
                 if affected == 0 {
+                    tx.rollback().await?;
                     return self.short_circuit_purchase_posted(invoice_id).await?
                         .ok_or(BillingError::InvoiceNotFound(invoice_id));
                 }
                 // Billed lines (item + qty) for the buying seam.
-                let hdr = company_scope::with_company_scope(
-                    Some(env.company_id),
-                    self.purchases.fetch_seam_header(&self.db_pool, invoice_id),
-                ).await?;
-                let line_rows = company_scope::with_company_scope(
-                    Some(env.company_id),
-                    self.purchase_lines.fetch_billed_lines(&self.db_pool, invoice_id),
-                ).await?;
+                let hdr = self.purchases.fetch_seam_header_on(&mut *tx, invoice_id).await?;
+                let line_rows = self.purchase_lines.fetch_billed_lines_on(&mut *tx, invoice_id).await?;
                 let billed_lines: Vec<BilledLine> = line_rows.iter()
                     .map(|r| BilledLine { item_id: r.item_id, quantity: r.quantity }).collect();
-                self.sink.publish(BillingEvent::PurchaseInvoicePosted(PurchaseInvoicePosted {
+                let event = PurchaseInvoicePosted {
                     invoice_id, company_id: env.company_id, journal_id: ack.journal_id, post_id: ack.post_id,
                     source_po_id: hdr.source_po_id, billed_lines, grand_total: hdr.grand_total,
-                }));
+                };
+                if let Some(schema) = self.outbox_schema.clone() {
+                    self.stage_outbox_event(
+                        &mut *tx, &schema, "PurchaseInvoicePosted", "PurchaseInvoice", invoice_id, &event,
+                    ).await?;
+                }
+                tx.commit().await?;
+                self.sink.publish(BillingEvent::PurchaseInvoicePosted(event));
                 Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
             }
             Err(rej) => {

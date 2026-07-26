@@ -290,3 +290,47 @@ async fn body_company_id_cannot_override_the_token_tenant() {
     assert_eq!(persisted, token_company, "tenant must come from the token, not the body");
     assert_ne!(persisted, attacker_company, "the body's companyId must be ignored");
 }
+
+// IP-5 (outbox fence — mirrors backbone-payment::post_payment): when `with_outbox_schema` is set,
+// `post_sales_invoice` stages `SalesInvoicePosted` into `<schema>.outbox_events` INSIDE the
+// pending→posted transaction, so a crash after the transition can never lose the event (go-live
+// durable bus). The legacy in-proc sink still fires too. Proves the staged payload is relay-readable.
+#[tokio::test]
+async fn posted_invoice_stages_seam_event_in_outbox() {
+    let pool = pool().await;
+    backbone_outbox::outbox::migrate(&pool, "billing").await.expect("migrate billing outbox");
+
+    let rec = Recorder::default();
+    let gl = OkGl { hits: Arc::new(Mutex::new(0)), journal: Uuid::new_v4(), post: Uuid::new_v4() };
+    let w = BillingWriteService::with_sink(pool.clone(), Arc::new(rec.clone()))
+        .with_outbox_schema("billing");
+
+    let (company, customer, item, ar) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    let inv = w.create_sales_invoice(NewSalesInvoice {
+        invoice_number: uq("SI"), company_id: company, branch_id: None, customer_id: customer,
+        source_so_id: None, posting_date: day(), due_date: None, currency: None,
+        receivable_account_id: ar,
+        lines: vec![line(item, ar, "1", "100000")],
+        tax_lines: vec![],
+    }).await.unwrap();
+
+    w.post_sales_invoice(inv, &gl).await.unwrap();
+
+    // Legacy in-proc sink fired exactly once.
+    let in_proc = rec.events.lock().unwrap().iter()
+        .filter(|e| matches!(e, BillingEvent::SalesInvoicePosted(p) if p.invoice_id == inv)).count();
+    assert_eq!(in_proc, 1, "in-proc sink must still fire alongside the durable outbox");
+
+    // The durable outbox holds exactly one SalesInvoicePosted for this invoice — staged iff the
+    // transition committed (the fence).
+    let staged: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM billing.outbox_events WHERE event_type='SalesInvoicePosted' AND aggregate_id=$1")
+        .bind(inv.to_string()).fetch_one(&pool).await.unwrap();
+    assert_eq!(staged, 1, "SalesInvoicePosted must be staged in the outbox exactly once");
+
+    // The staged payload is the serialized seam event (relay-readable: carries the billed line).
+    let payload_item: String = sqlx::query_scalar(
+        "SELECT (payload->'billed_lines'->0->>'item_id') FROM billing.outbox_events WHERE aggregate_id=$1")
+        .bind(inv.to_string()).fetch_one(&pool).await.unwrap();
+    assert_eq!(payload_item, item.to_string(), "staged payload carries the billed line");
+}

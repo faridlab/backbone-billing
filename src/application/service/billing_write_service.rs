@@ -209,6 +209,11 @@ pub struct BillingWriteService {
     pub(super) tax_lines: Arc<InvoiceTaxLineRepository>,
     pub(super) schedules: Arc<PaymentScheduleRepository>,
     pub(super) settlement: Arc<InvoiceSettlementRepository>,
+    /// When set, `post_*_invoice` / `reverse_sales_invoice` stage the seam event into
+    /// `<schema>.outbox_events` **inside the state-transition transaction** (crash-safe emission —
+    /// the go-live durable bus, mirroring `backbone-payment`'s outbox fence). When `None`, only the
+    /// legacy in-proc sink fires. Requires `backbone_outbox::outbox::migrate` to have created the table.
+    pub(super) outbox_schema: Option<String>,
 }
 
 impl BillingWriteService {
@@ -226,7 +231,18 @@ impl BillingWriteService {
             settlement: Arc::new(InvoiceSettlementRepository::new()),
             db_pool,
             sink,
+            outbox_schema: None,
         }
+    }
+
+    /// Enable crash-safe seam-event emission via the durable outbox in `schema` (e.g. `"billing"`),
+    /// staged inside the posted/cancelled transition transaction — mirrors
+    /// `backbone-payment::PaymentWriteService::with_outbox_schema`. The relay later drains the outbox
+    /// to the real bus; consumers dedup via `backbone_outbox::inbox::once`. Requires
+    /// `backbone_outbox::outbox::migrate(&pool, schema)` to have created `<schema>.outbox_events`.
+    pub fn with_outbox_schema(mut self, schema: impl Into<String>) -> Self {
+        self.outbox_schema = Some(schema.into());
+        self
     }
 
     pub(super) async fn insert_tax_lines(&self, tx: &mut sqlx::PgConnection, invoice_id: Uuid, company_id: Uuid, kind: &str, tax: &[NewTaxLine]) -> Result<(), BillingError> {
@@ -243,6 +259,33 @@ impl BillingWriteService {
                 tax_amount: money(t.tax_amount),
             }).await?;
         }
+        Ok(())
+    }
+
+    /// Stage a seam event into the durable outbox on the SAME transaction as the state transition —
+    /// the crash-safe fence (mirrors `backbone-payment::stage_settled`). The event is serialized into
+    /// the outbox payload so a relay can deliver it to any consumer (buying, tax, selling); billing's
+    /// own in-proc sink still fires after commit for same-process consumers/tests. The caller has
+    /// already bound the company scope onto `conn` (RLS), so this just executes on it.
+    pub(super) async fn stage_outbox_event<E: serde::Serialize>(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        schema: &str,
+        event_type: &str,
+        aggregate_type: &str,
+        aggregate_id: Uuid,
+        event: &E,
+    ) -> Result<(), BillingError> {
+        let payload = serde_json::to_value(event)
+            .map_err(|e| BillingError::Db(sqlx::Error::Protocol(format!("outbox serialize: {e}"))))?;
+        // 5-arg OutboxRecord::new matches the backbone-outbox version pinned here (no company_id
+        // field yet); the staged row inherits the ambient company scope bound on `conn`.
+        let rec = backbone_outbox::OutboxRecord::new(
+            event_type, aggregate_type, aggregate_id.to_string(), payload, chrono::Utc::now(),
+        );
+        backbone_outbox::outbox::stage(&mut *conn, schema, &rec)
+            .await
+            .map_err(|e| BillingError::Db(sqlx::Error::Protocol(e.to_string())))?;
         Ok(())
     }
 }

@@ -224,6 +224,45 @@ impl PurchaseInvoiceRepository {
             source_po_id: row.get("source_po_id"), grand_total: row.get("grand_total"),
         })
     }
+
+    // --- Transaction-accepting twins (outbox fence) -------------------------------------------
+    // Caller has already bound the company scope onto `conn`; these run the SAME SQL as their pool
+    // counterparts on the shared transition transaction (mirrors backbone-payment).
+
+    /// Transaction-accepting twin of [`Self::mark_posted`] — returns rows affected (1 = winner).
+    pub async fn mark_posted_on(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        invoice_id: Uuid,
+        journal_id: Uuid,
+        post_id: Uuid,
+    ) -> Result<u64, sqlx::Error> {
+        let done = sqlx::query(
+            r#"UPDATE billing.purchase_invoices SET posting_state='posted'::gl_posting_state,
+                status='submitted'::invoice_status, journal_id=$2, accounting_post_id=$3,
+                posted_at=now(), outstanding_amount=grand_total
+               WHERE id=$1 AND posting_state <> 'posted'::gl_posting_state"#,
+        )
+        .bind(invoice_id).bind(journal_id).bind(post_id)
+        .execute(conn)
+        .await?;
+        Ok(done.rows_affected())
+    }
+
+    /// Transaction-accepting twin of [`Self::fetch_seam_header`].
+    pub async fn fetch_seam_header_on(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        invoice_id: Uuid,
+    ) -> Result<PurchaseSeamHeaderRow, sqlx::Error> {
+        let row = sqlx::query("SELECT source_po_id, grand_total FROM billing.purchase_invoices WHERE id=$1")
+            .bind(invoice_id)
+            .fetch_one(conn)
+            .await?;
+        Ok(PurchaseSeamHeaderRow {
+            source_po_id: row.get("source_po_id"), grand_total: row.get("grand_total"),
+        })
+    }
 }
 
 backbone_core::impl_crud_repository!(PurchaseInvoiceRepository, PurchaseInvoice, soft_delete);
