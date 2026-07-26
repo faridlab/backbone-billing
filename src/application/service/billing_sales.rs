@@ -141,7 +141,7 @@ impl BillingWriteService {
                 };
                 if let Some(schema) = self.outbox_schema.clone() {
                     self.stage_outbox_event(
-                        &mut *tx, &schema, "SalesInvoicePosted", "SalesInvoice", invoice_id, &event,
+                        &mut *tx, &schema, "SalesInvoicePosted", "SalesInvoice", invoice_id, env.company_id, &event,
                     ).await?;
                 }
                 tx.commit().await?;
@@ -196,7 +196,7 @@ impl BillingWriteService {
                     let event = InvoiceCancelled { invoice_id, kind: "sales".into() };
                     if let Some(schema) = self.outbox_schema.clone() {
                         self.stage_outbox_event(
-                            &mut *tx, &schema, "InvoiceCancelled", "SalesInvoice", invoice_id, &event,
+                            &mut *tx, &schema, "InvoiceCancelled", "SalesInvoice", invoice_id, env.company_id, &event,
                         ).await?;
                     }
                     tx.commit().await?;

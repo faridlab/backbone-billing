@@ -1,6 +1,6 @@
 [package]
 name = "backbone-billing"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "Billing: region-neutral AR/AP invoicing (Sales + Purchase Invoice) -> AccountingPost; tax via removable overlay; drives buying.mark_billed via PurchaseInvoicePosted"
 
@@ -17,19 +17,19 @@ path = "src/lib.rs"
 # or `rev = "<commit-sha>"`. Cargo dedupes the git fetch — the repo is only
 # cloned once even though four crates reference it.
 # -----------------------------------------------------------------------------
-backbone-core = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.1", features = ["postgres"] }
+backbone-core = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.6", features = ["postgres"] }
 # The GL-posting wire contract (envelope + sink port), shared across producers (phase 2).
 # backbone-gl-posting 0.1.0 shipped on backbone-framework v2.7.5; billing_gl.rs re-exports it.
-backbone-gl-posting = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.5" }
-backbone-orm = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.1" }
-backbone-auth = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.1", features = ["axum"] }
-backbone-messaging = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.1" }
+backbone-gl-posting = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.6" }
+backbone-orm = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.6" }
+backbone-auth = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.6", features = ["axum"] }
+backbone-messaging = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.6" }
 # Go-live durable bus (transactional outbox + inbox). Same dual-mode wiring as the sibling modules:
 # the committed source is the framework git dep (so billing is consumable from git / standalone / CI);
 # .cargo/config.toml (gitignored) patches it back to ../backbone-framework/backbone-outbox for local
 # hermetic builds so it doesn't force a framework git-rev bump. Only sqlx/serde transitively, so it
 # never conflicts with the git-pinned framework crates. See .cargo/config.toml.example.
-backbone-outbox = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.1" }
+backbone-outbox = { git = "https://github.com/faridlab/backbone-framework", tag = "v2.7.6" }
 
 # Core async runtime and serialization
 tokio = { version = "1.0", features = ["full"] }

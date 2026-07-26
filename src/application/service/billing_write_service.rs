@@ -274,14 +274,15 @@ impl BillingWriteService {
         event_type: &str,
         aggregate_type: &str,
         aggregate_id: Uuid,
+        company_id: Uuid,
         event: &E,
     ) -> Result<(), BillingError> {
         let payload = serde_json::to_value(event)
             .map_err(|e| BillingError::Db(sqlx::Error::Protocol(format!("outbox serialize: {e}"))))?;
-        // 5-arg OutboxRecord::new matches the backbone-outbox version pinned here (no company_id
-        // field yet); the staged row inherits the ambient company scope bound on `conn`.
+        // OutboxRecord::new requires the owning tenant (ADR-0011 — the outbox_events table is fenced
+        // by company_id). The caller passes the event's company explicitly.
         let rec = backbone_outbox::OutboxRecord::new(
-            event_type, aggregate_type, aggregate_id.to_string(), payload, chrono::Utc::now(),
+            event_type, aggregate_type, aggregate_id.to_string(), company_id, payload, chrono::Utc::now(),
         );
         backbone_outbox::outbox::stage(&mut *conn, schema, &rec)
             .await

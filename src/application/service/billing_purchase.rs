@@ -150,7 +150,7 @@ impl BillingWriteService {
                 };
                 if let Some(schema) = self.outbox_schema.clone() {
                     self.stage_outbox_event(
-                        &mut *tx, &schema, "PurchaseInvoicePosted", "PurchaseInvoice", invoice_id, &event,
+                        &mut *tx, &schema, "PurchaseInvoicePosted", "PurchaseInvoice", invoice_id, env.company_id, &event,
                     ).await?;
                 }
                 tx.commit().await?;
