@@ -334,3 +334,68 @@ async fn posted_invoice_stages_seam_event_in_outbox() {
         .bind(inv.to_string()).fetch_one(&pool).await.unwrap();
     assert_eq!(payload_item, item.to_string(), "staged payload carries the billed line");
 }
+
+// IP-6 (outbox fence, A/P side): `post_purchase_invoice` stages `PurchaseInvoicePosted` in the
+// transition tx — the A/P seam event a relay routes to buying::mark_billed. Mirrors IP-5 for A/P.
+#[tokio::test]
+async fn posted_purchase_invoice_stages_seam_event_in_outbox() {
+    let pool = pool().await;
+    backbone_outbox::outbox::migrate(&pool, "billing").await.expect("migrate billing outbox");
+
+    let rec = Recorder::default();
+    let gl = OkGl { hits: Arc::new(Mutex::new(0)), journal: Uuid::new_v4(), post: Uuid::new_v4() };
+    let w = BillingWriteService::with_sink(pool.clone(), Arc::new(rec.clone()))
+        .with_outbox_schema("billing");
+
+    let (company, supplier, item, ap) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    let inv = w.create_purchase_invoice(NewPurchaseInvoice {
+        invoice_number: uq("PI"), company_id: company, branch_id: None, supplier_id: supplier,
+        source_po_id: None, posting_date: day(), due_date: None, currency: None,
+        payable_account_id: ap,
+        lines: vec![line(item, ap, "1", "100000")],
+        tax_lines: vec![],
+    }).await.unwrap();
+    w.post_purchase_invoice(inv, &gl).await.unwrap();
+
+    let in_proc = rec.events.lock().unwrap().iter()
+        .filter(|e| matches!(e, BillingEvent::PurchaseInvoicePosted(p) if p.invoice_id == inv)).count();
+    assert_eq!(in_proc, 1, "in-proc sink must fire for the A/P post");
+
+    let staged: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM billing.outbox_events WHERE event_type='PurchaseInvoicePosted' AND aggregate_id=$1")
+        .bind(inv.to_string()).fetch_one(&pool).await.unwrap();
+    assert_eq!(staged, 1, "PurchaseInvoicePosted must be staged exactly once");
+}
+
+// IP-7 (outbox fence, credit note): `reverse_sales_invoice` stages `InvoiceCancelled` in the
+// cancelled-transition tx, so a crash after the reversal can never lose the cancel event.
+#[tokio::test]
+async fn reversed_invoice_stages_cancel_in_outbox() {
+    let pool = pool().await;
+    backbone_outbox::outbox::migrate(&pool, "billing").await.expect("migrate billing outbox");
+
+    let rec = Recorder::default();
+    let gl = OkGl { hits: Arc::new(Mutex::new(0)), journal: Uuid::new_v4(), post: Uuid::new_v4() };
+    let w = BillingWriteService::with_sink(pool.clone(), Arc::new(rec.clone()))
+        .with_outbox_schema("billing");
+
+    let (company, customer, item, ar) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    let inv = w.create_sales_invoice(NewSalesInvoice {
+        invoice_number: uq("SI"), company_id: company, branch_id: None, customer_id: customer,
+        source_so_id: None, posting_date: day(), due_date: None, currency: None,
+        receivable_account_id: ar,
+        lines: vec![line(item, ar, "1", "100000")],
+        tax_lines: vec![],
+    }).await.unwrap();
+    w.post_sales_invoice(inv, &gl).await.unwrap();    // posted → outstanding set
+    w.reverse_sales_invoice(inv, &gl).await.unwrap(); // credit note → cancelled
+
+    let in_proc = rec.events.lock().unwrap().iter()
+        .filter(|e| matches!(e, BillingEvent::InvoiceCancelled(c) if c.invoice_id == inv)).count();
+    assert_eq!(in_proc, 1, "in-proc sink must fire InvoiceCancelled");
+
+    let staged: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM billing.outbox_events WHERE event_type='InvoiceCancelled' AND aggregate_id=$1")
+        .bind(inv.to_string()).fetch_one(&pool).await.unwrap();
+    assert_eq!(staged, 1, "InvoiceCancelled must be staged exactly once");
+}
