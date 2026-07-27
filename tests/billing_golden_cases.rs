@@ -185,3 +185,34 @@ async fn tax_free_invoice_posts_net_only() {
     assert_eq!(env.lines.len(), 2, "Dr A/R + Cr Revenue only — no tax line");
     assert_eq!(env.totals(), (d("150000.00"), d("150000.00")));
 }
+
+// SIGC-6: revenue grouped by income account — two income accounts produce two separate credit
+// lines (each the sum of its own lines); the single A/R debit = grand total.
+#[tokio::test]
+async fn sales_invoice_revenue_grouped_by_account() {
+    let pool = pool().await;
+    let w = BillingWriteService::new(pool.clone());
+    let (company, item, ar, rev_a, rev_b) =
+        (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    let id = w.create_sales_invoice(NewSalesInvoice {
+        invoice_number: uq("SI"), company_id: company, branch_id: None, customer_id: Uuid::new_v4(),
+        source_so_id: None, posting_date: day(), due_date: None, currency: None, receivable_account_id: ar,
+        lines: vec![
+            line(item, rev_a, "1", "100000"),
+            line(item, rev_a, "1", "50000"),
+            line(item, rev_b, "1", "200000"),
+        ],
+        tax_lines: vec![],
+    }).await.unwrap();
+    let gl = FakeGl::new();
+    w.post_sales_invoice(id, &gl).await.unwrap();
+    let env = gl.last();
+    assert!(env.is_balanced());
+    // No tax → 1 A/R debit + 2 revenue credits (rev_a summed across its two lines, rev_b separate).
+    assert_eq!(env.lines.len(), 3, "Dr A/R + Cr rev_a + Cr rev_b");
+    let credit_for = |acct: Uuid| env.lines.iter().find(|l| l.account_id == acct && l.credit > Decimal::ZERO).map(|l| l.credit);
+    assert_eq!(credit_for(rev_a), Some(d("150000")), "rev_a summed across its two lines");
+    assert_eq!(credit_for(rev_b), Some(d("200000")));
+    let ar_debit = env.lines.iter().find(|l| l.account_id == ar).unwrap().debit;
+    assert_eq!(ar_debit, d("350000"));
+}
