@@ -21,7 +21,7 @@
 -- =============================================================================
 -- 1) billing.sales_invoice_lines  (parent: billing.sales_invoices via invoice_id)
 -- =============================================================================
-ALTER TABLE billing.sales_invoice_lines ADD COLUMN company_id UUID;
+ALTER TABLE billing.sales_invoice_lines ADD COLUMN IF NOT EXISTS company_id UUID;
 
 UPDATE billing.sales_invoice_lines l
 SET company_id = (SELECT s.company_id FROM billing.sales_invoices s WHERE s.id = l.invoice_id);
@@ -49,7 +49,7 @@ CREATE POLICY sales_invoice_lines_company_isolation ON billing.sales_invoice_lin
 -- =============================================================================
 -- 2) billing.purchase_invoice_lines  (parent: billing.purchase_invoices via invoice_id)
 -- =============================================================================
-ALTER TABLE billing.purchase_invoice_lines ADD COLUMN company_id UUID;
+ALTER TABLE billing.purchase_invoice_lines ADD COLUMN IF NOT EXISTS company_id UUID;
 
 UPDATE billing.purchase_invoice_lines l
 SET company_id = (SELECT p.company_id FROM billing.purchase_invoices p WHERE p.id = l.invoice_id);
@@ -78,7 +78,7 @@ CREATE POLICY purchase_invoice_lines_company_isolation ON billing.purchase_invoi
 --    OR purchase_invoices (when invoice_kind='purchase'). Backfill resolves the right
 --    parent using the disambiguating invoice_kind column on the row itself.
 -- =============================================================================
-ALTER TABLE billing.invoice_tax_lines ADD COLUMN company_id UUID;
+ALTER TABLE billing.invoice_tax_lines ADD COLUMN IF NOT EXISTS company_id UUID;
 
 UPDATE billing.invoice_tax_lines t
 SET company_id = CASE t.invoice_kind
