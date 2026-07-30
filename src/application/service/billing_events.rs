@@ -4,6 +4,7 @@
 //! `PurchaseInvoicePosted` carries the billed lines so an ACL routes them to
 //! `backbone-buying::mark_billed` — retiring buying's simulated billing leg.
 
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,6 +21,12 @@ pub struct SalesInvoicePosted {
     /// order-to-cash mirror of `PurchaseInvoicePosted.billed_lines`).
     pub billed_lines: Vec<BilledLine>,
     pub grand_total: Decimal,
+    /// Tax-overlay fields for the tax faktur-pajak consumer
+    /// (`backbone-tax::EFakturService::record_tax_transaction`): `taxable_base` = invoice net,
+    /// `output_total` = PPN output (the sales `tax_total`). The ACL maps these into `PostedForTax`.
+    pub posting_date: NaiveDate,
+    pub taxable_base: Decimal,
+    pub output_total: Decimal,
 }
 
 /// One billed line (item + quantity) — what a downstream PO's billed_qty advances by.
@@ -40,6 +47,12 @@ pub struct PurchaseInvoicePosted {
     pub source_po_id: Option<Uuid>,
     pub billed_lines: Vec<BilledLine>,
     pub grand_total: Decimal,
+    /// Tax-overlay fields for the tax consumer: `taxable_base` = invoice net, `input_total` =
+    /// PPN input (the purchase `tax_total`), `withholding_total` = PPh withheld.
+    pub posting_date: NaiveDate,
+    pub taxable_base: Decimal,
+    pub input_total: Decimal,
+    pub withholding_total: Decimal,
 }
 
 /// An invoice was cancelled (a reversal post is emitted separately).

@@ -147,6 +147,8 @@ impl BillingWriteService {
                 let event = PurchaseInvoicePosted {
                     invoice_id, company_id: env.company_id, journal_id: ack.journal_id, post_id: ack.post_id,
                     source_po_id: hdr.source_po_id, billed_lines, grand_total: hdr.grand_total,
+                    posting_date: env.posting_date, taxable_base: hdr.net_total,
+                    input_total: hdr.tax_total, withholding_total: hdr.withholding_total,
                 };
                 if let Some(schema) = self.outbox_schema.clone() {
                     self.stage_outbox_event(

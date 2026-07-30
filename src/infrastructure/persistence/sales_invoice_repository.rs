@@ -86,6 +86,9 @@ pub struct PostingStateRow {
 pub struct SalesSeamHeaderRow {
     pub source_so_id: Option<Uuid>,
     pub grand_total: Decimal,
+    /// Tax-overlay projection for the tax consumer (net + PPN output).
+    pub net_total: Decimal,
+    pub tax_total: Decimal,
 }
 
 /// Hand-written SalesInvoice SQL. Lives here (not in the write service) per the module's 4-layer rule:
@@ -238,12 +241,13 @@ impl SalesInvoiceRepository {
         conn: &mut sqlx::PgConnection,
         invoice_id: Uuid,
     ) -> Result<SalesSeamHeaderRow, sqlx::Error> {
-        let row = sqlx::query("SELECT source_so_id, grand_total FROM billing.sales_invoices WHERE id=$1")
+        let row = sqlx::query("SELECT source_so_id, grand_total, net_total, tax_total FROM billing.sales_invoices WHERE id=$1")
             .bind(invoice_id)
             .fetch_one(conn)
             .await?;
         Ok(SalesSeamHeaderRow {
             source_so_id: row.get("source_so_id"), grand_total: row.get("grand_total"),
+            net_total: row.get("net_total"), tax_total: row.get("tax_total"),
         })
     }
 

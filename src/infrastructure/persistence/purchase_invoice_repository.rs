@@ -80,6 +80,10 @@ pub struct ApHeaderRow {
 pub struct PurchaseSeamHeaderRow {
     pub source_po_id: Option<Uuid>,
     pub grand_total: Decimal,
+    /// Tax-overlay projection for the tax consumer (net + PPN input + PPh withheld).
+    pub net_total: Decimal,
+    pub tax_total: Decimal,
+    pub withholding_total: Decimal,
 }
 
 /// Hand-written PurchaseInvoice SQL. Lives here (not in the write service) per the module's 4-layer
@@ -211,12 +215,14 @@ impl PurchaseInvoiceRepository {
         conn: &mut sqlx::PgConnection,
         invoice_id: Uuid,
     ) -> Result<PurchaseSeamHeaderRow, sqlx::Error> {
-        let row = sqlx::query("SELECT source_po_id, grand_total FROM billing.purchase_invoices WHERE id=$1")
+        let row = sqlx::query("SELECT source_po_id, grand_total, net_total, tax_total, withholding_total FROM billing.purchase_invoices WHERE id=$1")
             .bind(invoice_id)
             .fetch_one(conn)
             .await?;
         Ok(PurchaseSeamHeaderRow {
             source_po_id: row.get("source_po_id"), grand_total: row.get("grand_total"),
+            net_total: row.get("net_total"), tax_total: row.get("tax_total"),
+            withholding_total: row.get("withholding_total"),
         })
     }
 }
