@@ -321,7 +321,7 @@ dependencies = [
 
 [[package]]
 name = "backbone-billing"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -593,7 +593,6 @@ dependencies = [
 [[package]]
 name = "backbone-outbox"
 version = "0.2.0"
-source = "git+https://github.com/faridlab/backbone-framework?tag=v2.7.8#550b5464c49f902e18c9ec6f19a219f151f8eea9"
 dependencies = [
  "chrono",
  "serde",
@@ -4540,3 +4539,11 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+
+[[patch.unused]]
+name = "backbone-buying"
+version = "0.3.3"
+
+[[patch.unused]]
+name = "backbone-accounting"
+version = "0.4.2"
