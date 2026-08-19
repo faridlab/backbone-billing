@@ -14,6 +14,11 @@ version: 2
 schema: billing
 description: "Billing: region-neutral AR/AP invoicing (Sales + Purchase Invoice) emitting revenue/expense AccountingPosts into backbone-accounting; tax via a removable InvoiceTaxLine overlay; drives buying.mark_billed via PurchaseInvoicePosted."
 
+# ADR-0014 company fence: every entity here is company-scoped and fenced strict —
+# invoice headers and their child lines (tax lines, payment schedules) each carry
+# company_id and are fenced; no cross-company invoice data. No exceptions.
+company_fence: strict
+
 config:
   database: postgresql
   soft_delete: true
