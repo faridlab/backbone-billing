@@ -4,6 +4,7 @@
 
 [patch."https://github.com/faridlab/backbone-framework"]
 backbone-outbox = { path = "../backbone-framework/backbone-outbox" }
+backbone-gl-posting = { path = "../backbone-framework/backbone-gl-posting" }
 
 [patch."https://github.com/faridlab/backbone-accounting"]
 backbone-accounting = { path = "../backbone-accounting" }
