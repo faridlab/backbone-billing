@@ -23,6 +23,7 @@ pub mod billing_write_service;
 pub mod billing_purchase;
 pub mod billing_sales;
 pub mod billing_settlement;
+pub mod settlement_consumer;
 // END CUSTOM
 
 pub use invoice_tax_line_service::InvoiceTaxLineService;
@@ -37,11 +38,17 @@ pub use billing_events::{
     PurchaseInvoicePosted, SalesInvoicePosted,
 };
 pub use billing_gl::{
-    AccountingPostEnvelope, GlPostAck, GlPostLine, GlPostRejected, GlPostSink,
+    AccountingPostEnvelope, GlPostAck, GlPostLine, GlPostRejected, GlPostSink, ReconcileEdgeAck,
+    ReconcileLine, ReconcileOrigin, ReconcilePairRequest, ReconcileRejected, ReconcileSink,
+    UnreconcilePairRequest,
 };
 pub use billing_write_service::{
     BillingError, BillingWriteService, NewInvoiceLine, NewPurchaseInvoice, NewSalesInvoice,
     NewTaxLine, PostOutcome,
 };
 pub use billing_settlement::SettlementOutcome;
+pub use settlement_consumer::{
+    PaymentCancelledDto, PaymentCancelledHandler, PaymentSettledDto, PaymentSettledHandler,
+    SettledInvoiceDto,
+};
 // END CUSTOM

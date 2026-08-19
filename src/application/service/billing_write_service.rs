@@ -105,6 +105,10 @@ pub enum BillingError {
     InvoiceNotFound(Uuid),
     NotDraft(String),
     GlRejected { code: String, message: String },
+    /// The reconciliation-graph sink refused the settlement's edge (guard violation, unposted
+    /// journal, or a clamp disagreement between the subledger and the ledger). Settlements are
+    /// fail-closed on this: the drawdown rolls back with the refused edge.
+    ReconcileRefused { code: String, message: String },
     Db(sqlx::Error),
 }
 
@@ -119,6 +123,7 @@ impl BillingError {
             BillingError::InvoiceNotFound(_) => "invoice_not_found".into(),
             BillingError::NotDraft(_) => "invoice_not_draft".into(),
             BillingError::GlRejected { code, .. } => code.clone(),
+            BillingError::ReconcileRefused { code, .. } => code.clone(),
             BillingError::Db(_) => "internal_error".into(),
         }
     }
@@ -134,6 +139,7 @@ impl std::fmt::Display for BillingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BillingError::GlRejected { code, message } => write!(f, "{code}: {message}"),
+            BillingError::ReconcileRefused { code, message } => write!(f, "{code}: {message}"),
             other => write!(f, "{}", other.code()),
         }
     }

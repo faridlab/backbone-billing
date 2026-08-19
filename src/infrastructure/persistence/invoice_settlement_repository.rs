@@ -42,11 +42,22 @@ fn settlement_table(kind: InvoiceKind) -> &'static str {
     }
 }
 
+/// The column holding the invoice's control account (A/R for sales, A/P for purchase). The
+/// reconciliation edge between the invoice's line and the payment's line sits on this account —
+/// the settlement seam needs it to build the locator.
+fn control_account_column(kind: InvoiceKind) -> &'static str {
+    match kind {
+        InvoiceKind::Sales => "receivable_account_id",
+        InvoiceKind::Purchase => "payable_account_id",
+    }
+}
+
 /// A locked invoice's settlement state. `grand_total` is only read by the reversal path (it is the
-/// ceiling the restore clamps against).
+/// ceiling the restore clamps against); `control_account_id` feeds the reconciliation locator.
 pub struct OutstandingRow {
     pub outstanding_amount: Decimal,
     pub grand_total: Decimal,
+    pub control_account_id: Uuid,
 }
 
 /// The settlement drawdown's SQL. Stateless: every method takes the CALLER'S transaction, because
@@ -76,12 +87,14 @@ impl InvoiceSettlementRepository {
         invoice_ref: Uuid,
     ) -> Result<Option<OutstandingRow>, sqlx::Error> {
         let sql = format!(
-            "SELECT outstanding_amount, grand_total FROM {} WHERE id=$1 AND (metadata->>'deleted_at') IS NULL FOR UPDATE",
+            "SELECT outstanding_amount, grand_total, {} AS control_account_id FROM {} WHERE id=$1 AND (metadata->>'deleted_at') IS NULL FOR UPDATE",
+            control_account_column(kind),
             settlement_table(kind),
         );
         let row = sqlx::query(&sql).bind(invoice_ref).fetch_optional(conn).await?;
         Ok(row.map(|r| OutstandingRow {
             outstanding_amount: r.get("outstanding_amount"), grand_total: r.get("grand_total"),
+            control_account_id: r.get("control_account_id"),
         }))
     }
 

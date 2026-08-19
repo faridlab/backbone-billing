@@ -19,6 +19,7 @@ user_owned:
   - "src/application/service/billing_purchase.rs"
   - "src/application/service/billing_sales.rs"
   - "src/application/service/billing_settlement.rs"
+  - "src/application/service/settlement_consumer.rs"
   # Own the hand-written AR/AP SQL (the draft header + line + tax-overlay inserts, the post builders'
   # projections, the pending→posted reconcile, the credit note, and the settlement drawdown) that the
   # write service orchestrates. Declared here — not renamed with a `_custom` suffix — so the generator
@@ -36,6 +37,7 @@ user_owned:
   - "tests/billing_golden_cases.rs"
   - "tests/integrity_probes.rs"
   - "tests/ap_seam.rs"
+  - "tests/settlement_graph_seam.rs"
   - "tests/schedules_and_events.rs"
   - "scripts/**"
   # Hand-authored behavior (services + their HTTP surface). Examples:
