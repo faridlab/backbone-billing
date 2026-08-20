@@ -22,19 +22,32 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::application::service::billing_write_service::{
-    BillingError, BillingWriteService, NewInvoiceLine, NewPurchaseInvoice, NewSalesInvoice, NewTaxLine,
+    BillingError, BillingWriteService, NewInvoiceLine, NewPurchaseInvoice, NewSalesInvoice,
+    NewTaxLine,
 };
 use crate::BillingModule;
 
 use super::{create_purchase_invoice_read_routes, create_sales_invoice_read_routes};
 
 #[derive(Debug, Serialize)]
-struct ErrorBody { error: String, message: String }
+struct ErrorBody {
+    error: String,
+    message: String,
+}
 #[derive(Debug, Serialize)]
-struct IdResponse { id: Uuid }
+struct IdResponse {
+    id: Uuid,
+}
 fn err(e: BillingError) -> axum::response::Response {
     let s = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    (s, Json(ErrorBody { error: e.code(), message: e.to_string() })).into_response()
+    (
+        s,
+        Json(ErrorBody {
+            error: e.code(),
+            message: e.to_string(),
+        }),
+    )
+        .into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,13 +55,26 @@ fn err(e: BillingError) -> axum::response::Response {
 struct LineBody {
     item_id: Uuid,
     account_id: Uuid,
-    #[serde(default)] description: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
     quantity: Decimal,
     unit_price: Decimal,
+    /// Optional tax template — supplying it on ANY line makes the document
+    /// template-driven (the tax engine computes the overlay; supplied tax lines
+    /// are ignored for that document).
+    #[serde(default)]
+    tax_template_id: Option<Uuid>,
 }
 impl From<LineBody> for NewInvoiceLine {
     fn from(b: LineBody) -> Self {
-        NewInvoiceLine { item_id: b.item_id, account_id: b.account_id, description: b.description, quantity: b.quantity, unit_price: b.unit_price }
+        NewInvoiceLine {
+            item_id: b.item_id,
+            account_id: b.account_id,
+            description: b.description,
+            quantity: b.quantity,
+            unit_price: b.unit_price,
+            tax_template_id: b.tax_template_id,
+        }
     }
 }
 
@@ -57,13 +83,26 @@ impl From<LineBody> for NewInvoiceLine {
 struct TaxLineBody {
     account_id: Uuid,
     basis: String,
-    #[serde(default)] description: Option<String>,
-    #[serde(default)] rate: Decimal,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    rate: Decimal,
     tax_amount: Decimal,
 }
 impl From<TaxLineBody> for NewTaxLine {
     fn from(b: TaxLineBody) -> Self {
-        NewTaxLine { account_id: b.account_id, basis: b.basis, description: b.description, rate: b.rate, tax_amount: b.tax_amount }
+        NewTaxLine {
+            account_id: b.account_id,
+            basis: b.basis,
+            description: b.description,
+            rate: b.rate,
+            tax_amount: b.tax_amount,
+            taxable_base: Decimal::ZERO,
+            tax_template_id: None,
+            repartition_line_id: None,
+            real_account_id: None,
+            exigibility: None,
+        }
     }
 }
 
@@ -75,13 +114,17 @@ struct CreateSalesInvoiceBody {
     // `CompanyContext`, never from the request body — a client must not be able to name the tenant
     // it writes into.
     customer_id: Uuid,
-    #[serde(default)] source_so_id: Option<Uuid>,
+    #[serde(default)]
+    source_so_id: Option<Uuid>,
     posting_date: chrono::NaiveDate,
-    #[serde(default)] due_date: Option<chrono::NaiveDate>,
-    #[serde(default)] currency: Option<String>,
+    #[serde(default)]
+    due_date: Option<chrono::NaiveDate>,
+    #[serde(default)]
+    currency: Option<String>,
     receivable_account_id: Uuid,
     lines: Vec<LineBody>,
-    #[serde(default)] tax_lines: Vec<TaxLineBody>,
+    #[serde(default)]
+    tax_lines: Vec<TaxLineBody>,
 }
 async fn create_sales_invoice(
     State(svc): State<Arc<BillingWriteService>>,
@@ -89,9 +132,15 @@ async fn create_sales_invoice(
     Json(b): Json<CreateSalesInvoiceBody>,
 ) -> axum::response::Response {
     let inv = NewSalesInvoice {
-        invoice_number: b.invoice_number, company_id: tenant.company_id, branch_id: tenant.branch_id,
-        customer_id: b.customer_id, source_so_id: b.source_so_id, posting_date: b.posting_date,
-        due_date: b.due_date, currency: b.currency, receivable_account_id: b.receivable_account_id,
+        invoice_number: b.invoice_number,
+        company_id: tenant.company_id,
+        branch_id: tenant.branch_id,
+        customer_id: b.customer_id,
+        source_so_id: b.source_so_id,
+        posting_date: b.posting_date,
+        due_date: b.due_date,
+        currency: b.currency,
+        receivable_account_id: b.receivable_account_id,
         lines: b.lines.into_iter().map(Into::into).collect(),
         tax_lines: b.tax_lines.into_iter().map(Into::into).collect(),
     };
@@ -107,13 +156,17 @@ struct CreatePurchaseInvoiceBody {
     invoice_number: String,
     // Tenant comes from the signed token (`CompanyContext`), not the body.
     supplier_id: Uuid,
-    #[serde(default)] source_po_id: Option<Uuid>,
+    #[serde(default)]
+    source_po_id: Option<Uuid>,
     posting_date: chrono::NaiveDate,
-    #[serde(default)] due_date: Option<chrono::NaiveDate>,
-    #[serde(default)] currency: Option<String>,
+    #[serde(default)]
+    due_date: Option<chrono::NaiveDate>,
+    #[serde(default)]
+    currency: Option<String>,
     payable_account_id: Uuid,
     lines: Vec<LineBody>,
-    #[serde(default)] tax_lines: Vec<TaxLineBody>,
+    #[serde(default)]
+    tax_lines: Vec<TaxLineBody>,
 }
 async fn create_purchase_invoice(
     State(svc): State<Arc<BillingWriteService>>,
@@ -121,9 +174,15 @@ async fn create_purchase_invoice(
     Json(b): Json<CreatePurchaseInvoiceBody>,
 ) -> axum::response::Response {
     let inv = NewPurchaseInvoice {
-        invoice_number: b.invoice_number, company_id: tenant.company_id, branch_id: tenant.branch_id,
-        supplier_id: b.supplier_id, source_po_id: b.source_po_id, posting_date: b.posting_date,
-        due_date: b.due_date, currency: b.currency, payable_account_id: b.payable_account_id,
+        invoice_number: b.invoice_number,
+        company_id: tenant.company_id,
+        branch_id: tenant.branch_id,
+        supplier_id: b.supplier_id,
+        source_po_id: b.source_po_id,
+        posting_date: b.posting_date,
+        due_date: b.due_date,
+        currency: b.currency,
+        payable_account_id: b.payable_account_id,
         lines: b.lines.into_iter().map(Into::into).collect(),
         tax_lines: b.tax_lines.into_iter().map(Into::into).collect(),
     };
@@ -160,7 +219,11 @@ pub fn create_guarded_billing_routes(
 ) -> Router {
     let write = Arc::new(BillingWriteService::new(pool));
     Router::new()
-        .merge(create_sales_invoice_read_routes(m.sales_invoice_service.clone()))
-        .merge(create_purchase_invoice_read_routes(m.purchase_invoice_service.clone()))
+        .merge(create_sales_invoice_read_routes(
+            m.sales_invoice_service.clone(),
+        ))
+        .merge(create_purchase_invoice_read_routes(
+            m.purchase_invoice_service.clone(),
+        ))
         .merge(write_routes(write, verifier))
 }

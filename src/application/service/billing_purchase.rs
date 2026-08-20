@@ -20,106 +20,181 @@ use crate::infrastructure::persistence::{NewPurchaseInvoiceLineRow, NewPurchaseI
 use super::billing_events::{BilledLine, BillingEvent, PurchaseInvoicePosted};
 use super::billing_gl::{AccountingPostEnvelope, GlPostLine, GlPostSink};
 use super::billing_write_service::{
-    is_dup, posted_outcome, price, BillingError, BillingWriteService, NewPurchaseInvoice, PostOutcome,
+    is_dup, posted_outcome, BillingError, BillingWriteService, NewPurchaseInvoice, PostOutcome,
 };
 
 impl BillingWriteService {
     // ---- Purchase Invoice (A/P) ---------------------------------------------
 
-    pub async fn create_purchase_invoice(&self, inv: NewPurchaseInvoice) -> Result<Uuid, BillingError> {
-        let (priced, net_total, _out, input, wht) = price(&inv.lines, &inv.tax_lines)?;
-        let grand = net_total + input - wht; // A/P owed
-        // Withholding is a deduction from the payable, never more than the base: a negative A/P would
-        // persist a negative outstanding + emit a negative-A/P seam event (fails open). Refuse it.
-        if grand < Decimal::ZERO { return Err(BillingError::NegativeAmount); }
+    pub async fn create_purchase_invoice(
+        &self,
+        inv: NewPurchaseInvoice,
+    ) -> Result<Uuid, BillingError> {
+        // Template-driven when any line carries a tax template (engine computes the overlay +
+        // redistributes the nets under round_globally); supplied lines otherwise.
+        let doc = self
+            .price_document(
+                &inv.lines,
+                &inv.tax_lines,
+                inv.company_id,
+                inv.posting_date,
+                "purchase",
+            )
+            .await?;
+        let grand = doc.net_total + doc.input - doc.withholding; // A/P owed
+                                                                 // Withholding is a deduction from the payable, never more than the base: a negative A/P would
+                                                                 // persist a negative outstanding + emit a negative-A/P seam event (fails open). Refuse it.
+        if grand < Decimal::ZERO {
+            return Err(BillingError::NegativeAmount);
+        }
         let id = Uuid::new_v4();
         let currency = inv.currency.unwrap_or_else(|| "IDR".into());
         let mut tx = self.db_pool.begin().await?;
         // RLS scope (ADR-0008): company on the DTO.
         company_scope::bind_company_on(&mut tx, inv.company_id).await?;
-        let r = self.purchases.insert_draft(&mut tx, &NewPurchaseInvoiceRow {
-            id,
-            invoice_number: &inv.invoice_number,
-            company_id: inv.company_id,
-            branch_id: inv.branch_id,
-            supplier_id: inv.supplier_id,
-            source_po_id: inv.source_po_id,
-            posting_date: inv.posting_date,
-            due_date: inv.due_date,
-            currency: &currency,
-            net_total,
-            tax_total: input,
-            withholding_total: wht,
-            grand_total: grand,
-            payable_account_id: inv.payable_account_id,
-        }).await;
+        let r = self
+            .purchases
+            .insert_draft(
+                &mut tx,
+                &NewPurchaseInvoiceRow {
+                    id,
+                    invoice_number: &inv.invoice_number,
+                    company_id: inv.company_id,
+                    branch_id: inv.branch_id,
+                    supplier_id: inv.supplier_id,
+                    source_po_id: inv.source_po_id,
+                    posting_date: inv.posting_date,
+                    due_date: inv.due_date,
+                    currency: &currency,
+                    net_total: doc.net_total,
+                    tax_total: doc.input,
+                    withholding_total: doc.withholding,
+                    grand_total: grand,
+                    payable_account_id: inv.payable_account_id,
+                },
+            )
+            .await;
         if let Err(e) = r {
-            return Err(if is_dup(&e) { BillingError::DuplicateNumber(inv.invoice_number) } else { e.into() });
+            return Err(if is_dup(&e) {
+                BillingError::DuplicateNumber(inv.invoice_number)
+            } else {
+                e.into()
+            });
         }
-        for p in &priced {
-            self.purchase_lines.insert_line(&mut tx, &NewPurchaseInvoiceLineRow {
-                id: Uuid::new_v4(),
-                invoice_id: id,
-                company_id: inv.company_id,
-                item_id: p.item_id,
-                account_id: p.account_id,
-                description: p.description.as_deref(),
-                quantity: p.quantity,
-                unit_price: p.unit_price,
-                net_amount: p.net_amount,
-            }).await?;
+        for p in &doc.priced {
+            self.purchase_lines
+                .insert_line(
+                    &mut tx,
+                    &NewPurchaseInvoiceLineRow {
+                        id: Uuid::new_v4(),
+                        invoice_id: id,
+                        company_id: inv.company_id,
+                        item_id: p.item_id,
+                        account_id: p.account_id,
+                        description: p.description.as_deref(),
+                        quantity: p.quantity,
+                        unit_price: p.unit_price,
+                        net_amount: p.net_amount,
+                    },
+                )
+                .await?;
         }
-        self.insert_tax_lines(&mut tx, id, inv.company_id, "purchase", &inv.tax_lines).await?;
+        self.insert_tax_lines(&mut tx, id, inv.company_id, "purchase", &doc.tax_lines)
+            .await?;
         tx.commit().await?;
         Ok(id)
     }
 
     /// Build the balanced A/P post: `Dr Expense (net per account) · Dr PPN Input (per input line) ·
     /// Cr A/P (grand) [supplier] · Cr PPh Payable (per withholding line)`.
-    pub async fn build_ap_post(&self, invoice_id: Uuid) -> Result<AccountingPostEnvelope, BillingError> {
+    pub async fn build_ap_post(
+        &self,
+        invoice_id: Uuid,
+    ) -> Result<AccountingPostEnvelope, BillingError> {
         // RLS scope (ADR-0008), ID-only: fenced by the request/inherited scope.
-        let inv = self.purchases.fetch_ap_header(&self.db_pool, invoice_id).await?
+        let inv = self
+            .purchases
+            .fetch_ap_header(&self.db_pool, invoice_id)
+            .await?
             .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         let currency = inv.currency;
-        if currency != "IDR" { return Err(BillingError::UnsupportedCurrency(currency)); }
+        if currency != "IDR" {
+            return Err(BillingError::UnsupportedCurrency(currency));
+        }
 
         let exp_rows = company_scope::with_company_scope(
             Some(inv.company_id),
-            self.purchase_lines.fetch_expense_amounts(&self.db_pool, invoice_id),
-        ).await?;
+            self.purchase_lines
+                .fetch_expense_amounts(&self.db_pool, invoice_id),
+        )
+        .await?;
         let mut expense: BTreeMap<Uuid, Decimal> = BTreeMap::new();
         for r in &exp_rows {
             *expense.entry(r.expense_account_id).or_insert(Decimal::ZERO) += r.net_amount;
         }
         let input_rows = company_scope::with_company_scope(
             Some(inv.company_id),
-            self.tax_lines.fetch_amounts_by_basis(&self.db_pool, invoice_id, "purchase", "input"),
-        ).await?;
+            self.tax_lines
+                .fetch_amounts_by_basis(&self.db_pool, invoice_id, "purchase", "input"),
+        )
+        .await?;
         let wht_rows = company_scope::with_company_scope(
             Some(inv.company_id),
-            self.tax_lines.fetch_amounts_by_basis(&self.db_pool, invoice_id, "purchase", "withholding"),
-        ).await?;
+            self.tax_lines.fetch_amounts_by_basis(
+                &self.db_pool,
+                invoice_id,
+                "purchase",
+                "withholding",
+            ),
+        )
+        .await?;
 
         let mut lines: Vec<GlPostLine> = Vec::new();
-        for (acct, amt) in &expense { lines.push(GlPostLine::debit(*acct, *amt).with_description("Expense/GR-IR")); }
-        for t in &input_rows { lines.push(GlPostLine::debit(t.account_id, t.tax_amount).with_description("PPN Input")); }
-        lines.push(GlPostLine::credit(inv.payable_account_id, inv.grand_total)
-            .with_party("supplier", inv.supplier_id)
-            .with_description(format!("A/P {}", inv.invoice_number)));
-        for t in &wht_rows { lines.push(GlPostLine::credit(t.account_id, t.tax_amount).with_description("PPh Payable")); }
+        for (acct, amt) in &expense {
+            lines.push(GlPostLine::debit(*acct, *amt).with_description("Expense/GR-IR"));
+        }
+        for t in &input_rows {
+            lines.push(GlPostLine::debit(t.account_id, t.tax_amount).with_description("PPN Input"));
+        }
+        lines.push(
+            GlPostLine::credit(inv.payable_account_id, inv.grand_total)
+                .with_party("supplier", inv.supplier_id)
+                .with_description(format!("A/P {}", inv.invoice_number)),
+        );
+        for t in &wht_rows {
+            lines.push(
+                GlPostLine::credit(t.account_id, t.tax_amount).with_description("PPh Payable"),
+            );
+        }
 
         let env = AccountingPostEnvelope {
-            idempotency_key: invoice_id.to_string(), company_id: inv.company_id, branch_id: inv.branch_id,
-            source_type: "expense".into(), source_id: invoice_id, source_reference: Some(inv.invoice_number),
-            posting_date: inv.posting_date, currency, posting_type: "original".into(), reverses_post_id: None,
-            description: Some("Purchase invoice".into()), lines,
+            idempotency_key: invoice_id.to_string(),
+            company_id: inv.company_id,
+            branch_id: inv.branch_id,
+            source_type: "expense".into(),
+            source_id: invoice_id,
+            source_reference: Some(inv.invoice_number),
+            posting_date: inv.posting_date,
+            currency,
+            posting_type: "original".into(),
+            reverses_post_id: None,
+            description: Some("Purchase invoice".into()),
+            lines,
         };
-        if !env.is_balanced() { return Err(BillingError::UnbalancedPost); }
+        if !env.is_balanced() {
+            return Err(BillingError::UnbalancedPost);
+        }
         Ok(env)
     }
 
-    pub async fn post_purchase_invoice(&self, invoice_id: Uuid, sink: &dyn GlPostSink) -> Result<PostOutcome, BillingError> {
-        if let Some(o) = self.short_circuit_purchase_posted(invoice_id).await? { return Ok(o); }
+    pub async fn post_purchase_invoice(
+        &self,
+        invoice_id: Uuid,
+        sink: &dyn GlPostSink,
+    ) -> Result<PostOutcome, BillingError> {
+        if let Some(o) = self.short_circuit_purchase_posted(invoice_id).await? {
+            return Ok(o);
+        }
         let env = self.build_ap_post(invoice_id).await?;
         match sink.post(&env).await {
             Ok(ack) => {
@@ -132,47 +207,93 @@ impl BillingWriteService {
                 // billed_qty corruption.
                 let mut tx = self.db_pool.begin().await?;
                 company_scope::bind_company_on(&mut tx, env.company_id).await?;
-                let affected = self.purchases
-                    .mark_posted_on(&mut *tx, invoice_id, ack.journal_id, ack.post_id).await?;
+                let affected = self
+                    .purchases
+                    .mark_posted_on(&mut *tx, invoice_id, ack.journal_id, ack.post_id)
+                    .await?;
                 if affected == 0 {
                     tx.rollback().await?;
-                    return self.short_circuit_purchase_posted(invoice_id).await?
+                    return self
+                        .short_circuit_purchase_posted(invoice_id)
+                        .await?
                         .ok_or(BillingError::InvoiceNotFound(invoice_id));
                 }
                 // Billed lines (item + qty) for the buying seam.
-                let hdr = self.purchases.fetch_seam_header_on(&mut *tx, invoice_id).await?;
-                let line_rows = self.purchase_lines.fetch_billed_lines_on(&mut *tx, invoice_id).await?;
-                let billed_lines: Vec<BilledLine> = line_rows.iter()
-                    .map(|r| BilledLine { item_id: r.item_id, quantity: r.quantity }).collect();
+                let hdr = self
+                    .purchases
+                    .fetch_seam_header_on(&mut *tx, invoice_id)
+                    .await?;
+                let line_rows = self
+                    .purchase_lines
+                    .fetch_billed_lines_on(&mut *tx, invoice_id)
+                    .await?;
+                let billed_lines: Vec<BilledLine> = line_rows
+                    .iter()
+                    .map(|r| BilledLine {
+                        item_id: r.item_id,
+                        quantity: r.quantity,
+                    })
+                    .collect();
                 let event = PurchaseInvoicePosted {
-                    invoice_id, company_id: env.company_id, journal_id: ack.journal_id, post_id: ack.post_id,
-                    source_po_id: hdr.source_po_id, billed_lines, grand_total: hdr.grand_total,
-                    posting_date: env.posting_date, taxable_base: hdr.net_total,
-                    input_total: hdr.tax_total, withholding_total: hdr.withholding_total,
+                    invoice_id,
+                    company_id: env.company_id,
+                    journal_id: ack.journal_id,
+                    post_id: ack.post_id,
+                    source_po_id: hdr.source_po_id,
+                    billed_lines,
+                    grand_total: hdr.grand_total,
+                    posting_date: env.posting_date,
+                    taxable_base: hdr.net_total,
+                    input_total: hdr.tax_total,
+                    withholding_total: hdr.withholding_total,
                 };
                 if let Some(schema) = self.outbox_schema.clone() {
                     self.stage_outbox_event(
-                        &mut *tx, &schema, "PurchaseInvoicePosted", "PurchaseInvoice", invoice_id, env.company_id, &event,
-                    ).await?;
+                        &mut *tx,
+                        &schema,
+                        "PurchaseInvoicePosted",
+                        "PurchaseInvoice",
+                        invoice_id,
+                        env.company_id,
+                        &event,
+                    )
+                    .await?;
                 }
                 tx.commit().await?;
-                self.sink.publish(BillingEvent::PurchaseInvoicePosted(event));
-                Ok(PostOutcome { invoice_id, post_id: ack.post_id, journal_id: ack.journal_id, idempotent_reuse: ack.idempotent_reuse })
+                self.sink
+                    .publish(BillingEvent::PurchaseInvoicePosted(event));
+                Ok(PostOutcome {
+                    invoice_id,
+                    post_id: ack.post_id,
+                    journal_id: ack.journal_id,
+                    idempotent_reuse: ack.idempotent_reuse,
+                })
             }
             Err(rej) => {
                 let _ = company_scope::with_company_scope(
                     Some(env.company_id),
-                    self.purchases.mark_posting_failed(&self.db_pool, invoice_id),
-                ).await;
-                Err(BillingError::GlRejected { code: rej.code, message: rej.message })
+                    self.purchases
+                        .mark_posting_failed(&self.db_pool, invoice_id),
+                )
+                .await;
+                Err(BillingError::GlRejected {
+                    code: rej.code,
+                    message: rej.message,
+                })
             }
         }
     }
 
     // ---- shared -------------------------------------------------------------
 
-    pub(super) async fn short_circuit_purchase_posted(&self, invoice_id: Uuid) -> Result<Option<PostOutcome>, BillingError> {
-        let row = self.purchases.fetch_posting_state(&self.db_pool, invoice_id).await?
+    pub(super) async fn short_circuit_purchase_posted(
+        &self,
+        invoice_id: Uuid,
+    ) -> Result<Option<PostOutcome>, BillingError> {
+        let row = self
+            .purchases
+            .fetch_posting_state(&self.db_pool, invoice_id)
+            .await?
             .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         Ok(posted_outcome(invoice_id, row))
     }

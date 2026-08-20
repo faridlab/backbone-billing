@@ -30,7 +30,9 @@ pub struct InvoiceTaxLineRepository(
 
 impl std::ops::Deref for InvoiceTaxLineRepository {
     type Target = backbone_orm::GenericCrudRepository<InvoiceTaxLine, backbone_orm::SoftDelete>;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl InvoiceTaxLineRepository {
@@ -44,9 +46,11 @@ impl InvoiceTaxLineRepository {
 ///
 /// Mirrors the raw column shape rather than the `InvoiceTaxLine` entity: `invoice_kind` and `basis`
 /// are supplied as free strings and cast at the DB (`$3::invoice_kind`, `$5::tax_basis`), which is
-/// what lets a bad value fail as a DB error instead of a deserialize panic. `taxable_base` is a
-/// literal 0 in the statement — billing is region-neutral and does not compute the base (that is
-/// `backbone-tax`'s job later); `tax_amount` arrives already rounded.
+/// what lets a bad value fail as a DB error instead of a deserialize panic. Caller-supplied lines
+/// carry no base (region-neutral billing does not compute it — the literal-0 legacy shape), while
+/// engine-computed lines carry the source line's post-policy net; `tax_amount` arrives already
+/// rounded. The template/routing columns are `None` for supplied lines and populated only by the
+/// document-engine path; `exigibility` NULL-binds to `'on_invoice'` at the DB (the column default).
 pub struct NewInvoiceTaxLineRow<'a> {
     pub id: Uuid,
     /// Bound to the `invoice_ref` column — the sales OR purchase invoice id, disambiguated by `kind`.
@@ -63,6 +67,17 @@ pub struct NewInvoiceTaxLineRow<'a> {
     pub description: Option<&'a str>,
     pub rate: Decimal,
     pub tax_amount: Decimal,
+    pub taxable_base: Decimal,
+    /// The tax template that produced this line (engine-computed rows only).
+    pub tax_template_id: Option<Uuid>,
+    /// The repartition split whose factor produced this amount (engine rows on templates
+    /// with repartition families; `None` for legacy template-row routing).
+    pub repartition_line_id: Option<Uuid>,
+    /// Cash-basis rows: the real account the amount flips to at payment (the posting
+    /// `account_id` is the transition account meanwhile). `None` ⟺ exigibility on_invoice.
+    pub real_account_id: Option<Uuid>,
+    /// "on_invoice" | "on_payment" — `None` binds to the column default `'on_invoice'`.
+    pub exigibility: Option<&'a str>,
 }
 
 /// One overlay tax line's account + amount — a `Cr PPN Output` / `Dr PPN Input` / `Cr PPh` GL leg.
@@ -85,11 +100,26 @@ impl InvoiceTaxLineRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO billing.invoice_tax_lines
-                (id, invoice_ref, invoice_kind, company_id, account_id, basis, description, taxable_base, rate, tax_amount)
-               VALUES ($1,$2,$3::invoice_kind,$4,$5,$6::tax_basis,$7,0,$8,$9)"#,
+                (id, invoice_ref, invoice_kind, company_id, account_id, basis, description,
+                 taxable_base, rate, tax_amount, tax_template_id, repartition_line_id,
+                 real_account_id, exigibility)
+               VALUES ($1,$2,$3::invoice_kind,$4,$5,$6::tax_basis,$7,$8,$9,$10,$11,$12,$13,
+                 COALESCE($14::billing.tax_exigibility, 'on_invoice'))"#,
         )
-        .bind(t.id).bind(t.invoice_ref).bind(t.kind).bind(t.company_id).bind(t.account_id).bind(t.basis)
-        .bind(t.description).bind(t.rate).bind(t.tax_amount)
+        .bind(t.id)
+        .bind(t.invoice_ref)
+        .bind(t.kind)
+        .bind(t.company_id)
+        .bind(t.account_id)
+        .bind(t.basis)
+        .bind(t.description)
+        .bind(t.taxable_base)
+        .bind(t.rate)
+        .bind(t.tax_amount)
+        .bind(t.tax_template_id)
+        .bind(t.repartition_line_id)
+        .bind(t.real_account_id)
+        .bind(t.exigibility)
         .execute(conn)
         .await?;
         Ok(())
@@ -114,12 +144,18 @@ impl InvoiceTaxLineRepository {
                    WHERE invoice_ref=$1 AND invoice_kind=$2::invoice_kind AND basis=$3::tax_basis
                      AND (metadata->>'deleted_at') IS NULL"#,
             )
-            .bind(invoice_ref).bind(kind).bind(basis),
+            .bind(invoice_ref)
+            .bind(kind)
+            .bind(basis),
         )
         .await?;
-        Ok(rows.iter().map(|r| TaxAmountRow {
-            account_id: r.get("account_id"), tax_amount: r.get("tax_amount"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| TaxAmountRow {
+                account_id: r.get("account_id"),
+                tax_amount: r.get("tax_amount"),
+            })
+            .collect())
     }
 }
 
