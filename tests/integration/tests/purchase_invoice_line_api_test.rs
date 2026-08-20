@@ -60,7 +60,13 @@ impl TestDataGenerator for PurchaseInvoiceLineTestData {
 
     async fn seed_dependencies(&self, api: &ApiTest) -> Vec<(String, String)> {
         let mut deps: Vec<(String, String)> = Vec::new();
-        if let Some(id) = super::crud_test_base::create_and_get_id(api, "/api/v1/purchase_invoices", &super::purchase_invoice_api_test::PurchaseInvoiceTestData).await {
+        if let Some(id) = super::crud_test_base::create_and_get_id(
+            api,
+            "/api/v1/purchase_invoices",
+            &super::purchase_invoice_api_test::PurchaseInvoiceTestData,
+        )
+        .await
+        {
             deps.push(("invoice_id".to_string(), id));
         }
         deps
@@ -78,7 +84,8 @@ pub struct PurchaseInvoiceLineApiTest {
 
 impl PurchaseInvoiceLineApiTest {
     pub fn new() -> Self {
-        let mut config = CrudTestConfig::new("/api/v1/purchase_invoice_lines", "PurchaseInvoiceLine");
+        let mut config =
+            CrudTestConfig::new("/api/v1/purchase_invoice_lines", "PurchaseInvoiceLine");
         config.supports_soft_delete = true;
         Self {
             inner: GenericCrudTest::new(config, PurchaseInvoiceLineTestData),

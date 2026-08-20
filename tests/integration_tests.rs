@@ -93,4 +93,3 @@ async fn test_sales_invoice_line_api() {
         panic!("{} tests failed", failed.len());
     }
 }
-

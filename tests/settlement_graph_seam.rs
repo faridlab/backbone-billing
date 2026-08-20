@@ -83,7 +83,10 @@ impl ReconcileSink for AccountingReconcileSink {
                 applied: o.applied,
                 full_reconcile_id: o.full_reconcile_id,
             }),
-            Err(e) => Err(ReconcileRejected { code: e.code().to_string(), message: e.to_string() }),
+            Err(e) => Err(ReconcileRejected {
+                code: e.code().to_string(),
+                message: e.to_string(),
+            }),
         }
     }
 
@@ -99,9 +102,17 @@ impl ReconcileSink for AccountingReconcileSink {
             reversing: l.reversing,
         };
         self.svc
-            .unreconcile_pair_on(conn, req.company_id, &to_loc(&req.debit), &to_loc(&req.credit))
+            .unreconcile_pair_on(
+                conn,
+                req.company_id,
+                &to_loc(&req.debit),
+                &to_loc(&req.credit),
+            )
             .await
-            .map_err(|e| ReconcileRejected { code: e.code().to_string(), message: e.to_string() })
+            .map_err(|e| ReconcileRejected {
+                code: e.code().to_string(),
+                message: e.to_string(),
+            })
     }
 }
 
@@ -125,7 +136,14 @@ async fn pool() -> PgPool {
 async fn seed_coa(pool: &PgPool) -> (Uuid, HashMap<&'static str, Uuid>) {
     let company = Uuid::new_v4();
     let coa: &[(&str, &str, &str, &str, &str, bool)] = &[
-        ("1200", "Piutang Usaha", "asset", "accounts_receivable", "debit", true),
+        (
+            "1200",
+            "Piutang Usaha",
+            "asset",
+            "accounts_receivable",
+            "debit",
+            true,
+        ),
         ("1100", "Bank", "asset", "bank", "debit", false),
     ];
     let mut m = HashMap::new();
@@ -181,12 +199,15 @@ async fn post_invoice(
                 description: None,
                 quantity: d("1"),
                 unit_price: amount,
+                tax_template_id: None,
             }],
             tax_lines: vec![],
         })
         .await
         .unwrap();
-    let gl = GlCashAdapter { svc: PostingService::new(Arc::new(SqlxPostingRepository::new(pool.clone()))) };
+    let gl = GlCashAdapter {
+        svc: PostingService::new(Arc::new(SqlxPostingRepository::new(pool.clone()))),
+    };
     billing.post_sales_invoice(inv, &gl).await.unwrap();
     inv
 }
@@ -200,8 +221,12 @@ impl backbone_billing::application::service::billing_gl::GlPostSink for GlCashAd
     async fn post(
         &self,
         e: &backbone_billing::application::service::billing_gl::AccountingPostEnvelope,
-    ) -> Result<backbone_billing::application::service::billing_gl::GlPostAck, backbone_billing::application::service::billing_gl::GlPostRejected> {
-        let mut r = PostingRequest::original(e.company_id, &e.source_type, e.source_id, e.posting_date);
+    ) -> Result<
+        backbone_billing::application::service::billing_gl::GlPostAck,
+        backbone_billing::application::service::billing_gl::GlPostRejected,
+    > {
+        let mut r =
+            PostingRequest::original(e.company_id, &e.source_type, e.source_id, e.posting_date);
         r.source_reference = e.source_reference.clone();
         r.lines = e
             .lines
@@ -219,15 +244,19 @@ impl backbone_billing::application::service::billing_gl::GlPostSink for GlCashAd
             })
             .collect();
         match self.svc.post(r, None).await {
-            Ok(x) => Ok(backbone_billing::application::service::billing_gl::GlPostAck {
-                post_id: x.post_id,
-                journal_id: x.journal_id,
-                idempotent_reuse: x.idempotent_reuse,
-            }),
-            Err(x) => Err(backbone_billing::application::service::billing_gl::GlPostRejected {
-                code: x.code().to_string(),
-                message: x.to_string(),
-            }),
+            Ok(x) => Ok(
+                backbone_billing::application::service::billing_gl::GlPostAck {
+                    post_id: x.post_id,
+                    journal_id: x.journal_id,
+                    idempotent_reuse: x.idempotent_reuse,
+                },
+            ),
+            Err(x) => Err(
+                backbone_billing::application::service::billing_gl::GlPostRejected {
+                    code: x.code().to_string(),
+                    message: x.to_string(),
+                },
+            ),
         }
     }
 }
@@ -296,7 +325,13 @@ async fn settlement_edges(pool: &PgPool, company: Uuid) -> (Decimal, i64) {
 /// The control-account line's residual: its signed amount minus every partial touching it.
 /// The account pin matters — a source posts SEVERAL lines (payment posts Bank + A/R), all stamped
 /// with the same source identity; only the control line carries the edges.
-async fn residual(pool: &PgPool, company: Uuid, source_type: &str, source_id: Uuid, account: Uuid) -> Decimal {
+async fn residual(
+    pool: &PgPool,
+    company: Uuid,
+    source_type: &str,
+    source_id: Uuid,
+    account: Uuid,
+) -> Decimal {
     sqlx::query_scalar(
         r#"SELECT (CASE WHEN base_debit_amount > 0 THEN base_debit_amount ELSE base_credit_amount END)
                  - COALESCE((SELECT SUM(p.amount) FROM accounting.partial_reconciles p WHERE p.debit_move_id=jl.id),0)
@@ -313,7 +348,13 @@ async fn residual(pool: &PgPool, company: Uuid, source_type: &str, source_id: Uu
     .unwrap()
 }
 
-async fn line_reconciled(pool: &PgPool, company: Uuid, source_type: &str, source_id: Uuid, account: Uuid) -> (bool, Option<Uuid>) {
+async fn line_reconciled(
+    pool: &PgPool,
+    company: Uuid,
+    source_type: &str,
+    source_id: Uuid,
+    account: Uuid,
+) -> (bool, Option<Uuid>) {
     sqlx::query_as(
         "SELECT is_reconciled, full_reconcile_id FROM accounting.journal_lines \
          WHERE company_id=$1 AND source_type=$2 AND source_id=$3 AND account_id=$4 AND is_posted",
@@ -363,11 +404,21 @@ async fn settlement_writes_its_graph_edge_and_the_cache_agrees() {
     // Graph: exactly one settlement edge of 60; both lines' residuals 40.
     let (sum, n) = settlement_edges(&pool, company).await;
     assert_eq!((sum, n), (d("60"), 1), "one settlement edge of 60");
-    assert_eq!(residual(&pool, company, "order", inv, coa["1200"]).await, d("40"));
-    assert_eq!(residual(&pool, company, "payment", payment, coa["1200"]).await, d("40"));
+    assert_eq!(
+        residual(&pool, company, "order", inv, coa["1200"]).await,
+        d("40")
+    );
+    assert_eq!(
+        residual(&pool, company, "payment", payment, coa["1200"]).await,
+        d("40")
+    );
 
     // The invariant the whole seam hangs on: outstanding == grand_total − Σ edges.
-    assert_eq!(outstanding, grand - sum, "billing cache must equal the graph");
+    assert_eq!(
+        outstanding,
+        grand - sum,
+        "billing cache must equal the graph"
+    );
 }
 
 /// An over-settlement clamps to the invoice: the surplus stays as the payment line's own residual
@@ -387,7 +438,11 @@ async fn over_settle_leaves_the_on_account_credit_unreconciled() {
         .apply_settlement(company, inv, "sales", d("150"), payment, &sink)
         .await
         .unwrap();
-    assert_eq!((out.applied, out.remainder), (d("100"), d("50")), "clamped to the invoice");
+    assert_eq!(
+        (out.applied, out.remainder),
+        (d("100"), d("50")),
+        "clamped to the invoice"
+    );
 
     let (outstanding, grand, status) = invoice_state(&pool, inv).await;
     assert_eq!(outstanding, Decimal::ZERO);
@@ -398,9 +453,17 @@ async fn over_settle_leaves_the_on_account_credit_unreconciled() {
     assert_eq!(outstanding, grand - sum);
 
     // Invoice side fully reconciled; payment side still owes 50 — no full group, no flag.
-    assert_eq!(residual(&pool, company, "order", inv, coa["1200"]).await, Decimal::ZERO);
-    assert_eq!(residual(&pool, company, "payment", payment, coa["1200"]).await, d("50"), "on-account credit");
-    let (pay_rec, pay_full) = line_reconciled(&pool, company, "payment", payment, coa["1200"]).await;
+    assert_eq!(
+        residual(&pool, company, "order", inv, coa["1200"]).await,
+        Decimal::ZERO
+    );
+    assert_eq!(
+        residual(&pool, company, "payment", payment, coa["1200"]).await,
+        d("50"),
+        "on-account credit"
+    );
+    let (pay_rec, pay_full) =
+        line_reconciled(&pool, company, "payment", payment, coa["1200"]).await;
     assert!(!pay_rec, "the payment line is NOT fully reconciled");
     assert!(pay_full.is_none());
     assert_eq!(full_groups(&pool, company).await, 0);
@@ -420,8 +483,14 @@ async fn second_payment_completes_the_full_reconcile_group() {
     post_payment(&pool, company, &coa, customer, p1, d("60")).await;
     post_payment(&pool, company, &coa, customer, p2, d("40")).await;
 
-    billing.apply_settlement(company, inv, "sales", d("60"), p1, &sink).await.unwrap();
-    billing.apply_settlement(company, inv, "sales", d("40"), p2, &sink).await.unwrap();
+    billing
+        .apply_settlement(company, inv, "sales", d("60"), p1, &sink)
+        .await
+        .unwrap();
+    billing
+        .apply_settlement(company, inv, "sales", d("40"), p2, &sink)
+        .await
+        .unwrap();
 
     let (outstanding, grand, status) = invoice_state(&pool, inv).await;
     assert_eq!(outstanding, Decimal::ZERO);
@@ -437,8 +506,14 @@ async fn second_payment_completes_the_full_reconcile_group() {
     let (r1, f1) = line_reconciled(&pool, company, "payment", p1, coa["1200"]).await;
     assert!(r1);
     assert_eq!(f1, Some(group), "same group from every member");
-    assert_eq!(residual(&pool, company, "payment", p1, coa["1200"]).await, Decimal::ZERO);
-    assert_eq!(residual(&pool, company, "payment", p2, coa["1200"]).await, Decimal::ZERO);
+    assert_eq!(
+        residual(&pool, company, "payment", p1, coa["1200"]).await,
+        Decimal::ZERO
+    );
+    assert_eq!(
+        residual(&pool, company, "payment", p2, coa["1200"]).await,
+        Decimal::ZERO
+    );
     assert_eq!(full_groups(&pool, company).await, 1);
 }
 
@@ -454,7 +529,10 @@ async fn reverse_settlement_unlinks_the_edge_and_restores_outstanding() {
     let inv = post_invoice(&pool, &billing, company, &coa, customer, d("100")).await;
     let payment = Uuid::new_v4();
     post_payment(&pool, company, &coa, customer, payment, d("100")).await;
-    billing.apply_settlement(company, inv, "sales", d("60"), payment, &sink).await.unwrap();
+    billing
+        .apply_settlement(company, inv, "sales", d("60"), payment, &sink)
+        .await
+        .unwrap();
 
     let restored = billing
         .reverse_settlement(company, inv, "sales", d("60"), payment, &sink)
@@ -468,8 +546,14 @@ async fn reverse_settlement_unlinks_the_edge_and_restores_outstanding() {
     let (sum, n) = settlement_edges(&pool, company).await;
     assert_eq!((sum, n), (Decimal::ZERO, 0), "the edge is gone");
     assert_eq!(outstanding, grand - sum);
-    assert_eq!(residual(&pool, company, "order", inv, coa["1200"]).await, d("100"));
-    assert_eq!(residual(&pool, company, "payment", payment, coa["1200"]).await, d("100"));
+    assert_eq!(
+        residual(&pool, company, "order", inv, coa["1200"]).await,
+        d("100")
+    );
+    assert_eq!(
+        residual(&pool, company, "payment", payment, coa["1200"]).await,
+        d("100")
+    );
 }
 
 /// Two payments racing the same invoice clamp THROUGH the graph: combined edges never exceed the
@@ -488,8 +572,30 @@ async fn racing_settlements_clamp_through_the_graph() {
     post_payment(&pool, company, &coa, customer, p2, d("60")).await;
 
     let (a, b) = tokio::join!(
-        async { BillingWriteService::apply_settlement(&*billing, company, inv, "sales", d("60"), p1, &*sink).await },
-        async { BillingWriteService::apply_settlement(&*billing, company, inv, "sales", d("60"), p2, &*sink).await },
+        async {
+            BillingWriteService::apply_settlement(
+                &*billing,
+                company,
+                inv,
+                "sales",
+                d("60"),
+                p1,
+                &*sink,
+            )
+            .await
+        },
+        async {
+            BillingWriteService::apply_settlement(
+                &*billing,
+                company,
+                inv,
+                "sales",
+                d("60"),
+                p2,
+                &*sink,
+            )
+            .await
+        },
     );
     let applied: Decimal = [a.unwrap().applied, b.unwrap().applied].iter().sum();
     assert_eq!(applied, d("100"), "60 + clamped 40 — never 120");
@@ -499,11 +605,18 @@ async fn racing_settlements_clamp_through_the_graph() {
     let (sum, n) = settlement_edges(&pool, company).await;
     assert_eq!((sum, n), (d("100"), 2));
     assert_eq!(outstanding, grand - sum);
-    assert_eq!(residual(&pool, company, "order", inv, coa["1200"]).await, Decimal::ZERO);
+    assert_eq!(
+        residual(&pool, company, "order", inv, coa["1200"]).await,
+        Decimal::ZERO
+    );
     // The losing payment keeps its 60 on-account.
     let r1 = residual(&pool, company, "payment", p1, coa["1200"]).await;
     let r2 = residual(&pool, company, "payment", p2, coa["1200"]).await;
-    assert_eq!([r1, r2].iter().filter(|r| **r == Decimal::ZERO).count(), 1, "exactly one payment consumed fully");
+    assert_eq!(
+        [r1, r2].iter().filter(|r| **r == Decimal::ZERO).count(),
+        1,
+        "exactly one payment consumed fully"
+    );
 }
 
 /// The bus consumer is exactly-once: an at-least-once redelivery of `PaymentSettled` is a no-op.
@@ -589,7 +702,10 @@ async fn payment_event_consumers_round_trip_the_seam() {
     assert_eq!(status.as_str(), "submitted");
     let (sum, n) = settlement_edges(&pool, company).await;
     assert_eq!((sum, n), (Decimal::ZERO, 0), "unlinked");
-    assert_eq!(residual(&pool, company, "order", inv, coa["1200"]).await, d("100"));
+    assert_eq!(
+        residual(&pool, company, "order", inv, coa["1200"]).await,
+        d("100")
+    );
 }
 
 /// A settlement whose payment journal does not exist FAILS CLOSED: the refused edge rolls the

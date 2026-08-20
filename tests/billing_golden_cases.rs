@@ -13,40 +13,85 @@ use backbone_billing::application::service::billing_gl::{
     AccountingPostEnvelope, GlPostAck, GlPostRejected, GlPostSink,
 };
 use backbone_billing::application::service::billing_write_service::{
-    BillingError, BillingWriteService, NewInvoiceLine, NewPurchaseInvoice, NewSalesInvoice, NewTaxLine,
+    BillingError, BillingWriteService, NewInvoiceLine, NewPurchaseInvoice, NewSalesInvoice,
+    NewTaxLine,
 };
 
-fn d(s: &str) -> Decimal { Decimal::from_str_exact(s).unwrap() }
-fn day() -> chrono::NaiveDate { chrono::NaiveDate::from_ymd_opt(2026, 7, 5).unwrap() }
-fn uq(p: &str) -> String { format!("{p}-{}", &Uuid::new_v4().simple().to_string()[..8]) }
+fn d(s: &str) -> Decimal {
+    Decimal::from_str_exact(s).unwrap()
+}
+fn day() -> chrono::NaiveDate {
+    chrono::NaiveDate::from_ymd_opt(2026, 7, 5).unwrap()
+}
+fn uq(p: &str) -> String {
+    format!("{p}-{}", &Uuid::new_v4().simple().to_string()[..8])
+}
 async fn pool() -> PgPool {
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5433/backbone_billing".to_string());
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgresql://postgres:postgres@localhost:5433/backbone_billing".to_string()
+    });
     PgPool::connect(&url).await.expect("connect DB")
 }
 
 /// A fake GL sink: records the envelope, returns a fixed ack. Asserts double-entry balance so a
 /// broken build_*_post surfaces here, not silently.
 #[derive(Default, Clone)]
-struct FakeGl { seen: Arc<Mutex<Vec<AccountingPostEnvelope>>>, journal: Uuid, post: Uuid }
+struct FakeGl {
+    seen: Arc<Mutex<Vec<AccountingPostEnvelope>>>,
+    journal: Uuid,
+    post: Uuid,
+}
 impl FakeGl {
-    fn new() -> Self { Self { seen: Arc::new(Mutex::new(Vec::new())), journal: Uuid::new_v4(), post: Uuid::new_v4() } }
-    fn last(&self) -> AccountingPostEnvelope { self.seen.lock().unwrap().last().unwrap().clone() }
+    fn new() -> Self {
+        Self {
+            seen: Arc::new(Mutex::new(Vec::new())),
+            journal: Uuid::new_v4(),
+            post: Uuid::new_v4(),
+        }
+    }
+    fn last(&self) -> AccountingPostEnvelope {
+        self.seen.lock().unwrap().last().unwrap().clone()
+    }
 }
 #[async_trait::async_trait]
 impl GlPostSink for FakeGl {
     async fn post(&self, env: &AccountingPostEnvelope) -> Result<GlPostAck, GlPostRejected> {
-        assert!(env.is_balanced(), "billing emitted an UNBALANCED post: {env:?}");
+        assert!(
+            env.is_balanced(),
+            "billing emitted an UNBALANCED post: {env:?}"
+        );
         self.seen.lock().unwrap().push(env.clone());
-        Ok(GlPostAck { post_id: self.post, journal_id: self.journal, idempotent_reuse: false })
+        Ok(GlPostAck {
+            post_id: self.post,
+            journal_id: self.journal,
+            idempotent_reuse: false,
+        })
     }
 }
 
 fn line(item: Uuid, acct: Uuid, qty: &str, price: &str) -> NewInvoiceLine {
-    NewInvoiceLine { item_id: item, account_id: acct, description: None, quantity: d(qty), unit_price: d(price) }
+    NewInvoiceLine {
+        item_id: item,
+        account_id: acct,
+        description: None,
+        quantity: d(qty),
+        unit_price: d(price),
+        tax_template_id: None,
+    }
 }
 fn tax(acct: Uuid, basis: &str, amt: &str) -> NewTaxLine {
-    NewTaxLine { account_id: acct, basis: basis.into(), description: None, rate: d("11"), tax_amount: d(amt) }
+    NewTaxLine {
+        account_id: acct,
+        basis: basis.into(),
+        description: None,
+        rate: d("11"),
+        tax_amount: d(amt),
+        taxable_base: Decimal::ZERO,
+        tax_template_id: None,
+        repartition_line_id: None,
+        real_account_id: None,
+        exigibility: None,
+    }
 }
 
 // SIGC-1: Sales invoice math + AR post — 10 × 100,000 net, PPN Output 11% (110,000) supplied →
@@ -56,14 +101,29 @@ fn tax(acct: Uuid, basis: &str, amt: &str) -> NewTaxLine {
 async fn sales_invoice_math_and_ar_post() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, rev, ar, ppn) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
-    let id = w.create_sales_invoice(NewSalesInvoice {
-        invoice_number: uq("SI"), company_id: company, branch_id: None, customer_id: Uuid::new_v4(),
-        source_so_id: None, posting_date: day(), due_date: None, currency: None,
-        receivable_account_id: ar,
-        lines: vec![line(item, rev, "10", "100000")],
-        tax_lines: vec![tax(ppn, "output", "110000")],
-    }).await.unwrap();
+    let (company, item, rev, ar, ppn) = (
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    );
+    let id = w
+        .create_sales_invoice(NewSalesInvoice {
+            invoice_number: uq("SI"),
+            company_id: company,
+            branch_id: None,
+            customer_id: Uuid::new_v4(),
+            source_so_id: None,
+            posting_date: day(),
+            due_date: None,
+            currency: None,
+            receivable_account_id: ar,
+            lines: vec![line(item, rev, "10", "100000")],
+            tax_lines: vec![tax(ppn, "output", "110000")],
+        })
+        .await
+        .unwrap();
 
     let r = sqlx::query("SELECT net_total, tax_total, grand_total, status::text AS st FROM billing.sales_invoices WHERE id=$1")
         .bind(id).fetch_one(&pool).await.unwrap();
@@ -83,8 +143,13 @@ async fn sales_invoice_math_and_ar_post() {
     assert_eq!(ar_line.debit, d("1110000.00"));
     assert_eq!(ar_line.party_type.as_deref(), Some("customer"));
     // posted state + outstanding = grand.
-    let (ps, outst): (String, Decimal) = sqlx::query_as("SELECT posting_state::text, outstanding_amount FROM billing.sales_invoices WHERE id=$1")
-        .bind(id).fetch_one(&pool).await.unwrap();
+    let (ps, outst): (String, Decimal) = sqlx::query_as(
+        "SELECT posting_state::text, outstanding_amount FROM billing.sales_invoices WHERE id=$1",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(ps, "posted");
     assert_eq!(outst, d("1110000.00"));
 }
@@ -96,14 +161,33 @@ async fn sales_invoice_math_and_ar_post() {
 async fn purchase_invoice_math_and_ap_post() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, exp, ap, ppn_in, pph) =
-        (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
-    let id = w.create_purchase_invoice(NewPurchaseInvoice {
-        invoice_number: uq("PI"), company_id: company, branch_id: None, supplier_id: Uuid::new_v4(),
-        source_po_id: None, posting_date: day(), due_date: None, currency: None, payable_account_id: ap,
-        lines: vec![line(item, exp, "10", "90000")],
-        tax_lines: vec![tax(ppn_in, "input", "99000"), tax(pph, "withholding", "18000")],
-    }).await.unwrap();
+    let (company, item, exp, ap, ppn_in, pph) = (
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    );
+    let id = w
+        .create_purchase_invoice(NewPurchaseInvoice {
+            invoice_number: uq("PI"),
+            company_id: company,
+            branch_id: None,
+            supplier_id: Uuid::new_v4(),
+            source_po_id: None,
+            posting_date: day(),
+            due_date: None,
+            currency: None,
+            payable_account_id: ap,
+            lines: vec![line(item, exp, "10", "90000")],
+            tax_lines: vec![
+                tax(ppn_in, "input", "99000"),
+                tax(pph, "withholding", "18000"),
+            ],
+        })
+        .await
+        .unwrap();
 
     let r = sqlx::query("SELECT net_total, tax_total, withholding_total, grand_total FROM billing.purchase_invoices WHERE id=$1")
         .bind(id).fetch_one(&pool).await.unwrap();
@@ -126,19 +210,39 @@ async fn purchase_invoice_math_and_ap_post() {
 async fn posting_is_idempotent() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, rev, ar) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
-    let id = w.create_sales_invoice(NewSalesInvoice {
-        invoice_number: uq("SI"), company_id: company, branch_id: None, customer_id: Uuid::new_v4(),
-        source_so_id: None, posting_date: day(), due_date: None, currency: None, receivable_account_id: ar,
-        lines: vec![line(item, rev, "1", "50000")], tax_lines: vec![],
-    }).await.unwrap();
+    let (company, item, rev, ar) = (
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    );
+    let id = w
+        .create_sales_invoice(NewSalesInvoice {
+            invoice_number: uq("SI"),
+            company_id: company,
+            branch_id: None,
+            customer_id: Uuid::new_v4(),
+            source_so_id: None,
+            posting_date: day(),
+            due_date: None,
+            currency: None,
+            receivable_account_id: ar,
+            lines: vec![line(item, rev, "1", "50000")],
+            tax_lines: vec![],
+        })
+        .await
+        .unwrap();
     let gl = FakeGl::new();
     let first = w.post_sales_invoice(id, &gl).await.unwrap();
     assert!(!first.idempotent_reuse);
     let second = w.post_sales_invoice(id, &gl).await.unwrap();
     assert!(second.idempotent_reuse, "re-post reuses the recorded ack");
     assert_eq!(first.journal_id, second.journal_id);
-    assert_eq!(gl.seen.lock().unwrap().len(), 1, "the sink is hit exactly once");
+    assert_eq!(
+        gl.seen.lock().unwrap().len(),
+        1,
+        "the sink is hit exactly once"
+    );
 }
 
 // SIGC-4: validation gates — empty document, negative amount, duplicate number.
@@ -146,24 +250,50 @@ async fn posting_is_idempotent() {
 async fn validation_gates() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, rev, ar) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    let (company, item, rev, ar) = (
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    );
     let base = |num: String, lines: Vec<NewInvoiceLine>| NewSalesInvoice {
-        invoice_number: num, company_id: company, branch_id: None, customer_id: Uuid::new_v4(),
-        source_so_id: None, posting_date: day(), due_date: None, currency: None, receivable_account_id: ar, lines,
+        invoice_number: num,
+        company_id: company,
+        branch_id: None,
+        customer_id: Uuid::new_v4(),
+        source_so_id: None,
+        posting_date: day(),
+        due_date: None,
+        currency: None,
+        receivable_account_id: ar,
+        lines,
         tax_lines: vec![],
     };
     // empty
-    assert!(matches!(w.create_sales_invoice(base(uq("SI"), vec![])).await.unwrap_err(), BillingError::EmptyDocument));
+    assert!(matches!(
+        w.create_sales_invoice(base(uq("SI"), vec![]))
+            .await
+            .unwrap_err(),
+        BillingError::EmptyDocument
+    ));
     // negative
     assert!(matches!(
-        w.create_sales_invoice(base(uq("SI"), vec![line(item, rev, "-1", "100")])).await.unwrap_err(),
-        BillingError::NegativeAmount));
+        w.create_sales_invoice(base(uq("SI"), vec![line(item, rev, "-1", "100")]))
+            .await
+            .unwrap_err(),
+        BillingError::NegativeAmount
+    ));
     // duplicate number
     let num = uq("DUP");
-    w.create_sales_invoice(base(num.clone(), vec![line(item, rev, "1", "100")])).await.unwrap();
+    w.create_sales_invoice(base(num.clone(), vec![line(item, rev, "1", "100")]))
+        .await
+        .unwrap();
     assert!(matches!(
-        w.create_sales_invoice(base(num, vec![line(item, rev, "1", "100")])).await.unwrap_err(),
-        BillingError::DuplicateNumber(_)));
+        w.create_sales_invoice(base(num, vec![line(item, rev, "1", "100")]))
+            .await
+            .unwrap_err(),
+        BillingError::DuplicateNumber(_)
+    ));
 }
 
 // SIGC-5: a tax-free invoice still posts clean (net only) — proving the tax overlay is removable.
@@ -171,13 +301,34 @@ async fn validation_gates() {
 async fn tax_free_invoice_posts_net_only() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, rev, ar) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
-    let id = w.create_sales_invoice(NewSalesInvoice {
-        invoice_number: uq("SI"), company_id: company, branch_id: None, customer_id: Uuid::new_v4(),
-        source_so_id: None, posting_date: day(), due_date: None, currency: None, receivable_account_id: ar,
-        lines: vec![line(item, rev, "2", "75000")], tax_lines: vec![],
-    }).await.unwrap();
-    let grand: Decimal = sqlx::query_scalar("SELECT grand_total FROM billing.sales_invoices WHERE id=$1").bind(id).fetch_one(&pool).await.unwrap();
+    let (company, item, rev, ar) = (
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    );
+    let id = w
+        .create_sales_invoice(NewSalesInvoice {
+            invoice_number: uq("SI"),
+            company_id: company,
+            branch_id: None,
+            customer_id: Uuid::new_v4(),
+            source_so_id: None,
+            posting_date: day(),
+            due_date: None,
+            currency: None,
+            receivable_account_id: ar,
+            lines: vec![line(item, rev, "2", "75000")],
+            tax_lines: vec![],
+        })
+        .await
+        .unwrap();
+    let grand: Decimal =
+        sqlx::query_scalar("SELECT grand_total FROM billing.sales_invoices WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(grand, d("150000.00"), "no tax → grand == net");
     let gl = FakeGl::new();
     w.post_sales_invoice(id, &gl).await.unwrap();
@@ -192,26 +343,50 @@ async fn tax_free_invoice_posts_net_only() {
 async fn sales_invoice_revenue_grouped_by_account() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, ar, rev_a, rev_b) =
-        (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
-    let id = w.create_sales_invoice(NewSalesInvoice {
-        invoice_number: uq("SI"), company_id: company, branch_id: None, customer_id: Uuid::new_v4(),
-        source_so_id: None, posting_date: day(), due_date: None, currency: None, receivable_account_id: ar,
-        lines: vec![
-            line(item, rev_a, "1", "100000"),
-            line(item, rev_a, "1", "50000"),
-            line(item, rev_b, "1", "200000"),
-        ],
-        tax_lines: vec![],
-    }).await.unwrap();
+    let (company, item, ar, rev_a, rev_b) = (
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    );
+    let id = w
+        .create_sales_invoice(NewSalesInvoice {
+            invoice_number: uq("SI"),
+            company_id: company,
+            branch_id: None,
+            customer_id: Uuid::new_v4(),
+            source_so_id: None,
+            posting_date: day(),
+            due_date: None,
+            currency: None,
+            receivable_account_id: ar,
+            lines: vec![
+                line(item, rev_a, "1", "100000"),
+                line(item, rev_a, "1", "50000"),
+                line(item, rev_b, "1", "200000"),
+            ],
+            tax_lines: vec![],
+        })
+        .await
+        .unwrap();
     let gl = FakeGl::new();
     w.post_sales_invoice(id, &gl).await.unwrap();
     let env = gl.last();
     assert!(env.is_balanced());
     // No tax → 1 A/R debit + 2 revenue credits (rev_a summed across its two lines, rev_b separate).
     assert_eq!(env.lines.len(), 3, "Dr A/R + Cr rev_a + Cr rev_b");
-    let credit_for = |acct: Uuid| env.lines.iter().find(|l| l.account_id == acct && l.credit > Decimal::ZERO).map(|l| l.credit);
-    assert_eq!(credit_for(rev_a), Some(d("150000")), "rev_a summed across its two lines");
+    let credit_for = |acct: Uuid| {
+        env.lines
+            .iter()
+            .find(|l| l.account_id == acct && l.credit > Decimal::ZERO)
+            .map(|l| l.credit)
+    };
+    assert_eq!(
+        credit_for(rev_a),
+        Some(d("150000")),
+        "rev_a summed across its two lines"
+    );
     assert_eq!(credit_for(rev_b), Some(d("200000")));
     let ar_debit = env.lines.iter().find(|l| l.account_id == ar).unwrap().debit;
     assert_eq!(ar_debit, d("350000"));
