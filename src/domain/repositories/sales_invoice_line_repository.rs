@@ -5,8 +5,8 @@
 //! This trait defines the repository contract for the SalesInvoiceLine aggregate.
 //! Implementation is in the infrastructure layer.
 
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::domain::entity::SalesInvoiceLine;
@@ -54,7 +54,11 @@ pub struct SalesInvoiceLineFilter {
 impl SalesInvoiceLineFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.invoice_id.is_some() || self.company_id.is_some() || self.item_id.is_some() || self.revenue_account_id.is_some() || self.description.is_some()
+        self.invoice_id.is_some()
+            || self.company_id.is_some()
+            || self.item_id.is_some()
+            || self.revenue_account_id.is_some()
+            || self.description.is_some()
     }
 }
 
@@ -64,7 +68,6 @@ impl SalesInvoiceLineFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait SalesInvoiceLineRepository: Send + Sync {
-
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -79,7 +82,8 @@ pub trait SalesInvoiceLineRepository: Send + Sync {
     async fn find_all(&self) -> Result<Vec<SalesInvoiceLine>>;
 
     /// Update sales_invoice_line by ID
-    async fn update(&self, id: &str, entity: &SalesInvoiceLine) -> Result<Option<SalesInvoiceLine>>;
+    async fn update(&self, id: &str, entity: &SalesInvoiceLine)
+        -> Result<Option<SalesInvoiceLine>>;
 
     /// Delete sales_invoice_line by ID
     async fn delete(&self, id: &str) -> Result<bool>;
@@ -89,10 +93,17 @@ pub trait SalesInvoiceLineRepository: Send + Sync {
     // =========================================================================
 
     /// List sales_invoice_line with pagination
-    async fn list(&self, params: SalesInvoiceLinePaginationParams) -> Result<SalesInvoiceLinePaginatedResult>;
+    async fn list(
+        &self,
+        params: SalesInvoiceLinePaginationParams,
+    ) -> Result<SalesInvoiceLinePaginatedResult>;
 
     /// List sales_invoice_line with pagination and filters
-    async fn list_with_filters(&self, params: SalesInvoiceLinePaginationParams, filters: SalesInvoiceLineFilter) -> Result<SalesInvoiceLinePaginatedResult>;
+    async fn list_with_filters(
+        &self,
+        params: SalesInvoiceLinePaginationParams,
+        filters: SalesInvoiceLineFilter,
+    ) -> Result<SalesInvoiceLinePaginatedResult>;
 
     /// Count all sales_invoice_line entities
     async fn count(&self) -> Result<u64>;
@@ -114,7 +125,10 @@ pub trait SalesInvoiceLineRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<SalesInvoiceLine>>;
 
     /// List soft-deleted sales_invoice_line entities
-    async fn list_deleted(&self, params: SalesInvoiceLinePaginationParams) -> Result<SalesInvoiceLinePaginatedResult>;
+    async fn list_deleted(
+        &self,
+        params: SalesInvoiceLinePaginationParams,
+    ) -> Result<SalesInvoiceLinePaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;

@@ -5,8 +5,8 @@
 //! `DomainPolicy` enforces pure business invariants (state-based rules).
 //! Identity-based rules live in `backbone_auth::ResourcePolicy`.
 
-use backbone_core::PermitAllPolicy;
 use crate::domain::entity::PaymentSchedule;
+use backbone_core::PermitAllPolicy;
 
 /// Domain policy for PaymentSchedule — permits all operations (no business invariants).
 ///

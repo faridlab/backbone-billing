@@ -5,9 +5,9 @@
 //! Returns an `EntityValidator<PurchaseInvoice>` pre-loaded with schema-derived
 //! field rules. Extend in the `// <<< CUSTOM` zone.
 
-use backbone_core::{EntityValidator, ValidationErrors, ValidationError};
-use backbone_core::{NonNegative, OptionalNotBlank, RequiredString};
 use crate::domain::entity::PurchaseInvoice;
+use backbone_core::{EntityValidator, ValidationError, ValidationErrors};
+use backbone_core::{NonNegative, OptionalNotBlank, RequiredString};
 
 /// Validator type alias for PurchaseInvoice entities.
 pub type PurchaseInvoiceValidator = EntityValidator<PurchaseInvoice>;
@@ -15,9 +15,16 @@ pub type PurchaseInvoiceValidator = EntityValidator<PurchaseInvoice>;
 /// Build a validator for PurchaseInvoice with all schema-defined field rules.
 pub fn purchase_invoice_validator() -> PurchaseInvoiceValidator {
     EntityValidator::new()
-        .rule(RequiredString::new("invoice_number", |e: &PurchaseInvoice| &e.invoice_number))
-        .rule(RequiredString::new("currency", |e: &PurchaseInvoice| &e.currency))
-        .rule(OptionalNotBlank::new("notes", |e: &PurchaseInvoice| e.notes.as_deref()))
+        .rule(RequiredString::new(
+            "invoice_number",
+            |e: &PurchaseInvoice| &e.invoice_number,
+        ))
+        .rule(RequiredString::new("currency", |e: &PurchaseInvoice| {
+            &e.currency
+        }))
+        .rule(OptionalNotBlank::new("notes", |e: &PurchaseInvoice| {
+            e.notes.as_deref()
+        }))
     // <<< CUSTOM RULES
     // END CUSTOM RULES
 }

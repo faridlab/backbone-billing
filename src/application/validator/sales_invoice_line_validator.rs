@@ -5,17 +5,19 @@
 //! Returns an `EntityValidator<SalesInvoiceLine>` pre-loaded with schema-derived
 //! field rules. Extend in the `// <<< CUSTOM` zone.
 
-use backbone_core::{EntityValidator, ValidationErrors, ValidationError};
-use backbone_core::{NonNegative, OptionalNotBlank};
 use crate::domain::entity::SalesInvoiceLine;
+use backbone_core::{EntityValidator, ValidationError, ValidationErrors};
+use backbone_core::{NonNegative, OptionalNotBlank};
 
 /// Validator type alias for SalesInvoiceLine entities.
 pub type SalesInvoiceLineValidator = EntityValidator<SalesInvoiceLine>;
 
 /// Build a validator for SalesInvoiceLine with all schema-defined field rules.
 pub fn sales_invoice_line_validator() -> SalesInvoiceLineValidator {
-    EntityValidator::new()
-        .rule(OptionalNotBlank::new("description", |e: &SalesInvoiceLine| e.description.as_deref()))
+    EntityValidator::new().rule(OptionalNotBlank::new(
+        "description",
+        |e: &SalesInvoiceLine| e.description.as_deref(),
+    ))
     // <<< CUSTOM RULES
     // END CUSTOM RULES
 }

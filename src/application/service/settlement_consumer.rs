@@ -67,10 +67,18 @@ impl PaymentSettledHandler {
         reconcile: std::sync::Arc<dyn ReconcileSink>,
         consumer: impl Into<String>,
     ) -> Self {
-        Self { billing, reconcile, consumer: consumer.into() }
+        Self {
+            billing,
+            reconcile,
+            consumer: consumer.into(),
+        }
     }
 
-    pub async fn handle(&self, event_id: Uuid, event: &PaymentSettledDto) -> Result<SettlementOutcome, BillingError> {
+    pub async fn handle(
+        &self,
+        event_id: Uuid,
+        event: &PaymentSettledDto,
+    ) -> Result<SettlementOutcome, BillingError> {
         let allocations: Vec<(Uuid, String, Decimal)> = event
             .allocations
             .iter()
@@ -104,11 +112,19 @@ impl PaymentCancelledHandler {
         reconcile: std::sync::Arc<dyn ReconcileSink>,
         consumer: impl Into<String>,
     ) -> Self {
-        Self { billing, reconcile, consumer: consumer.into() }
+        Self {
+            billing,
+            reconcile,
+            consumer: consumer.into(),
+        }
     }
 
     /// Returns the total amount restored (0 on a redelivery).
-    pub async fn handle(&self, event_id: Uuid, event: &PaymentCancelledDto) -> Result<Decimal, BillingError> {
+    pub async fn handle(
+        &self,
+        event_id: Uuid,
+        event: &PaymentCancelledDto,
+    ) -> Result<Decimal, BillingError> {
         let allocations: Vec<(Uuid, String, Decimal)> = event
             .allocations
             .iter()

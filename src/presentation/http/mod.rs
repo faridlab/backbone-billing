@@ -17,12 +17,30 @@ pub mod guarded_routes;
 // END CUSTOM
 
 // Re-exports
-pub use invoice_tax_line_handler::{create_invoice_tax_line_routes, create_invoice_tax_line_read_routes, create_invoice_tax_line_write_routes};
-pub use payment_schedule_handler::{create_payment_schedule_routes, create_payment_schedule_read_routes, create_payment_schedule_write_routes};
-pub use purchase_invoice_handler::{create_purchase_invoice_routes, create_purchase_invoice_read_routes, create_purchase_invoice_write_routes};
-pub use purchase_invoice_line_handler::{create_purchase_invoice_line_routes, create_purchase_invoice_line_read_routes, create_purchase_invoice_line_write_routes};
-pub use sales_invoice_handler::{create_sales_invoice_routes, create_sales_invoice_read_routes, create_sales_invoice_write_routes};
-pub use sales_invoice_line_handler::{create_sales_invoice_line_routes, create_sales_invoice_line_read_routes, create_sales_invoice_line_write_routes};
+pub use invoice_tax_line_handler::{
+    create_invoice_tax_line_read_routes, create_invoice_tax_line_routes,
+    create_invoice_tax_line_write_routes,
+};
+pub use payment_schedule_handler::{
+    create_payment_schedule_read_routes, create_payment_schedule_routes,
+    create_payment_schedule_write_routes,
+};
+pub use purchase_invoice_handler::{
+    create_purchase_invoice_read_routes, create_purchase_invoice_routes,
+    create_purchase_invoice_write_routes,
+};
+pub use purchase_invoice_line_handler::{
+    create_purchase_invoice_line_read_routes, create_purchase_invoice_line_routes,
+    create_purchase_invoice_line_write_routes,
+};
+pub use sales_invoice_handler::{
+    create_sales_invoice_read_routes, create_sales_invoice_routes,
+    create_sales_invoice_write_routes,
+};
+pub use sales_invoice_line_handler::{
+    create_sales_invoice_line_read_routes, create_sales_invoice_line_routes,
+    create_sales_invoice_line_write_routes,
+};
 // <<< CUSTOM
 pub use guarded_routes::create_guarded_billing_routes;
 // END CUSTOM

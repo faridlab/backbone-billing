@@ -11,17 +11,17 @@ use sqlx::PgPool;
 
 mod invoice_tax_line_seeder;
 mod payment_schedule_seeder;
-mod purchase_invoice_seeder;
 mod purchase_invoice_line_seeder;
-mod sales_invoice_seeder;
+mod purchase_invoice_seeder;
 mod sales_invoice_line_seeder;
+mod sales_invoice_seeder;
 
 pub use invoice_tax_line_seeder::SeedInvoiceTaxLineSeeder;
 pub use payment_schedule_seeder::SeedPaymentScheduleSeeder;
-pub use purchase_invoice_seeder::SeedPurchaseInvoiceSeeder;
 pub use purchase_invoice_line_seeder::SeedPurchaseInvoiceLineSeeder;
-pub use sales_invoice_seeder::SeedSalesInvoiceSeeder;
+pub use purchase_invoice_seeder::SeedPurchaseInvoiceSeeder;
 pub use sales_invoice_line_seeder::SeedSalesInvoiceLineSeeder;
+pub use sales_invoice_seeder::SeedSalesInvoiceSeeder;
 
 // ============================================================================
 // SEEDER TRAIT
@@ -63,8 +63,8 @@ pub enum SeederType {
     Development,
     /// Test data (for automated tests)
     Test,
-// <<< CUSTOM SEEDERS START >>>
-// Add custom seeders here.
+    // <<< CUSTOM SEEDERS START >>>
+    // Add custom seeders here.
 }
 
 // ============================================================================

@@ -5,11 +5,11 @@
 //! This trait defines the repository contract for the InvoiceTaxLine aggregate.
 //! Implementation is in the infrastructure layer.
 
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::domain::entity::{InvoiceTaxLine, InvoiceKind, TaxBasis};
+use crate::domain::entity::{InvoiceKind, InvoiceTaxLine, TaxBasis};
 
 /// Pagination parameters for list queries
 #[derive(Debug, Clone, Default)]
@@ -55,7 +55,12 @@ pub struct InvoiceTaxLineFilter {
 impl InvoiceTaxLineFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.invoice_ref.is_some() || self.invoice_kind.is_some() || self.company_id.is_some() || self.account_id.is_some() || self.basis.is_some() || self.description.is_some()
+        self.invoice_ref.is_some()
+            || self.invoice_kind.is_some()
+            || self.company_id.is_some()
+            || self.account_id.is_some()
+            || self.basis.is_some()
+            || self.description.is_some()
     }
 }
 
@@ -65,7 +70,6 @@ impl InvoiceTaxLineFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait InvoiceTaxLineRepository: Send + Sync {
-
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -90,10 +94,17 @@ pub trait InvoiceTaxLineRepository: Send + Sync {
     // =========================================================================
 
     /// List invoice_tax_line with pagination
-    async fn list(&self, params: InvoiceTaxLinePaginationParams) -> Result<InvoiceTaxLinePaginatedResult>;
+    async fn list(
+        &self,
+        params: InvoiceTaxLinePaginationParams,
+    ) -> Result<InvoiceTaxLinePaginatedResult>;
 
     /// List invoice_tax_line with pagination and filters
-    async fn list_with_filters(&self, params: InvoiceTaxLinePaginationParams, filters: InvoiceTaxLineFilter) -> Result<InvoiceTaxLinePaginatedResult>;
+    async fn list_with_filters(
+        &self,
+        params: InvoiceTaxLinePaginationParams,
+        filters: InvoiceTaxLineFilter,
+    ) -> Result<InvoiceTaxLinePaginatedResult>;
 
     /// Count all invoice_tax_line entities
     async fn count(&self) -> Result<u64>;
@@ -115,7 +126,10 @@ pub trait InvoiceTaxLineRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<InvoiceTaxLine>>;
 
     /// List soft-deleted invoice_tax_line entities
-    async fn list_deleted(&self, params: InvoiceTaxLinePaginationParams) -> Result<InvoiceTaxLinePaginatedResult>;
+    async fn list_deleted(
+        &self,
+        params: InvoiceTaxLinePaginationParams,
+    ) -> Result<InvoiceTaxLinePaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;

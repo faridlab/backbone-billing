@@ -22,7 +22,9 @@ use uuid::Uuid;
 use crate::domain::entity::InvoiceKind;
 use crate::infrastructure::persistence::{parse_invoice_kind, NewPaymentScheduleRow};
 
-use super::billing_gl::{ReconcileLine, ReconcileOrigin, ReconcilePairRequest, ReconcileSink, UnreconcilePairRequest};
+use super::billing_gl::{
+    ReconcileLine, ReconcileOrigin, ReconcilePairRequest, ReconcileSink, UnreconcilePairRequest,
+};
 use super::billing_write_service::{money, BillingError, BillingWriteService};
 
 /// The result of applying a settlement to an invoice (council 2026-07-26, rec #3).
@@ -40,14 +42,20 @@ pub struct SettlementOutcome {
 /// Resolve the settlement seam's wire `kind` into the closed enum the repository dispatches on.
 /// Unknown kinds keep their original domain error.
 fn invoice_kind(kind: &str) -> Result<InvoiceKind, BillingError> {
-    parse_invoice_kind(kind).ok_or_else(|| BillingError::NotDraft(format!("unknown invoice kind {kind}")))
+    parse_invoice_kind(kind)
+        .ok_or_else(|| BillingError::NotDraft(format!("unknown invoice kind {kind}")))
 }
 
 /// The two reconciliation-graph locator sides of one invoice↔payment settlement, on the invoice's
 /// control account. Sales: the invoice's A/R debit (`order`) meets the payment's A/R credit
 /// (`payment`); purchase mirrors (payment debits A/P, invoice credits it via `expense`). Debit is
 /// whichever side owes, credit whichever pays — the graph's direction guard demands it.
-fn edge_sides(kind: InvoiceKind, invoice_ref: Uuid, control_account: Uuid, payment_id: Uuid) -> (ReconcileLine, ReconcileLine) {
+fn edge_sides(
+    kind: InvoiceKind,
+    invoice_ref: Uuid,
+    control_account: Uuid,
+    payment_id: Uuid,
+) -> (ReconcileLine, ReconcileLine) {
     match kind {
         InvoiceKind::Sales => (
             ReconcileLine::new("order", invoice_ref, control_account),
@@ -64,20 +72,31 @@ impl BillingWriteService {
     // ---- Payment schedule ---------------------------------------------------
 
     /// Attach installment due dates to an invoice (AR or A/P). Lean — settlement is payments' job.
-    pub async fn add_payment_schedule(&self, invoice_ref: Uuid, kind: &str, company_id: Uuid, installments: &[(chrono::NaiveDate, Decimal)]) -> Result<(), BillingError> {
+    pub async fn add_payment_schedule(
+        &self,
+        invoice_ref: Uuid,
+        kind: &str,
+        company_id: Uuid,
+        installments: &[(chrono::NaiveDate, Decimal)],
+    ) -> Result<(), BillingError> {
         let mut tx = self.db_pool.begin().await?;
         // RLS scope (ADR-0008): company is an explicit argument.
         company_scope::bind_company_on(&mut tx, company_id).await?;
         for (i, (due, amt)) in installments.iter().enumerate() {
-            self.schedules.insert_schedule(&mut tx, &NewPaymentScheduleRow {
-                id: Uuid::new_v4(),
-                invoice_ref,
-                kind,
-                company_id,
-                installment_no: (i + 1) as i32,
-                due_date: *due,
-                amount: money(*amt),
-            }).await?;
+            self.schedules
+                .insert_schedule(
+                    &mut tx,
+                    &NewPaymentScheduleRow {
+                        id: Uuid::new_v4(),
+                        invoice_ref,
+                        kind,
+                        company_id,
+                        installment_no: (i + 1) as i32,
+                        due_date: *due,
+                        amount: money(*amt),
+                    },
+                )
+                .await?;
         }
         tx.commit().await?;
         Ok(())
@@ -113,9 +132,22 @@ impl BillingWriteService {
         // which left a "forget the wrapper and you get InvoiceNotFound" trap. `bind_company_on` sets the
         // same tx-local `app.company_id` the repo's RLS policy reads.
         company_scope::bind_company_on(&mut tx, company_id).await?;
-        let applied = self.apply_settlement_in_tx(&mut tx, invoice_ref, kind, amount, company_id, payment_id, reconcile).await?;
+        let applied = self
+            .apply_settlement_in_tx(
+                &mut tx,
+                invoice_ref,
+                kind,
+                amount,
+                company_id,
+                payment_id,
+                reconcile,
+            )
+            .await?;
         tx.commit().await?;
-        Ok(SettlementOutcome { applied, remainder: money(amount) - applied })
+        Ok(SettlementOutcome {
+            applied,
+            remainder: money(amount) - applied,
+        })
     }
 
     /// **Go-live exactly-once settlement consumer.** Apply every allocation of one `PaymentSettled`
@@ -142,16 +174,32 @@ impl BillingWriteService {
             .map_err(|e| BillingError::Db(sqlx::Error::Protocol(e.to_string())))?;
         if !first {
             tx.commit().await?; // already consumed — exactly-once no-op
-            return Ok(SettlementOutcome { applied: Decimal::ZERO, remainder: Decimal::ZERO });
+            return Ok(SettlementOutcome {
+                applied: Decimal::ZERO,
+                remainder: Decimal::ZERO,
+            });
         }
         let mut applied_total = Decimal::ZERO;
         let mut requested_total = Decimal::ZERO;
         for (invoice_ref, kind, amount) in allocations {
             requested_total += money(*amount);
-            applied_total += self.apply_settlement_in_tx(&mut tx, *invoice_ref, kind, *amount, company_id, payment_id, reconcile).await?;
+            applied_total += self
+                .apply_settlement_in_tx(
+                    &mut tx,
+                    *invoice_ref,
+                    kind,
+                    *amount,
+                    company_id,
+                    payment_id,
+                    reconcile,
+                )
+                .await?;
         }
         tx.commit().await?;
-        Ok(SettlementOutcome { applied: applied_total, remainder: requested_total - applied_total })
+        Ok(SettlementOutcome {
+            applied: applied_total,
+            remainder: requested_total - applied_total,
+        })
     }
 
     /// The drawdown core, on a caller-supplied transaction (shared by `apply_settlement` and the
@@ -169,35 +217,69 @@ impl BillingWriteService {
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
         let ikind = invoice_kind(kind)?;
-        if amount < Decimal::ZERO { return Err(BillingError::NegativeAmount); }
+        if amount < Decimal::ZERO {
+            return Err(BillingError::NegativeAmount);
+        }
         let amount = money(amount);
-        if amount.is_zero() { return Ok(Decimal::ZERO); }
+        if amount.is_zero() {
+            return Ok(Decimal::ZERO);
+        }
 
         // Lock the invoice FIRST, then draw the schedules down — this order serializes concurrent
         // settlements of the same invoice.
-        let row = self.settlement.lock_outstanding(&mut **tx, ikind, invoice_ref).await?
+        let row = self
+            .settlement
+            .lock_outstanding(&mut **tx, ikind, invoice_ref)
+            .await?
             .ok_or(BillingError::InvoiceNotFound(invoice_ref))?;
         let outstanding = row.outstanding_amount;
         // Clamp to what is owed; the remainder is the caller's on-account credit.
-        let applied = if amount < outstanding { amount } else { outstanding };
+        let applied = if amount < outstanding {
+            amount
+        } else {
+            outstanding
+        };
         if applied.is_zero() {
             return Ok(Decimal::ZERO);
         }
         let new_out = outstanding - applied;
-        let new_status = if new_out.is_zero() { "paid" } else { "partially_paid" };
-        self.settlement.update_settlement(&mut **tx, ikind, invoice_ref, new_out, new_status).await?;
+        let new_status = if new_out.is_zero() {
+            "paid"
+        } else {
+            "partially_paid"
+        };
+        self.settlement
+            .update_settlement(&mut **tx, ikind, invoice_ref, new_out, new_status)
+            .await?;
 
         // Draw down payment schedules fill-in-order (earliest installment first) by the applied amount.
-        let scheds = self.schedules.lock_schedules_fill_order(&mut **tx, invoice_ref, kind).await?;
+        let scheds = self
+            .schedules
+            .lock_schedules_fill_order(&mut **tx, invoice_ref, kind)
+            .await?;
         let mut remaining = applied;
         for s in &scheds {
-            if remaining.is_zero() { break; }
+            if remaining.is_zero() {
+                break;
+            }
             let capacity = s.amount - s.paid_amount;
-            if capacity <= Decimal::ZERO { continue; }
-            let take = if capacity < remaining { capacity } else { remaining };
+            if capacity <= Decimal::ZERO {
+                continue;
+            }
+            let take = if capacity < remaining {
+                capacity
+            } else {
+                remaining
+            };
             let new_paid = s.paid_amount + take;
-            let sstatus = if new_paid >= s.amount { "paid" } else { "partially_paid" };
-            self.schedules.update_paid(&mut **tx, s.id, new_paid, sstatus).await?;
+            let sstatus = if new_paid >= s.amount {
+                "paid"
+            } else {
+                "partially_paid"
+            };
+            self.schedules
+                .update_paid(&mut **tx, s.id, new_paid, sstatus)
+                .await?;
             remaining -= take;
         }
 
@@ -205,19 +287,31 @@ impl BillingWriteService {
         // the payment's, for exactly what was knocked off. Same transaction — edge and drawdown
         // commit together, so `outstanding == grand_total − Σ edges` holds by construction.
         let (debit, credit) = edge_sides(ikind, invoice_ref, row.control_account_id, payment_id);
-        let ack = reconcile.reconcile_pair_on(&mut **tx, &ReconcilePairRequest {
-            company_id,
-            debit,
-            credit,
-            amount: applied,
-            origin: ReconcileOrigin::Settlement,
-        }).await.map_err(|r| BillingError::ReconcileRefused { code: r.code, message: r.message })?;
+        let ack = reconcile
+            .reconcile_pair_on(
+                &mut **tx,
+                &ReconcilePairRequest {
+                    company_id,
+                    debit,
+                    credit,
+                    amount: applied,
+                    origin: ReconcileOrigin::Settlement,
+                },
+            )
+            .await
+            .map_err(|r| BillingError::ReconcileRefused {
+                code: r.code,
+                message: r.message,
+            })?;
         if ack.applied != applied {
             // The graph clamped to a different amount than billing's own clamp — the subledger and
             // the ledger disagree about what is absorbable. Refuse rather than drift.
             return Err(BillingError::ReconcileRefused {
                 code: "reconcile_clamp_mismatch".into(),
-                message: format!("billing clamped {applied} but the graph applied {}", ack.applied),
+                message: format!(
+                    "billing clamped {applied} but the graph applied {}",
+                    ack.applied
+                ),
             });
         }
         Ok(applied)
@@ -244,7 +338,17 @@ impl BillingWriteService {
     ) -> Result<Decimal, BillingError> {
         let mut tx = self.db_pool.begin().await?;
         company_scope::bind_company_on(&mut tx, company_id).await?;
-        let restored = self.reverse_settlement_in_tx(&mut tx, invoice_ref, kind, amount, company_id, payment_id, reconcile).await?;
+        let restored = self
+            .reverse_settlement_in_tx(
+                &mut tx,
+                invoice_ref,
+                kind,
+                amount,
+                company_id,
+                payment_id,
+                reconcile,
+            )
+            .await?;
         tx.commit().await?;
         Ok(restored)
     }
@@ -274,7 +378,17 @@ impl BillingWriteService {
         }
         let mut restored_total = Decimal::ZERO;
         for (invoice_ref, kind, amount) in allocations {
-            restored_total += self.reverse_settlement_in_tx(&mut tx, *invoice_ref, kind, *amount, company_id, payment_id, reconcile).await?;
+            restored_total += self
+                .reverse_settlement_in_tx(
+                    &mut tx,
+                    *invoice_ref,
+                    kind,
+                    *amount,
+                    company_id,
+                    payment_id,
+                    reconcile,
+                )
+                .await?;
         }
         tx.commit().await?;
         Ok(restored_total)
@@ -294,11 +408,18 @@ impl BillingWriteService {
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
         let ikind = invoice_kind(kind)?;
-        if amount < Decimal::ZERO { return Err(BillingError::NegativeAmount); }
+        if amount < Decimal::ZERO {
+            return Err(BillingError::NegativeAmount);
+        }
         let amount = money(amount);
-        if amount.is_zero() { return Ok(Decimal::ZERO); }
+        if amount.is_zero() {
+            return Ok(Decimal::ZERO);
+        }
 
-        let row = self.settlement.lock_outstanding(&mut **tx, ikind, invoice_ref).await?
+        let row = self
+            .settlement
+            .lock_outstanding(&mut **tx, ikind, invoice_ref)
+            .await?
             .ok_or(BillingError::InvoiceNotFound(invoice_ref))?;
         let outstanding = row.outstanding_amount;
         let grand = row.grand_total;
@@ -312,26 +433,60 @@ impl BillingWriteService {
         // Unlink the settlement's graph edge first: reverses any move the edge generated (exchange
         // difference), repairs the matching group, removes the partial — all on this transaction.
         let (debit, credit) = edge_sides(ikind, invoice_ref, row.control_account_id, payment_id);
-        reconcile.unreconcile_pair_on(&mut **tx, &UnreconcilePairRequest {
-            company_id,
-            debit,
-            credit,
-        }).await.map_err(|r| BillingError::ReconcileRefused { code: r.code, message: r.message })?;
+        reconcile
+            .unreconcile_pair_on(
+                &mut **tx,
+                &UnreconcilePairRequest {
+                    company_id,
+                    debit,
+                    credit,
+                },
+            )
+            .await
+            .map_err(|r| BillingError::ReconcileRefused {
+                code: r.code,
+                message: r.message,
+            })?;
 
         let new_out = outstanding + restored;
-        let new_status = if new_out >= grand { "submitted" } else { "partially_paid" };
-        self.settlement.update_settlement(&mut **tx, ikind, invoice_ref, new_out, new_status).await?;
+        let new_status = if new_out >= grand {
+            "submitted"
+        } else {
+            "partially_paid"
+        };
+        self.settlement
+            .update_settlement(&mut **tx, ikind, invoice_ref, new_out, new_status)
+            .await?;
 
         // Rewind schedules last-installment first (inverse of the fill-in-order drawdown).
-        let scheds = self.schedules.lock_schedules_rewind_order(&mut **tx, invoice_ref, kind).await?;
+        let scheds = self
+            .schedules
+            .lock_schedules_rewind_order(&mut **tx, invoice_ref, kind)
+            .await?;
         let mut remaining = restored;
         for s in &scheds {
-            if remaining.is_zero() { break; }
-            if s.paid_amount <= Decimal::ZERO { continue; }
-            let take = if s.paid_amount < remaining { s.paid_amount } else { remaining };
+            if remaining.is_zero() {
+                break;
+            }
+            if s.paid_amount <= Decimal::ZERO {
+                continue;
+            }
+            let take = if s.paid_amount < remaining {
+                s.paid_amount
+            } else {
+                remaining
+            };
             let new_paid = s.paid_amount - take;
-            let sstatus = if new_paid.is_zero() { "unpaid" } else if new_paid >= s.amount { "paid" } else { "partially_paid" };
-            self.schedules.update_paid(&mut **tx, s.id, new_paid, sstatus).await?;
+            let sstatus = if new_paid.is_zero() {
+                "unpaid"
+            } else if new_paid >= s.amount {
+                "paid"
+            } else {
+                "partially_paid"
+            };
+            self.schedules
+                .update_paid(&mut **tx, s.id, new_paid, sstatus)
+                .await?;
             remaining -= take;
         }
         Ok(restored)

@@ -5,11 +5,11 @@
 //! This trait defines the repository contract for the PurchaseInvoice aggregate.
 //! Implementation is in the infrastructure layer.
 
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::domain::entity::{PurchaseInvoice, GlPostingState, InvoiceStatus};
+use crate::domain::entity::{GlPostingState, InvoiceStatus, PurchaseInvoice};
 
 /// Pagination parameters for list queries
 #[derive(Debug, Clone, Default)]
@@ -61,7 +61,18 @@ pub struct PurchaseInvoiceFilter {
 impl PurchaseInvoiceFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.invoice_number.is_some() || self.company_id.is_some() || self.branch_id.is_some() || self.supplier_id.is_some() || self.source_po_id.is_some() || self.status.is_some() || self.currency.is_some() || self.payable_account_id.is_some() || self.posting_state.is_some() || self.journal_id.is_some() || self.accounting_post_id.is_some() || self.notes.is_some()
+        self.invoice_number.is_some()
+            || self.company_id.is_some()
+            || self.branch_id.is_some()
+            || self.supplier_id.is_some()
+            || self.source_po_id.is_some()
+            || self.status.is_some()
+            || self.currency.is_some()
+            || self.payable_account_id.is_some()
+            || self.posting_state.is_some()
+            || self.journal_id.is_some()
+            || self.accounting_post_id.is_some()
+            || self.notes.is_some()
     }
 }
 
@@ -71,7 +82,6 @@ impl PurchaseInvoiceFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait PurchaseInvoiceRepository: Send + Sync {
-
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -96,10 +106,17 @@ pub trait PurchaseInvoiceRepository: Send + Sync {
     // =========================================================================
 
     /// List purchase_invoice with pagination
-    async fn list(&self, params: PurchaseInvoicePaginationParams) -> Result<PurchaseInvoicePaginatedResult>;
+    async fn list(
+        &self,
+        params: PurchaseInvoicePaginationParams,
+    ) -> Result<PurchaseInvoicePaginatedResult>;
 
     /// List purchase_invoice with pagination and filters
-    async fn list_with_filters(&self, params: PurchaseInvoicePaginationParams, filters: PurchaseInvoiceFilter) -> Result<PurchaseInvoicePaginatedResult>;
+    async fn list_with_filters(
+        &self,
+        params: PurchaseInvoicePaginationParams,
+        filters: PurchaseInvoiceFilter,
+    ) -> Result<PurchaseInvoicePaginatedResult>;
 
     /// Count all purchase_invoice entities
     async fn count(&self) -> Result<u64>;
@@ -121,7 +138,10 @@ pub trait PurchaseInvoiceRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<PurchaseInvoice>>;
 
     /// List soft-deleted purchase_invoice entities
-    async fn list_deleted(&self, params: PurchaseInvoicePaginationParams) -> Result<PurchaseInvoicePaginatedResult>;
+    async fn list_deleted(
+        &self,
+        params: PurchaseInvoicePaginationParams,
+    ) -> Result<PurchaseInvoicePaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;

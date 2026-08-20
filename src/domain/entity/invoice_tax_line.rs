@@ -1,12 +1,12 @@
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use rust_decimal::Decimal;
 
+use super::AuditMetadata;
 use super::InvoiceKind;
 use super::TaxBasis;
-use super::AuditMetadata;
 
 /// Strongly-typed ID for InvoiceTaxLine
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -14,9 +14,15 @@ use super::AuditMetadata;
 pub struct InvoiceTaxLineId(pub Uuid);
 
 impl InvoiceTaxLineId {
-    pub fn new(id: Uuid) -> Self { Self(id) }
-    pub fn generate() -> Self { Self(Uuid::new_v4()) }
-    pub fn into_inner(self) -> Uuid { self.0 }
+    pub fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+    pub fn generate() -> Self {
+        Self(Uuid::new_v4())
+    }
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
 }
 
 impl std::fmt::Display for InvoiceTaxLineId {
@@ -33,20 +39,28 @@ impl std::str::FromStr for InvoiceTaxLineId {
 }
 
 impl From<Uuid> for InvoiceTaxLineId {
-    fn from(id: Uuid) -> Self { Self(id) }
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
 }
 
 impl From<InvoiceTaxLineId> for Uuid {
-    fn from(id: InvoiceTaxLineId) -> Self { id.0 }
+    fn from(id: InvoiceTaxLineId) -> Self {
+        id.0
+    }
 }
 
 impl AsRef<Uuid> for InvoiceTaxLineId {
-    fn as_ref(&self) -> &Uuid { &self.0 }
+    fn as_ref(&self) -> &Uuid {
+        &self.0
+    }
 }
 
 impl std::ops::Deref for InvoiceTaxLineId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -73,7 +87,16 @@ impl InvoiceTaxLine {
     }
 
     /// Create a new InvoiceTaxLine with required fields
-    pub fn new(invoice_ref: Uuid, invoice_kind: InvoiceKind, company_id: Uuid, account_id: Uuid, basis: TaxBasis, taxable_base: Decimal, rate: Decimal, tax_amount: Decimal) -> Self {
+    pub fn new(
+        invoice_ref: Uuid,
+        invoice_kind: InvoiceKind,
+        company_id: Uuid,
+        account_id: Uuid,
+        basis: TaxBasis,
+        taxable_base: Decimal,
+        rate: Decimal,
+        tax_amount: Decimal,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             invoice_ref,
@@ -139,7 +162,6 @@ impl InvoiceTaxLine {
         self.metadata.deleted_by.as_ref()
     }
 
-
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
@@ -159,31 +181,49 @@ impl InvoiceTaxLine {
         for (key, value) in fields {
             match key.as_str() {
                 "invoice_ref" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.invoice_ref = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.invoice_ref = v;
+                    }
                 }
                 "invoice_kind" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.invoice_kind = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.invoice_kind = v;
+                    }
                 }
                 "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.company_id = v;
+                    }
                 }
                 "account_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.account_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.account_id = v;
+                    }
                 }
                 "basis" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.basis = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.basis = v;
+                    }
                 }
                 "description" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.description = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.description = v;
+                    }
                 }
                 "taxable_base" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.taxable_base = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.taxable_base = v;
+                    }
                 }
                 "rate" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.rate = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.rate = v;
+                    }
                 }
                 "tax_amount" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.tax_amount = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.tax_amount = v;
+                    }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -329,12 +369,22 @@ impl InvoiceTaxLineBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<InvoiceTaxLine, String> {
-        let invoice_ref = self.invoice_ref.ok_or_else(|| "invoice_ref is required".to_string())?;
-        let invoice_kind = self.invoice_kind.ok_or_else(|| "invoice_kind is required".to_string())?;
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
-        let account_id = self.account_id.ok_or_else(|| "account_id is required".to_string())?;
+        let invoice_ref = self
+            .invoice_ref
+            .ok_or_else(|| "invoice_ref is required".to_string())?;
+        let invoice_kind = self
+            .invoice_kind
+            .ok_or_else(|| "invoice_kind is required".to_string())?;
+        let company_id = self
+            .company_id
+            .ok_or_else(|| "company_id is required".to_string())?;
+        let account_id = self
+            .account_id
+            .ok_or_else(|| "account_id is required".to_string())?;
         let basis = self.basis.ok_or_else(|| "basis is required".to_string())?;
-        let tax_amount = self.tax_amount.ok_or_else(|| "tax_amount is required".to_string())?;
+        let tax_amount = self
+            .tax_amount
+            .ok_or_else(|| "tax_amount is required".to_string())?;
 
         Ok(InvoiceTaxLine {
             id: Uuid::new_v4(),

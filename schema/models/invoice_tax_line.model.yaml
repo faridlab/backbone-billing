@@ -3,9 +3,13 @@
 # Entity: InvoiceTaxLine (the REMOVABLE tax overlay)
 # Description: Tax lines keyed by a LOGICAL invoice ref (no DB FK to the invoice)
 # — localization-standard §1: the base invoice carries no tax columns; PPN/PPh
-# live here and are populated from backbone-tax's TaxResult (supplied for now).
-# Remove this table and invoices still compute + post clean (net only). `basis`
-# distinguishes output (PPN out), input (PPN in), and withholding (PPh).
+# live here. Two population paths: caller-supplied lines (region-neutral billing
+# never computes tax itself), or computed by backbone-tax's document engine when
+# an invoice line carries a tax template — those rows additionally persist the
+# engine's routing (template, repartition split, and the real account a cash-basis
+# amount flips to at payment). Remove this table and invoices still compute +
+# post clean (net only). `basis` distinguishes output (PPN out), input (PPN in),
+# and withholding (PPh).
 # =============================================================================
 
 models:
@@ -64,6 +68,26 @@ models:
         attributes: ["@required", "@precision(18,2)", "@non_negative"]
         description: "Tax amount (posted to account_id)"
 
+      tax_template_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "The backbone-tax template that produced this line (engine-computed rows only; NULL for caller-supplied lines)"
+
+      repartition_line_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "The tax repartition split whose factor produced this amount (NULL for legacy template routing)"
+
+      real_account_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "For cash-basis (on_payment) rows: the real tax account the amount flips to as payments reconcile — account_id holds the transition account meanwhile"
+
+      exigibility:
+        type: TaxExigibility
+        attributes: ["@default(on_invoice)"]
+        description: "When the tax becomes exigible: on_invoice (accrual, the default) or on_payment (cash basis, deferred through the transition account)"
+
       metadata:
         type: Metadata
         attributes: ["@audit_metadata"]
@@ -93,3 +117,12 @@ enums:
         description: "Input VAT (PPN Masukan) — debited on a purchase invoice"
       - name: withholding
         description: "Withholding tax (PPh) — deducted from A/P, credited to PPh Payable"
+
+  - name: TaxExigibility
+    description: "When a tax amount becomes exigible (engine-computed rows; caller-supplied lines are always on_invoice)"
+    variants:
+      - name: on_invoice
+        description: "Accrual — exigible when the invoice posts"
+        default: true
+      - name: on_payment
+        description: "Cash basis — deferred through a transition account, flipped pro-rata as payments reconcile"

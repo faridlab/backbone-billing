@@ -39,6 +39,12 @@ user_owned:
   - "tests/ap_seam.rs"
   - "tests/settlement_graph_seam.rs"
   - "tests/schedules_and_events.rs"
+  # Tax-engine integration: the billing→tax seam (moved here from backbone-tax so the cargo
+  # edge stays billing→tax) + the template-driven create-path cases.
+  - "tests/tax_seam.rs"
+  - "tests/document_tax_cases.rs"
+  - "migrations/20260820100000_invoice_tax_line_tax_columns.up.sql"
+  - "migrations/20260820100000_invoice_tax_line_tax_columns.down.sql"
   - "scripts/**"
   # Hand-authored behavior (services + their HTTP surface). Examples:
   # - "src/application/service/onboarding_service.rs"

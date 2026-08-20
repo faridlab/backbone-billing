@@ -7,9 +7,9 @@
 
 use backbone_core::GenericCrudService;
 
-use crate::presentation::dto::{CreateSalesInvoiceLineDto, UpdateSalesInvoiceLineDto};
 use crate::domain::entity::SalesInvoiceLine;
 use crate::infrastructure::persistence::SalesInvoiceLineRepository;
+use crate::presentation::dto::{CreateSalesInvoiceLineDto, UpdateSalesInvoiceLineDto};
 
 /// Application service for SalesInvoiceLine entities.
 ///

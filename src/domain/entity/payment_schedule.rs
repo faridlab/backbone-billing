@@ -1,12 +1,12 @@
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{DateTime, NaiveDate, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use rust_decimal::Decimal;
 
+use super::AuditMetadata;
 use super::InvoiceKind;
 use super::PaymentScheduleStatus;
-use super::AuditMetadata;
 
 /// Strongly-typed ID for PaymentSchedule
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -14,9 +14,15 @@ use super::AuditMetadata;
 pub struct PaymentScheduleId(pub Uuid);
 
 impl PaymentScheduleId {
-    pub fn new(id: Uuid) -> Self { Self(id) }
-    pub fn generate() -> Self { Self(Uuid::new_v4()) }
-    pub fn into_inner(self) -> Uuid { self.0 }
+    pub fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+    pub fn generate() -> Self {
+        Self(Uuid::new_v4())
+    }
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
 }
 
 impl std::fmt::Display for PaymentScheduleId {
@@ -33,20 +39,28 @@ impl std::str::FromStr for PaymentScheduleId {
 }
 
 impl From<Uuid> for PaymentScheduleId {
-    fn from(id: Uuid) -> Self { Self(id) }
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
 }
 
 impl From<PaymentScheduleId> for Uuid {
-    fn from(id: PaymentScheduleId) -> Self { id.0 }
+    fn from(id: PaymentScheduleId) -> Self {
+        id.0
+    }
 }
 
 impl AsRef<Uuid> for PaymentScheduleId {
-    fn as_ref(&self) -> &Uuid { &self.0 }
+    fn as_ref(&self) -> &Uuid {
+        &self.0
+    }
 }
 
 impl std::ops::Deref for PaymentScheduleId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -72,7 +86,16 @@ impl PaymentSchedule {
     }
 
     /// Create a new PaymentSchedule with required fields
-    pub fn new(invoice_ref: Uuid, invoice_kind: InvoiceKind, company_id: Uuid, installment_no: i32, due_date: NaiveDate, amount: Decimal, paid_amount: Decimal, status: PaymentScheduleStatus) -> Self {
+    pub fn new(
+        invoice_ref: Uuid,
+        invoice_kind: InvoiceKind,
+        company_id: Uuid,
+        installment_no: i32,
+        due_date: NaiveDate,
+        amount: Decimal,
+        paid_amount: Decimal,
+        status: PaymentScheduleStatus,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             invoice_ref,
@@ -142,7 +165,6 @@ impl PaymentSchedule {
         &self.status
     }
 
-
     // ==========================================================
     // Partial Update
     // ==========================================================
@@ -152,28 +174,44 @@ impl PaymentSchedule {
         for (key, value) in fields {
             match key.as_str() {
                 "invoice_ref" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.invoice_ref = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.invoice_ref = v;
+                    }
                 }
                 "invoice_kind" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.invoice_kind = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.invoice_kind = v;
+                    }
                 }
                 "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.company_id = v;
+                    }
                 }
                 "installment_no" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.installment_no = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.installment_no = v;
+                    }
                 }
                 "due_date" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.due_date = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.due_date = v;
+                    }
                 }
                 "amount" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.amount = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.amount = v;
+                    }
                 }
                 "paid_amount" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.paid_amount = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.paid_amount = v;
+                    }
                 }
                 "status" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.status = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.status = v;
+                    }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -311,12 +349,24 @@ impl PaymentScheduleBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<PaymentSchedule, String> {
-        let invoice_ref = self.invoice_ref.ok_or_else(|| "invoice_ref is required".to_string())?;
-        let invoice_kind = self.invoice_kind.ok_or_else(|| "invoice_kind is required".to_string())?;
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
-        let installment_no = self.installment_no.ok_or_else(|| "installment_no is required".to_string())?;
-        let due_date = self.due_date.ok_or_else(|| "due_date is required".to_string())?;
-        let amount = self.amount.ok_or_else(|| "amount is required".to_string())?;
+        let invoice_ref = self
+            .invoice_ref
+            .ok_or_else(|| "invoice_ref is required".to_string())?;
+        let invoice_kind = self
+            .invoice_kind
+            .ok_or_else(|| "invoice_kind is required".to_string())?;
+        let company_id = self
+            .company_id
+            .ok_or_else(|| "company_id is required".to_string())?;
+        let installment_no = self
+            .installment_no
+            .ok_or_else(|| "installment_no is required".to_string())?;
+        let due_date = self
+            .due_date
+            .ok_or_else(|| "due_date is required".to_string())?;
+        let amount = self
+            .amount
+            .ok_or_else(|| "amount is required".to_string())?;
 
         Ok(PaymentSchedule {
             id: Uuid::new_v4(),

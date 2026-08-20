@@ -1,12 +1,12 @@
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{DateTime, NaiveDate, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use rust_decimal::Decimal;
 
-use super::InvoiceStatus;
-use super::GlPostingState;
 use super::AuditMetadata;
+use super::GlPostingState;
+use super::InvoiceStatus;
 
 /// Strongly-typed ID for SalesInvoice
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -14,9 +14,15 @@ use super::AuditMetadata;
 pub struct SalesInvoiceId(pub Uuid);
 
 impl SalesInvoiceId {
-    pub fn new(id: Uuid) -> Self { Self(id) }
-    pub fn generate() -> Self { Self(Uuid::new_v4()) }
-    pub fn into_inner(self) -> Uuid { self.0 }
+    pub fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+    pub fn generate() -> Self {
+        Self(Uuid::new_v4())
+    }
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
 }
 
 impl std::fmt::Display for SalesInvoiceId {
@@ -33,20 +39,28 @@ impl std::str::FromStr for SalesInvoiceId {
 }
 
 impl From<Uuid> for SalesInvoiceId {
-    fn from(id: Uuid) -> Self { Self(id) }
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
 }
 
 impl From<SalesInvoiceId> for Uuid {
-    fn from(id: SalesInvoiceId) -> Self { id.0 }
+    fn from(id: SalesInvoiceId) -> Self {
+        id.0
+    }
 }
 
 impl AsRef<Uuid> for SalesInvoiceId {
-    fn as_ref(&self) -> &Uuid { &self.0 }
+    fn as_ref(&self) -> &Uuid {
+        &self.0
+    }
 }
 
 impl std::ops::Deref for SalesInvoiceId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -83,7 +97,20 @@ impl SalesInvoice {
     }
 
     /// Create a new SalesInvoice with required fields
-    pub fn new(invoice_number: String, company_id: Uuid, customer_id: Uuid, status: InvoiceStatus, posting_date: NaiveDate, currency: String, net_total: Decimal, tax_total: Decimal, grand_total: Decimal, outstanding_amount: Decimal, receivable_account_id: Uuid, posting_state: GlPostingState) -> Self {
+    pub fn new(
+        invoice_number: String,
+        company_id: Uuid,
+        customer_id: Uuid,
+        status: InvoiceStatus,
+        posting_date: NaiveDate,
+        currency: String,
+        net_total: Decimal,
+        tax_total: Decimal,
+        grand_total: Decimal,
+        outstanding_amount: Decimal,
+        receivable_account_id: Uuid,
+        posting_state: GlPostingState,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             invoice_number,
@@ -164,7 +191,6 @@ impl SalesInvoice {
         &self.status
     }
 
-
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
@@ -220,61 +246,99 @@ impl SalesInvoice {
         for (key, value) in fields {
             match key.as_str() {
                 "invoice_number" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.invoice_number = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.invoice_number = v;
+                    }
                 }
                 "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.company_id = v;
+                    }
                 }
                 "branch_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.branch_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.branch_id = v;
+                    }
                 }
                 "customer_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.customer_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.customer_id = v;
+                    }
                 }
                 "source_so_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.source_so_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.source_so_id = v;
+                    }
                 }
                 "status" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.status = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.status = v;
+                    }
                 }
                 "posting_date" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.posting_date = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.posting_date = v;
+                    }
                 }
                 "due_date" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.due_date = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.due_date = v;
+                    }
                 }
                 "currency" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.currency = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.currency = v;
+                    }
                 }
                 "net_total" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.net_total = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.net_total = v;
+                    }
                 }
                 "tax_total" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.tax_total = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.tax_total = v;
+                    }
                 }
                 "grand_total" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.grand_total = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.grand_total = v;
+                    }
                 }
                 "outstanding_amount" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.outstanding_amount = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.outstanding_amount = v;
+                    }
                 }
                 "receivable_account_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.receivable_account_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.receivable_account_id = v;
+                    }
                 }
                 "posting_state" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.posting_state = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.posting_state = v;
+                    }
                 }
                 "journal_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.journal_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.journal_id = v;
+                    }
                 }
                 "accounting_post_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.accounting_post_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.accounting_post_id = v;
+                    }
                 }
                 "posted_at" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.posted_at = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.posted_at = v;
+                    }
                 }
                 "notes" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.notes = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.notes = v;
+                    }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -495,11 +559,21 @@ impl SalesInvoiceBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<SalesInvoice, String> {
-        let invoice_number = self.invoice_number.ok_or_else(|| "invoice_number is required".to_string())?;
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
-        let customer_id = self.customer_id.ok_or_else(|| "customer_id is required".to_string())?;
-        let posting_date = self.posting_date.ok_or_else(|| "posting_date is required".to_string())?;
-        let receivable_account_id = self.receivable_account_id.ok_or_else(|| "receivable_account_id is required".to_string())?;
+        let invoice_number = self
+            .invoice_number
+            .ok_or_else(|| "invoice_number is required".to_string())?;
+        let company_id = self
+            .company_id
+            .ok_or_else(|| "company_id is required".to_string())?;
+        let customer_id = self
+            .customer_id
+            .ok_or_else(|| "customer_id is required".to_string())?;
+        let posting_date = self
+            .posting_date
+            .ok_or_else(|| "posting_date is required".to_string())?;
+        let receivable_account_id = self
+            .receivable_account_id
+            .ok_or_else(|| "receivable_account_id is required".to_string())?;
 
         Ok(SalesInvoice {
             id: Uuid::new_v4(),

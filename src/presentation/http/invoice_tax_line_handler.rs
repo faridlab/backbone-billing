@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Router;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use rust_decimal::Decimal;
 
 // Backbone framework imports
 use backbone_core::http::BackboneCrudHandler;
@@ -22,12 +22,14 @@ use backbone_auth::middleware::AuthContext;
 use backbone_auth::AuthMiddleware;
 
 // Domain imports
-use crate::domain::entity::*;
 use crate::application::service::{InvoiceTaxLineService, ServiceError};
+use crate::domain::entity::*;
 
 // DTO imports
-use crate::presentation::dto::{CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, PatchInvoiceTaxLineDto, InvoiceTaxLineResponseDto};
-
+use crate::presentation::dto::{
+    CreateInvoiceTaxLineDto, InvoiceTaxLineResponseDto, PatchInvoiceTaxLineDto,
+    UpdateInvoiceTaxLineDto,
+};
 
 /// Application error type
 #[derive(Debug, thiserror::Error)]
@@ -62,8 +64,14 @@ impl axum::response::IntoResponse for InvoiceTaxLineError {
         let (status, code) = match &self {
             Self::NotFound(_) => (StatusCode::NOT_FOUND, "INVOICETAXLINE_NOT_FOUND"),
             Self::Validation(_) => (StatusCode::BAD_REQUEST, "INVOICETAXLINE_VALIDATION_ERROR"),
-            Self::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "INVOICETAXLINE_DATABASE_ERROR"),
-            Self::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "INVOICETAXLINE_INTERNAL_ERROR"),
+            Self::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INVOICETAXLINE_DATABASE_ERROR",
+            ),
+            Self::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INVOICETAXLINE_INTERNAL_ERROR",
+            ),
         };
 
         let body = serde_json::json!({
@@ -109,10 +117,13 @@ impl axum::response::IntoResponse for InvoiceTaxLineError {
 /// let router = create_invoice_tax_line_routes(service);
 /// ```
 pub fn create_invoice_tax_line_routes(service: Arc<InvoiceTaxLineService>) -> Router {
-    BackboneCrudHandler::<InvoiceTaxLineService, InvoiceTaxLine, CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, InvoiceTaxLineResponseDto>::routes(
-        service,
-        "/invoice_tax_lines",
-    )
+    BackboneCrudHandler::<
+        InvoiceTaxLineService,
+        InvoiceTaxLine,
+        CreateInvoiceTaxLineDto,
+        UpdateInvoiceTaxLineDto,
+        InvoiceTaxLineResponseDto,
+    >::routes(service, "/invoice_tax_lines")
 }
 
 /// Create Axum router with only the read (GET) endpoints for InvoiceTaxLine.
@@ -121,10 +132,13 @@ pub fn create_invoice_tax_line_routes(service: Arc<InvoiceTaxLineService>) -> Ro
 /// Mutations must be served separately via `create_invoice_tax_line_write_routes`,
 /// typically wrapped in an auth middleware layer.
 pub fn create_invoice_tax_line_read_routes(service: Arc<InvoiceTaxLineService>) -> Router {
-    BackboneCrudHandler::<InvoiceTaxLineService, InvoiceTaxLine, CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, InvoiceTaxLineResponseDto>::read_routes(
-        service,
-        "/invoice_tax_lines",
-    )
+    BackboneCrudHandler::<
+        InvoiceTaxLineService,
+        InvoiceTaxLine,
+        CreateInvoiceTaxLineDto,
+        UpdateInvoiceTaxLineDto,
+        InvoiceTaxLineResponseDto,
+    >::read_routes(service, "/invoice_tax_lines")
 }
 
 /// Create Axum router with only the write (mutation) endpoints for InvoiceTaxLine.
@@ -132,10 +146,13 @@ pub fn create_invoice_tax_line_read_routes(service: Arc<InvoiceTaxLineService>) 
 /// These routes must NOT be publicly exposed. Wrap them with an auth
 /// middleware before nesting into the application router.
 pub fn create_invoice_tax_line_write_routes(service: Arc<InvoiceTaxLineService>) -> Router {
-    BackboneCrudHandler::<InvoiceTaxLineService, InvoiceTaxLine, CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, InvoiceTaxLineResponseDto>::write_routes(
-        service,
-        "/invoice_tax_lines",
-    )
+    BackboneCrudHandler::<
+        InvoiceTaxLineService,
+        InvoiceTaxLine,
+        CreateInvoiceTaxLineDto,
+        UpdateInvoiceTaxLineDto,
+        InvoiceTaxLineResponseDto,
+    >::write_routes(service, "/invoice_tax_lines")
 }
 
 /// Create authenticated routes with auth middleware.
@@ -152,31 +169,35 @@ pub fn create_protected_invoice_tax_line_routes<A: AuthMiddleware + Send + Sync 
     use axum::response::IntoResponse;
 
     let auth_layer = auth.clone();
-    create_invoice_tax_line_routes(service)
-        .layer(middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+    create_invoice_tax_line_routes(service).layer(middleware::from_fn(
+        move |mut req: axum::extract::Request, next: axum::middleware::Next| {
             let auth = auth_layer.clone();
             async move {
-                let token = req.headers()
+                let token = req
+                    .headers()
                     .get(axum::http::header::AUTHORIZATION)
                     .and_then(|h| h.to_str().ok())
-                    .and_then(|raw| raw.strip_prefix("Bearer ").or_else(|| raw.strip_prefix("bearer ")))
+                    .and_then(|raw| {
+                        raw.strip_prefix("Bearer ")
+                            .or_else(|| raw.strip_prefix("bearer "))
+                    })
                     .unwrap_or("");
                 match auth.authenticate(token).await {
                     Ok(ctx) => {
                         req.extensions_mut().insert(ctx);
                         next.run(req).await
                     }
-                    Err(_) => {
-                        (axum::http::StatusCode::UNAUTHORIZED,
-                         axum::Json(serde_json::json!({
-                             "success": false,
-                             "error": "unauthorized",
-                             "message": "Authentication required"
-                         }))
-                        ).into_response()
-                    }
+                    Err(_) => (
+                        axum::http::StatusCode::UNAUTHORIZED,
+                        axum::Json(serde_json::json!({
+                            "success": false,
+                            "error": "unauthorized",
+                            "message": "Authentication required"
+                        })),
+                    )
+                        .into_response(),
                 }
             }
-        }))
+        },
+    ))
 }
-

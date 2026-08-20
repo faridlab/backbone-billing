@@ -9,10 +9,10 @@ pub use error::{ServiceError, ServiceResult};
 
 pub mod invoice_tax_line_service;
 pub mod payment_schedule_service;
-pub mod purchase_invoice_service;
 pub mod purchase_invoice_line_service;
-pub mod sales_invoice_service;
+pub mod purchase_invoice_service;
 pub mod sales_invoice_line_service;
+pub mod sales_invoice_service;
 
 // <<< CUSTOM
 pub mod billing_events;
@@ -28,10 +28,10 @@ pub mod settlement_consumer;
 
 pub use invoice_tax_line_service::InvoiceTaxLineService;
 pub use payment_schedule_service::PaymentScheduleService;
-pub use purchase_invoice_service::PurchaseInvoiceService;
 pub use purchase_invoice_line_service::PurchaseInvoiceLineService;
-pub use sales_invoice_service::SalesInvoiceService;
+pub use purchase_invoice_service::PurchaseInvoiceService;
 pub use sales_invoice_line_service::SalesInvoiceLineService;
+pub use sales_invoice_service::SalesInvoiceService;
 // <<< CUSTOM
 pub use billing_events::{
     BilledLine, BillingEvent, BillingEventSink, InvoiceCancelled, LoggingSink,
@@ -42,11 +42,11 @@ pub use billing_gl::{
     ReconcileLine, ReconcileOrigin, ReconcilePairRequest, ReconcileRejected, ReconcileSink,
     UnreconcilePairRequest,
 };
+pub use billing_settlement::SettlementOutcome;
 pub use billing_write_service::{
     BillingError, BillingWriteService, NewInvoiceLine, NewPurchaseInvoice, NewSalesInvoice,
     NewTaxLine, PostOutcome,
 };
-pub use billing_settlement::SettlementOutcome;
 pub use settlement_consumer::{
     PaymentCancelledDto, PaymentCancelledHandler, PaymentSettledDto, PaymentSettledHandler,
     SettledInvoiceDto,
