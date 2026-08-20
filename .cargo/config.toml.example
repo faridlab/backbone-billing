@@ -1,6 +1,6 @@
 # Copy to .cargo/config.toml (gitignored) to build billing against LOCAL checkouts: backbone-outbox
-# (../backbone-framework/backbone-outbox), backbone-accounting, and backbone-buying. Without this
-# file, Cargo builds them from their pinned git tags (the prod/CI path). See Cargo.toml.
+# (../backbone-framework/backbone-outbox), backbone-accounting, backbone-buying, and backbone-tax.
+# Without this file, Cargo builds them from their pinned git tags (the prod/CI path). See Cargo.toml.
 
 [patch."https://github.com/faridlab/backbone-framework"]
 backbone-outbox = { path = "../backbone-framework/backbone-outbox" }
@@ -11,3 +11,6 @@ backbone-accounting = { path = "../backbone-accounting" }
 
 [patch."https://github.com/faridlab/backbone-buying"]
 backbone-buying = { path = "../backbone-buying" }
+
+[patch."https://github.com/faridlab/backbone-tax"]
+backbone-tax = { path = "../backbone-tax" }
