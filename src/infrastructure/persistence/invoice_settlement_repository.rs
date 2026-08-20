@@ -66,11 +66,15 @@ pub struct OutstandingRow {
 pub struct InvoiceSettlementRepository;
 
 impl Default for InvoiceSettlementRepository {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InvoiceSettlementRepository {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     /// Lock the live invoice `FOR UPDATE` and read what it still owes. `Ok(None)` = no such live
     /// invoice IN THE CALLER'S SCOPE — which is also how this fails closed when no company scope was
@@ -91,9 +95,13 @@ impl InvoiceSettlementRepository {
             control_account_column(kind),
             settlement_table(kind),
         );
-        let row = sqlx::query(&sql).bind(invoice_ref).fetch_optional(conn).await?;
+        let row = sqlx::query(&sql)
+            .bind(invoice_ref)
+            .fetch_optional(conn)
+            .await?;
         Ok(row.map(|r| OutstandingRow {
-            outstanding_amount: r.get("outstanding_amount"), grand_total: r.get("grand_total"),
+            outstanding_amount: r.get("outstanding_amount"),
+            grand_total: r.get("grand_total"),
             control_account_id: r.get("control_account_id"),
         }))
     }
@@ -116,7 +124,9 @@ impl InvoiceSettlementRepository {
             settlement_table(kind),
         );
         sqlx::query(&sql)
-            .bind(invoice_ref).bind(outstanding_amount).bind(status)
+            .bind(invoice_ref)
+            .bind(outstanding_amount)
+            .bind(status)
             .execute(conn)
             .await?;
         Ok(())

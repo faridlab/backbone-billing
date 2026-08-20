@@ -8,10 +8,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Router;
+use chrono::{DateTime, NaiveDate, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc, NaiveDate};
-use rust_decimal::Decimal;
 
 // Backbone framework imports
 use backbone_core::http::BackboneCrudHandler;
@@ -23,12 +23,13 @@ use backbone_auth::middleware::AuthContext;
 use backbone_auth::AuthMiddleware;
 
 // Domain imports
-use crate::domain::entity::*;
 use crate::application::service::{SalesInvoiceService, ServiceError};
+use crate::domain::entity::*;
 
 // DTO imports
-use crate::presentation::dto::{CreateSalesInvoiceDto, UpdateSalesInvoiceDto, PatchSalesInvoiceDto, SalesInvoiceResponseDto};
-
+use crate::presentation::dto::{
+    CreateSalesInvoiceDto, PatchSalesInvoiceDto, SalesInvoiceResponseDto, UpdateSalesInvoiceDto,
+};
 
 /// Application error type
 #[derive(Debug, thiserror::Error)]
@@ -63,8 +64,14 @@ impl axum::response::IntoResponse for SalesInvoiceError {
         let (status, code) = match &self {
             Self::NotFound(_) => (StatusCode::NOT_FOUND, "SALESINVOICE_NOT_FOUND"),
             Self::Validation(_) => (StatusCode::BAD_REQUEST, "SALESINVOICE_VALIDATION_ERROR"),
-            Self::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "SALESINVOICE_DATABASE_ERROR"),
-            Self::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "SALESINVOICE_INTERNAL_ERROR"),
+            Self::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "SALESINVOICE_DATABASE_ERROR",
+            ),
+            Self::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "SALESINVOICE_INTERNAL_ERROR",
+            ),
         };
 
         let body = serde_json::json!({
@@ -110,10 +117,13 @@ impl axum::response::IntoResponse for SalesInvoiceError {
 /// let router = create_sales_invoice_routes(service);
 /// ```
 pub fn create_sales_invoice_routes(service: Arc<SalesInvoiceService>) -> Router {
-    BackboneCrudHandler::<SalesInvoiceService, SalesInvoice, CreateSalesInvoiceDto, UpdateSalesInvoiceDto, SalesInvoiceResponseDto>::routes(
-        service,
-        "/sales_invoices",
-    )
+    BackboneCrudHandler::<
+        SalesInvoiceService,
+        SalesInvoice,
+        CreateSalesInvoiceDto,
+        UpdateSalesInvoiceDto,
+        SalesInvoiceResponseDto,
+    >::routes(service, "/sales_invoices")
 }
 
 /// Create Axum router with only the read (GET) endpoints for SalesInvoice.
@@ -122,10 +132,13 @@ pub fn create_sales_invoice_routes(service: Arc<SalesInvoiceService>) -> Router 
 /// Mutations must be served separately via `create_sales_invoice_write_routes`,
 /// typically wrapped in an auth middleware layer.
 pub fn create_sales_invoice_read_routes(service: Arc<SalesInvoiceService>) -> Router {
-    BackboneCrudHandler::<SalesInvoiceService, SalesInvoice, CreateSalesInvoiceDto, UpdateSalesInvoiceDto, SalesInvoiceResponseDto>::read_routes(
-        service,
-        "/sales_invoices",
-    )
+    BackboneCrudHandler::<
+        SalesInvoiceService,
+        SalesInvoice,
+        CreateSalesInvoiceDto,
+        UpdateSalesInvoiceDto,
+        SalesInvoiceResponseDto,
+    >::read_routes(service, "/sales_invoices")
 }
 
 /// Create Axum router with only the write (mutation) endpoints for SalesInvoice.
@@ -133,10 +146,13 @@ pub fn create_sales_invoice_read_routes(service: Arc<SalesInvoiceService>) -> Ro
 /// These routes must NOT be publicly exposed. Wrap them with an auth
 /// middleware before nesting into the application router.
 pub fn create_sales_invoice_write_routes(service: Arc<SalesInvoiceService>) -> Router {
-    BackboneCrudHandler::<SalesInvoiceService, SalesInvoice, CreateSalesInvoiceDto, UpdateSalesInvoiceDto, SalesInvoiceResponseDto>::write_routes(
-        service,
-        "/sales_invoices",
-    )
+    BackboneCrudHandler::<
+        SalesInvoiceService,
+        SalesInvoice,
+        CreateSalesInvoiceDto,
+        UpdateSalesInvoiceDto,
+        SalesInvoiceResponseDto,
+    >::write_routes(service, "/sales_invoices")
 }
 
 /// Create authenticated routes with auth middleware.
@@ -153,31 +169,35 @@ pub fn create_protected_sales_invoice_routes<A: AuthMiddleware + Send + Sync + '
     use axum::response::IntoResponse;
 
     let auth_layer = auth.clone();
-    create_sales_invoice_routes(service)
-        .layer(middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+    create_sales_invoice_routes(service).layer(middleware::from_fn(
+        move |mut req: axum::extract::Request, next: axum::middleware::Next| {
             let auth = auth_layer.clone();
             async move {
-                let token = req.headers()
+                let token = req
+                    .headers()
                     .get(axum::http::header::AUTHORIZATION)
                     .and_then(|h| h.to_str().ok())
-                    .and_then(|raw| raw.strip_prefix("Bearer ").or_else(|| raw.strip_prefix("bearer ")))
+                    .and_then(|raw| {
+                        raw.strip_prefix("Bearer ")
+                            .or_else(|| raw.strip_prefix("bearer "))
+                    })
                     .unwrap_or("");
                 match auth.authenticate(token).await {
                     Ok(ctx) => {
                         req.extensions_mut().insert(ctx);
                         next.run(req).await
                     }
-                    Err(_) => {
-                        (axum::http::StatusCode::UNAUTHORIZED,
-                         axum::Json(serde_json::json!({
-                             "success": false,
-                             "error": "unauthorized",
-                             "message": "Authentication required"
-                         }))
-                        ).into_response()
-                    }
+                    Err(_) => (
+                        axum::http::StatusCode::UNAUTHORIZED,
+                        axum::Json(serde_json::json!({
+                            "success": false,
+                            "error": "unauthorized",
+                            "message": "Authentication required"
+                        })),
+                    )
+                        .into_response(),
                 }
             }
-        }))
+        },
+    ))
 }
-

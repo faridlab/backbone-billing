@@ -31,7 +31,9 @@ pub struct PurchaseInvoiceRepository(
 
 impl std::ops::Deref for PurchaseInvoiceRepository {
     type Target = backbone_orm::GenericCrudRepository<PurchaseInvoice, backbone_orm::SoftDelete>;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl PurchaseInvoiceRepository {
@@ -138,10 +140,14 @@ impl PurchaseInvoiceRepository {
         )
         .await?;
         Ok(row.map(|r| ApHeaderRow {
-            invoice_number: r.get("invoice_number"), company_id: r.get("company_id"),
-            branch_id: r.get("branch_id"), supplier_id: r.get("supplier_id"),
-            posting_date: r.get("posting_date"), currency: r.get("currency"),
-            grand_total: r.get("grand_total"), payable_account_id: r.get("payable_account_id"),
+            invoice_number: r.get("invoice_number"),
+            company_id: r.get("company_id"),
+            branch_id: r.get("branch_id"),
+            supplier_id: r.get("supplier_id"),
+            posting_date: r.get("posting_date"),
+            currency: r.get("currency"),
+            grand_total: r.get("grand_total"),
+            payable_account_id: r.get("payable_account_id"),
         }))
     }
 
@@ -164,7 +170,8 @@ impl PurchaseInvoiceRepository {
         )
         .await?;
         Ok(row.map(|r| PostingStateRow {
-            posting_state: r.get("ps"), journal_id: r.get("journal_id"),
+            posting_state: r.get("ps"),
+            journal_id: r.get("journal_id"),
             accounting_post_id: r.get("accounting_post_id"),
         }))
     }
@@ -203,7 +210,9 @@ impl PurchaseInvoiceRepository {
                 posted_at=now(), outstanding_amount=grand_total
                WHERE id=$1 AND posting_state <> 'posted'::gl_posting_state"#,
         )
-        .bind(invoice_id).bind(journal_id).bind(post_id)
+        .bind(invoice_id)
+        .bind(journal_id)
+        .bind(post_id)
         .execute(conn)
         .await?;
         Ok(done.rows_affected())
@@ -220,8 +229,10 @@ impl PurchaseInvoiceRepository {
             .fetch_one(conn)
             .await?;
         Ok(PurchaseSeamHeaderRow {
-            source_po_id: row.get("source_po_id"), grand_total: row.get("grand_total"),
-            net_total: row.get("net_total"), tax_total: row.get("tax_total"),
+            source_po_id: row.get("source_po_id"),
+            grand_total: row.get("grand_total"),
+            net_total: row.get("net_total"),
+            tax_total: row.get("tax_total"),
             withholding_total: row.get("withholding_total"),
         })
     }

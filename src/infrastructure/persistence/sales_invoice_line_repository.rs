@@ -30,7 +30,9 @@ pub struct SalesInvoiceLineRepository(
 
 impl std::ops::Deref for SalesInvoiceLineRepository {
     type Target = backbone_orm::GenericCrudRepository<SalesInvoiceLine, backbone_orm::SoftDelete>;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl SalesInvoiceLineRepository {
@@ -111,9 +113,13 @@ impl SalesInvoiceLineRepository {
                 .bind(invoice_id),
         )
         .await?;
-        Ok(rows.iter().map(|r| RevenueAmountRow {
-            revenue_account_id: r.get("revenue_account_id"), net_amount: r.get("net_amount"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| RevenueAmountRow {
+                revenue_account_id: r.get("revenue_account_id"),
+                net_amount: r.get("net_amount"),
+            })
+            .collect())
     }
 
     /// Read the live lines' item + qty for the selling seam on the shared transition transaction
@@ -129,9 +135,13 @@ impl SalesInvoiceLineRepository {
         .bind(invoice_id)
         .fetch_all(conn)
         .await?;
-        Ok(rows.iter().map(|r| BilledLineRow {
-            item_id: r.get("item_id"), quantity: r.get("quantity"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| BilledLineRow {
+                item_id: r.get("item_id"),
+                quantity: r.get("quantity"),
+            })
+            .collect())
     }
 }
 

@@ -28,7 +28,9 @@ pub struct PaymentScheduleRepository(
 
 impl std::ops::Deref for PaymentScheduleRepository {
     type Target = backbone_orm::GenericCrudRepository<PaymentSchedule, backbone_orm::SoftDelete>;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl PaymentScheduleRepository {
@@ -103,9 +105,14 @@ impl PaymentScheduleRepository {
         .bind(invoice_ref).bind(kind)
         .fetch_all(conn)
         .await?;
-        Ok(rows.iter().map(|s| ScheduleDrawdownRow {
-            id: s.get("id"), amount: s.get("amount"), paid_amount: s.get("paid_amount"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|s| ScheduleDrawdownRow {
+                id: s.get("id"),
+                amount: s.get("amount"),
+                paid_amount: s.get("paid_amount"),
+            })
+            .collect())
     }
 
     /// Lock the live installments `FOR UPDATE` in **rewind order** (last installment first) — the
@@ -124,9 +131,14 @@ impl PaymentScheduleRepository {
         .bind(invoice_ref).bind(kind)
         .fetch_all(conn)
         .await?;
-        Ok(rows.iter().map(|s| ScheduleDrawdownRow {
-            id: s.get("id"), amount: s.get("amount"), paid_amount: s.get("paid_amount"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|s| ScheduleDrawdownRow {
+                id: s.get("id"),
+                amount: s.get("amount"),
+                paid_amount: s.get("paid_amount"),
+            })
+            .collect())
     }
 
     /// Write back one installment's settled amount + its recomputed status ("unpaid" |

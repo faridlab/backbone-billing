@@ -31,8 +31,11 @@ pub struct PurchaseInvoiceLineRepository(
 );
 
 impl std::ops::Deref for PurchaseInvoiceLineRepository {
-    type Target = backbone_orm::GenericCrudRepository<PurchaseInvoiceLine, backbone_orm::SoftDelete>;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    type Target =
+        backbone_orm::GenericCrudRepository<PurchaseInvoiceLine, backbone_orm::SoftDelete>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl PurchaseInvoiceLineRepository {
@@ -105,9 +108,13 @@ impl PurchaseInvoiceLineRepository {
                 .bind(invoice_id),
         )
         .await?;
-        Ok(rows.iter().map(|r| ExpenseAmountRow {
-            expense_account_id: r.get("expense_account_id"), net_amount: r.get("net_amount"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| ExpenseAmountRow {
+                expense_account_id: r.get("expense_account_id"),
+                net_amount: r.get("net_amount"),
+            })
+            .collect())
     }
 
     /// Read the live lines' item + qty for the buying seam on the shared transition transaction
@@ -123,10 +130,18 @@ impl PurchaseInvoiceLineRepository {
         .bind(invoice_id)
         .fetch_all(conn)
         .await?;
-        Ok(rows.iter().map(|r| BilledLineRow {
-            item_id: r.get("item_id"), quantity: r.get("quantity"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| BilledLineRow {
+                item_id: r.get("item_id"),
+                quantity: r.get("quantity"),
+            })
+            .collect())
     }
 }
 
-backbone_core::impl_crud_repository!(PurchaseInvoiceLineRepository, PurchaseInvoiceLine, soft_delete);
+backbone_core::impl_crud_repository!(
+    PurchaseInvoiceLineRepository,
+    PurchaseInvoiceLine,
+    soft_delete
+);
