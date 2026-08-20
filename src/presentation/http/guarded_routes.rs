@@ -5,11 +5,10 @@
 //! write an invoice with inconsistent totals or bypass the AR/AP posting path.
 //! Every write derives its tenant from a **signed** Bearer token (`CompanyContext`) rather than the
 //! request body, so a caller cannot stamp an invoice with a company it does not belong to.
-//! `BillingWriteService` is built from the pool (regen-safe). Posting (`post_sales_invoice` /
+//! `BillingWriteService` is passed in by the composing service so routes, verbs, and event
+//! consumers all share one configured instance (regen-safe). Posting (`post_sales_invoice` /
 //! `post_purchase_invoice`) needs a `GlPostSink` composition layer, so it is service/job-driven,
 //! not an HTTP route.
-
-use std::sync::Arc;
 
 use axum::{
     extract::State, http::StatusCode, middleware::from_fn_with_state, response::IntoResponse,
@@ -18,7 +17,7 @@ use axum::{
 use backbone_auth::company::{company_auth, CompanyContext, CompanyVerifier};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::application::service::billing_write_service::{
@@ -212,12 +211,17 @@ fn write_routes(svc: Arc<BillingWriteService>, verifier: CompanyVerifier) -> Rou
 ///
 /// The composing service builds one [`CompanyVerifier`] from its JWT secret and passes it here; the
 /// write surface derives `company_id` from the token, so no tenant crosses the wire in a body.
+///
+/// The write service is passed in — the SAME configured instance the host wires its settlement
+/// consumers and finance verbs to. Constructing one here would silently fork the configuration:
+/// a host-set collaborator (e.g. the tax engine behind template-driven lines) would exist on the
+/// verbs' instance but not the create routes', and template lines would be refused with
+/// `tax_engine_unwired` at runtime while every suite passes.
 pub fn create_guarded_billing_routes(
     m: &BillingModule,
-    pool: PgPool,
+    write: Arc<BillingWriteService>,
     verifier: CompanyVerifier,
 ) -> Router {
-    let write = Arc::new(BillingWriteService::new(pool));
     Router::new()
         .merge(create_sales_invoice_read_routes(
             m.sales_invoice_service.clone(),

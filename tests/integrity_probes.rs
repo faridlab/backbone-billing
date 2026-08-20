@@ -341,7 +341,12 @@ async fn module(pool: &PgPool) -> BillingModule {
         .unwrap()
 }
 fn app(pool: &PgPool, m: &BillingModule) -> axum::Router {
-    create_guarded_billing_routes(m, pool.clone(), CompanyVerifier::hs256(SECRET))
+    let write = std::sync::Arc::new(
+        backbone_billing::application::service::billing_write_service::BillingWriteService::new(
+            pool.clone(),
+        ),
+    );
+    create_guarded_billing_routes(m, write, CompanyVerifier::hs256(SECRET))
 }
 
 /// Send a request with an optional bearer token.
