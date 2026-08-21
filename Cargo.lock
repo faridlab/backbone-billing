@@ -297,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "backbone-billing"
-version = "0.4.8"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -429,7 +429,6 @@ dependencies = [
 [[package]]
 name = "backbone-gl-posting"
 version = "0.1.0"
-source = "git+https://github.com/faridlab/backbone-framework?tag=v2.7.9#b0bca5c8571cffce00cef6db03e3f7f224195bcd"
 dependencies = [
  "async-trait",
  "chrono",
@@ -510,7 +509,6 @@ dependencies = [
 [[package]]
 name = "backbone-outbox"
 version = "0.2.0"
-source = "git+https://github.com/faridlab/backbone-framework?tag=v2.7.9#b0bca5c8571cffce00cef6db03e3f7f224195bcd"
 dependencies = [
  "chrono",
  "serde",
@@ -523,7 +521,6 @@ dependencies = [
 [[package]]
 name = "backbone-tax"
 version = "0.4.3"
-source = "git+https://github.com/faridlab/backbone-tax?tag=v0.4.3#e0b764dea64b76a901509c6e5a912702fae06fe6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4490,3 +4487,11 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+
+[[patch.unused]]
+name = "backbone-accounting"
+version = "0.6.1"
+
+[[patch.unused]]
+name = "backbone-buying"
+version = "0.3.3"
