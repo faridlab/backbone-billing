@@ -191,7 +191,7 @@ impl BillingError {
     }
     pub fn http_status(&self) -> u16 {
         match self {
-            BillingError::InvoiceNotFound(_) => 404,
+            BillingError::InvoiceNotFound(_) | BillingError::TermNotFound(_) => 404,
             BillingError::Db(_) => 500,
             _ => 422,
         }
