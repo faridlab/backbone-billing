@@ -6,6 +6,10 @@ pub mod invoice_tax_line_event_handlers;
 pub mod invoice_tax_line_events;
 pub mod payment_schedule_event_handlers;
 pub mod payment_schedule_events;
+pub mod payment_term_event_handlers;
+pub mod payment_term_events;
+pub mod payment_term_line_event_handlers;
+pub mod payment_term_line_events;
 pub mod purchase_invoice_event_handlers;
 pub mod purchase_invoice_events;
 pub mod purchase_invoice_line_event_handlers;
@@ -22,6 +26,14 @@ pub use invoice_tax_line_events::{
 pub use payment_schedule_event_handlers::PaymentScheduleEventHandler;
 pub use payment_schedule_events::{
     NoopPaymentScheduleEventPublisher, PaymentScheduleEvent, PaymentScheduleEventPublisher,
+};
+pub use payment_term_event_handlers::PaymentTermEventHandler;
+pub use payment_term_events::{
+    NoopPaymentTermEventPublisher, PaymentTermEvent, PaymentTermEventPublisher,
+};
+pub use payment_term_line_event_handlers::PaymentTermLineEventHandler;
+pub use payment_term_line_events::{
+    NoopPaymentTermLineEventPublisher, PaymentTermLineEvent, PaymentTermLineEventPublisher,
 };
 pub use purchase_invoice_event_handlers::PurchaseInvoiceEventHandler;
 pub use purchase_invoice_events::{

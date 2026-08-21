@@ -157,6 +157,25 @@ impl PaymentScheduleRepository {
             .await?;
         Ok(())
     }
+
+    /// Whether any live schedule row exists for an invoice — the term hook's conflict probe (a
+    /// manual schedule and a term's derived installments cannot coexist).
+    pub async fn has_live_schedules(
+        &self,
+        conn: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
+        invoice_ref: Uuid,
+        kind: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let row: Option<(i64,)> = sqlx::query_as(
+            "SELECT count(*) FROM billing.payment_schedules \
+             WHERE invoice_ref=$1 AND invoice_kind=$2::invoice_kind AND (metadata->>'deleted_at') IS NULL",
+        )
+        .bind(invoice_ref)
+        .bind(kind)
+        .fetch_optional(conn)
+        .await?;
+        Ok(row.map(|(n,)| n > 0).unwrap_or(false))
+    }
 }
 
 backbone_core::impl_crud_repository!(PaymentScheduleRepository, PaymentSchedule, soft_delete);

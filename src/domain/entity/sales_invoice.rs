@@ -74,6 +74,10 @@ pub struct SalesInvoice {
     pub status: InvoiceStatus,
     pub posting_date: NaiveDate,
     pub due_date: Option<NaiveDate>,
+    pub payment_term_id: Option<Uuid>,
+    pub early_pay_discount_percent: Decimal,
+    pub early_pay_discount_deadline: Option<NaiveDate>,
+    pub early_pay_discount_account_id: Option<Uuid>,
     pub currency: String,
     pub net_total: Decimal,
     pub tax_total: Decimal,
@@ -93,7 +97,7 @@ pub struct SalesInvoice {
 impl SalesInvoice {
     /// Create a builder for SalesInvoice
     pub fn builder() -> SalesInvoiceBuilder {
-        SalesInvoiceBuilder::default()
+        <SalesInvoiceBuilder as Default>::default()
     }
 
     /// Create a new SalesInvoice with required fields
@@ -103,6 +107,7 @@ impl SalesInvoice {
         customer_id: Uuid,
         status: InvoiceStatus,
         posting_date: NaiveDate,
+        early_pay_discount_percent: Decimal,
         currency: String,
         net_total: Decimal,
         tax_total: Decimal,
@@ -121,6 +126,10 @@ impl SalesInvoice {
             status,
             posting_date,
             due_date: None,
+            payment_term_id: None,
+            early_pay_discount_percent,
+            early_pay_discount_deadline: None,
+            early_pay_discount_account_id: None,
             currency,
             net_total,
             tax_total,
@@ -213,6 +222,24 @@ impl SalesInvoice {
         self
     }
 
+    /// Set the payment_term_id field (chainable)
+    pub fn with_payment_term_id(mut self, value: Uuid) -> Self {
+        self.payment_term_id = Some(value);
+        self
+    }
+
+    /// Set the early_pay_discount_deadline field (chainable)
+    pub fn with_early_pay_discount_deadline(mut self, value: NaiveDate) -> Self {
+        self.early_pay_discount_deadline = Some(value);
+        self
+    }
+
+    /// Set the early_pay_discount_account_id field (chainable)
+    pub fn with_early_pay_discount_account_id(mut self, value: Uuid) -> Self {
+        self.early_pay_discount_account_id = Some(value);
+        self
+    }
+
     /// Set the journal_id field (chainable)
     pub fn with_journal_id(mut self, value: Uuid) -> Self {
         self.journal_id = Some(value);
@@ -283,6 +310,26 @@ impl SalesInvoice {
                 "due_date" => {
                     if let Ok(v) = serde_json::from_value(value) {
                         self.due_date = v;
+                    }
+                }
+                "payment_term_id" => {
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.payment_term_id = v;
+                    }
+                }
+                "early_pay_discount_percent" => {
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.early_pay_discount_percent = v;
+                    }
+                }
+                "early_pay_discount_deadline" => {
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.early_pay_discount_deadline = v;
+                    }
+                }
+                "early_pay_discount_account_id" => {
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.early_pay_discount_account_id = v;
                     }
                 }
                 "currency" => {
@@ -398,6 +445,11 @@ impl backbone_orm::EntityRepoMeta for SalesInvoice {
         m.insert("branch_id".to_string(), "uuid".to_string());
         m.insert("customer_id".to_string(), "uuid".to_string());
         m.insert("source_so_id".to_string(), "uuid".to_string());
+        m.insert("payment_term_id".to_string(), "uuid".to_string());
+        m.insert(
+            "early_pay_discount_account_id".to_string(),
+            "uuid".to_string(),
+        );
         m.insert("receivable_account_id".to_string(), "uuid".to_string());
         m.insert("journal_id".to_string(), "uuid".to_string());
         m.insert("accounting_post_id".to_string(), "uuid".to_string());
@@ -427,6 +479,10 @@ pub struct SalesInvoiceBuilder {
     status: Option<InvoiceStatus>,
     posting_date: Option<NaiveDate>,
     due_date: Option<NaiveDate>,
+    payment_term_id: Option<Uuid>,
+    early_pay_discount_percent: Option<Decimal>,
+    early_pay_discount_deadline: Option<NaiveDate>,
+    early_pay_discount_account_id: Option<Uuid>,
     currency: Option<String>,
     net_total: Option<Decimal>,
     tax_total: Option<Decimal>,
@@ -486,6 +542,30 @@ impl SalesInvoiceBuilder {
     /// Set the due_date field (optional)
     pub fn due_date(mut self, value: NaiveDate) -> Self {
         self.due_date = Some(value);
+        self
+    }
+
+    /// Set the payment_term_id field (optional)
+    pub fn payment_term_id(mut self, value: Uuid) -> Self {
+        self.payment_term_id = Some(value);
+        self
+    }
+
+    /// Set the early_pay_discount_percent field (default: `Decimal::from(0)`)
+    pub fn early_pay_discount_percent(mut self, value: Decimal) -> Self {
+        self.early_pay_discount_percent = Some(value);
+        self
+    }
+
+    /// Set the early_pay_discount_deadline field (optional)
+    pub fn early_pay_discount_deadline(mut self, value: NaiveDate) -> Self {
+        self.early_pay_discount_deadline = Some(value);
+        self
+    }
+
+    /// Set the early_pay_discount_account_id field (optional)
+    pub fn early_pay_discount_account_id(mut self, value: Uuid) -> Self {
+        self.early_pay_discount_account_id = Some(value);
         self
     }
 
@@ -582,16 +662,20 @@ impl SalesInvoiceBuilder {
             branch_id: self.branch_id,
             customer_id,
             source_so_id: self.source_so_id,
-            status: self.status.unwrap_or(InvoiceStatus::default()),
+            status: self.status.unwrap_or_default(),
             posting_date,
             due_date: self.due_date,
+            payment_term_id: self.payment_term_id,
+            early_pay_discount_percent: self.early_pay_discount_percent.unwrap_or(Decimal::from(0)),
+            early_pay_discount_deadline: self.early_pay_discount_deadline,
+            early_pay_discount_account_id: self.early_pay_discount_account_id,
             currency: self.currency.unwrap_or("IDR".to_string()),
             net_total: self.net_total.unwrap_or(Decimal::from(0)),
             tax_total: self.tax_total.unwrap_or(Decimal::from(0)),
             grand_total: self.grand_total.unwrap_or(Decimal::from(0)),
             outstanding_amount: self.outstanding_amount.unwrap_or(Decimal::from(0)),
             receivable_account_id,
-            posting_state: self.posting_state.unwrap_or(GlPostingState::default()),
+            posting_state: self.posting_state.unwrap_or_default(),
             journal_id: self.journal_id,
             accounting_post_id: self.accounting_post_id,
             posted_at: self.posted_at,

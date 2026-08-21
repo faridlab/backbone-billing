@@ -131,4 +131,67 @@ impl InvoiceSettlementRepository {
             .await?;
         Ok(())
     }
+
+    /// The derived overdue read: open, GL-posted invoices whose due date has passed — both kinds,
+    /// one ordered list. **Derived on purpose**: there is no stored `overdue` flag that a later
+    /// settlement could leave stale; the filter recomputes from live state on every call.
+    /// Served on the caller's company-scoped connection.
+    pub async fn list_overdue_invoices(
+        &self,
+        conn: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
+        company_id: Uuid,
+        today: chrono::NaiveDate,
+    ) -> Result<Vec<OverdueInvoiceRow>, sqlx::Error> {
+        // Both tables carry the same overdue predicate; `kind` labels which side each row came
+        // from. `posting_state='posted'` excludes drafts; `status` excludes settled/voided ones.
+        let rows = sqlx::query(
+            r#"SELECT id, kind, invoice_number, due_date, outstanding_amount, grand_total
+               FROM (
+                   SELECT id, 'sales'::text AS kind, invoice_number, due_date,
+                          outstanding_amount, grand_total
+                   FROM billing.sales_invoices
+                   WHERE company_id = $1
+                     AND posting_state = 'posted'
+                     AND status::text NOT IN ('paid', 'cancelled')
+                     AND due_date IS NOT NULL AND due_date < $2
+                     AND (metadata->>'deleted_at') IS NULL
+                   UNION ALL
+                   SELECT id, 'purchase'::text, invoice_number, due_date,
+                          outstanding_amount, grand_total
+                   FROM billing.purchase_invoices
+                   WHERE company_id = $1
+                     AND posting_state = 'posted'
+                     AND status::text NOT IN ('paid', 'cancelled')
+                     AND due_date IS NOT NULL AND due_date < $2
+                     AND (metadata->>'deleted_at') IS NULL
+               ) overdue
+               ORDER BY due_date, kind, invoice_number"#,
+        )
+        .bind(company_id)
+        .bind(today)
+        .fetch_all(conn)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| OverdueInvoiceRow {
+                id: r.get("id"),
+                kind: r.get("kind"),
+                invoice_number: r.get("invoice_number"),
+                due_date: r.get("due_date"),
+                outstanding_amount: r.get("outstanding_amount"),
+                grand_total: r.get("grand_total"),
+            })
+            .collect())
+    }
+}
+
+/// One row of the derived overdue read.
+pub struct OverdueInvoiceRow {
+    pub id: Uuid,
+    /// "sales" | "purchase"
+    pub kind: String,
+    pub invoice_number: String,
+    pub due_date: chrono::NaiveDate,
+    pub outstanding_amount: Decimal,
+    pub grand_total: Decimal,
 }

@@ -7,6 +7,8 @@ pub use shared_types::{EntityValidator, ValidationError, ValidationErrors, Valid
 
 pub mod invoice_tax_line_validator;
 pub mod payment_schedule_validator;
+pub mod payment_term_line_validator;
+pub mod payment_term_validator;
 pub mod purchase_invoice_line_validator;
 pub mod purchase_invoice_validator;
 pub mod sales_invoice_line_validator;
@@ -14,6 +16,8 @@ pub mod sales_invoice_validator;
 
 pub use invoice_tax_line_validator::{invoice_tax_line_validator, InvoiceTaxLineValidator};
 pub use payment_schedule_validator::{payment_schedule_validator, PaymentScheduleValidator};
+pub use payment_term_line_validator::{payment_term_line_validator, PaymentTermLineValidator};
+pub use payment_term_validator::{payment_term_validator, PaymentTermValidator};
 pub use purchase_invoice_line_validator::{
     purchase_invoice_line_validator, PurchaseInvoiceLineValidator,
 };

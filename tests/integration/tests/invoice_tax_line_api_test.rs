@@ -33,6 +33,10 @@ impl TestDataGenerator for InvoiceTaxLineTestData {
             "taxable_base": 0,
             "rate": 0,
             "tax_amount": 0,
+            "tax_template_id": null,
+            "repartition_line_id": null,
+            "real_account_id": null,
+            "exigibility": "on_invoice",
             "metadata": json!({}),
         })
     }
@@ -50,6 +54,10 @@ impl TestDataGenerator for InvoiceTaxLineTestData {
             "taxable_base": 0,
             "rate": 0,
             "tax_amount": 0,
+            "tax_template_id": null,
+            "repartition_line_id": null,
+            "real_account_id": null,
+            "exigibility": "on_invoice",
             "metadata": json!({}),
         })
     }

@@ -82,7 +82,7 @@ pub struct PaymentSchedule {
 impl PaymentSchedule {
     /// Create a builder for PaymentSchedule
     pub fn builder() -> PaymentScheduleBuilder {
-        PaymentScheduleBuilder::default()
+        <PaymentScheduleBuilder as Default>::default()
     }
 
     /// Create a new PaymentSchedule with required fields
@@ -377,7 +377,7 @@ impl PaymentScheduleBuilder {
             due_date,
             amount,
             paid_amount: self.paid_amount.unwrap_or(Decimal::from(0)),
-            status: self.status.unwrap_or(PaymentScheduleStatus::default()),
+            status: self.status.unwrap_or_default(),
             metadata: AuditMetadata::default(),
         })
     }

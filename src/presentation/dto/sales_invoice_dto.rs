@@ -65,6 +65,26 @@ pub struct CreateSalesInvoiceDto {
     pub posting_date: NaiveDate,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "due_date")]
     pub due_date: Option<NaiveDate>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "payment_term_id"
+    )]
+    pub payment_term_id: Option<Uuid>,
+    #[serde(alias = "early_pay_discount_percent")]
+    pub early_pay_discount_percent: Decimal,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "early_pay_discount_deadline"
+    )]
+    pub early_pay_discount_deadline: Option<NaiveDate>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "early_pay_discount_account_id"
+    )]
+    pub early_pay_discount_account_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 3)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub currency: String,
@@ -142,6 +162,26 @@ pub struct UpdateSalesInvoiceDto {
     pub posting_date: NaiveDate,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "due_date")]
     pub due_date: Option<NaiveDate>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "payment_term_id"
+    )]
+    pub payment_term_id: Option<Uuid>,
+    #[serde(alias = "early_pay_discount_percent")]
+    pub early_pay_discount_percent: Decimal,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "early_pay_discount_deadline"
+    )]
+    pub early_pay_discount_deadline: Option<NaiveDate>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "early_pay_discount_account_id"
+    )]
+    pub early_pay_discount_account_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 3)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub currency: String,
@@ -216,6 +256,23 @@ pub struct PatchSalesInvoiceDto {
     pub posting_date: Option<NaiveDate>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "due_date")]
     pub due_date: Option<NaiveDate>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "payment_term_id")]
+    pub payment_term_id: Option<Uuid>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        alias = "early_pay_discount_percent"
+    )]
+    pub early_pay_discount_percent: Option<Decimal>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        alias = "early_pay_discount_deadline"
+    )]
+    pub early_pay_discount_deadline: Option<NaiveDate>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        alias = "early_pay_discount_account_id"
+    )]
+    pub early_pay_discount_account_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 3)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -261,6 +318,10 @@ impl PatchSalesInvoiceDto {
             || self.status.is_some()
             || self.posting_date.is_some()
             || self.due_date.is_some()
+            || self.payment_term_id.is_some()
+            || self.early_pay_discount_percent.is_some()
+            || self.early_pay_discount_deadline.is_some()
+            || self.early_pay_discount_account_id.is_some()
             || self.currency.is_some()
             || self.net_total.is_some()
             || self.tax_total.is_some()
@@ -310,6 +371,10 @@ pub struct SalesInvoiceResponseDto {
     #[cfg_attr(feature = "openapi", schema(example = "2024-01-01"))]
     pub posting_date: NaiveDate,
     pub due_date: Option<NaiveDate>,
+    pub payment_term_id: Option<Uuid>,
+    pub early_pay_discount_percent: Decimal,
+    pub early_pay_discount_deadline: Option<NaiveDate>,
+    pub early_pay_discount_account_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub currency: String,
     pub net_total: Decimal,
@@ -405,6 +470,10 @@ impl From<SalesInvoice> for SalesInvoiceResponseDto {
             status: entity.status,
             posting_date: entity.posting_date,
             due_date: entity.due_date,
+            payment_term_id: entity.payment_term_id,
+            early_pay_discount_percent: entity.early_pay_discount_percent,
+            early_pay_discount_deadline: entity.early_pay_discount_deadline,
+            early_pay_discount_account_id: entity.early_pay_discount_account_id,
             currency: entity.currency,
             net_total: entity.net_total,
             tax_total: entity.tax_total,
@@ -446,6 +515,10 @@ impl From<CreateSalesInvoiceDto> for SalesInvoice {
             status: dto.status,
             posting_date: dto.posting_date,
             due_date: dto.due_date,
+            payment_term_id: dto.payment_term_id,
+            early_pay_discount_percent: dto.early_pay_discount_percent,
+            early_pay_discount_deadline: dto.early_pay_discount_deadline,
+            early_pay_discount_account_id: dto.early_pay_discount_account_id,
             currency: dto.currency,
             net_total: dto.net_total,
             tax_total: dto.tax_total,
@@ -474,6 +547,10 @@ impl From<&SalesInvoice> for SalesInvoiceResponseDto {
             status: entity.status.clone(),
             posting_date: entity.posting_date.clone(),
             due_date: entity.due_date.clone(),
+            payment_term_id: entity.payment_term_id.clone(),
+            early_pay_discount_percent: entity.early_pay_discount_percent.clone(),
+            early_pay_discount_deadline: entity.early_pay_discount_deadline.clone(),
+            early_pay_discount_account_id: entity.early_pay_discount_account_id.clone(),
             currency: entity.currency.clone(),
             net_total: entity.net_total.clone(),
             tax_total: entity.tax_total.clone(),
@@ -506,6 +583,10 @@ impl backbone_core::ApplyUpdateDto<UpdateSalesInvoiceDto> for SalesInvoice {
         self.status = dto.status;
         self.posting_date = dto.posting_date;
         self.due_date = dto.due_date;
+        self.payment_term_id = dto.payment_term_id;
+        self.early_pay_discount_percent = dto.early_pay_discount_percent;
+        self.early_pay_discount_deadline = dto.early_pay_discount_deadline;
+        self.early_pay_discount_account_id = dto.early_pay_discount_account_id;
         self.currency = dto.currency;
         self.net_total = dto.net_total;
         self.tax_total = dto.tax_total;

@@ -11,6 +11,8 @@ use std::sync::Arc;
 use super::{
     invoice_tax_line_handler::create_invoice_tax_line_routes,
     payment_schedule_handler::create_payment_schedule_routes,
+    payment_term_handler::create_payment_term_routes,
+    payment_term_line_handler::create_payment_term_line_routes,
     purchase_invoice_handler::create_purchase_invoice_routes,
     purchase_invoice_line_handler::create_purchase_invoice_line_routes,
     sales_invoice_handler::create_sales_invoice_routes,
@@ -20,6 +22,8 @@ use super::{
 use crate::application::service::{
     InvoiceTaxLineService,
     PaymentScheduleService,
+    PaymentTermService,
+    PaymentTermLineService,
     PurchaseInvoiceService,
     PurchaseInvoiceLineService,
     SalesInvoiceService,
@@ -30,6 +34,8 @@ use crate::application::service::{
 pub struct HttpServices {
     pub invoice_tax_line: Arc<InvoiceTaxLineService>,
     pub payment_schedule: Arc<PaymentScheduleService>,
+    pub payment_term: Arc<PaymentTermService>,
+    pub payment_term_line: Arc<PaymentTermLineService>,
     pub purchase_invoice: Arc<PurchaseInvoiceService>,
     pub purchase_invoice_line: Arc<PurchaseInvoiceLineService>,
     pub sales_invoice: Arc<SalesInvoiceService>,
@@ -57,6 +63,10 @@ pub fn configure_routes(services: HttpServices) -> Router {
         .merge(create_invoice_tax_line_routes(services.invoice_tax_line))
         // PaymentSchedule routes (12 Backbone endpoints)
         .merge(create_payment_schedule_routes(services.payment_schedule))
+        // PaymentTerm routes (12 Backbone endpoints)
+        .merge(create_payment_term_routes(services.payment_term))
+        // PaymentTermLine routes (12 Backbone endpoints)
+        .merge(create_payment_term_line_routes(services.payment_term_line))
         // PurchaseInvoice routes (12 Backbone endpoints)
         .merge(create_purchase_invoice_routes(services.purchase_invoice))
         // PurchaseInvoiceLine routes (12 Backbone endpoints)
@@ -77,6 +87,14 @@ pub mod individual {
 
     pub fn payment_schedule_routes(service: Arc<PaymentScheduleService>) -> Router {
         create_payment_schedule_routes(service)
+    }
+
+    pub fn payment_term_routes(service: Arc<PaymentTermService>) -> Router {
+        create_payment_term_routes(service)
+    }
+
+    pub fn payment_term_line_routes(service: Arc<PaymentTermLineService>) -> Router {
+        create_payment_term_line_routes(service)
     }
 
     pub fn purchase_invoice_routes(service: Arc<PurchaseInvoiceService>) -> Router {

@@ -9,7 +9,11 @@
 
 - invoice_tax_line_seed
 - payment_schedule_seed
+- payment_term_seed
 - purchase_invoice_seed
 - purchase_invoice_line_seed
 - sales_invoice_seed
 - sales_invoice_line_seed
+
+# Newly added seeds (preserve manual order above):
+- payment_term_line_seed

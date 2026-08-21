@@ -28,8 +28,9 @@ use uuid::Uuid;
 
 use crate::infrastructure::persistence::{
     InvoiceSettlementRepository, InvoiceTaxLineRepository, NewInvoiceTaxLineRow,
-    PaymentScheduleRepository, PostingStateRow, PurchaseInvoiceLineRepository,
-    PurchaseInvoiceRepository, SalesInvoiceLineRepository, SalesInvoiceRepository,
+    PaymentScheduleRepository, PaymentTermRepository, PostingStateRow,
+    PurchaseInvoiceLineRepository, PurchaseInvoiceRepository, SalesInvoiceLineRepository,
+    SalesInvoiceRepository,
 };
 
 use super::billing_events::{BillingEventSink, LoggingSink};
@@ -85,6 +86,9 @@ pub struct NewSalesInvoice {
     pub source_so_id: Option<Uuid>,
     pub posting_date: chrono::NaiveDate,
     pub due_date: Option<chrono::NaiveDate>,
+    /// Payment term applied; when set, the post verb derives due date + installments + the
+    /// early-pay-discount block (a manual `due_date` alongside a term is refused).
+    pub payment_term_id: Option<Uuid>,
     pub currency: Option<String>,
     pub receivable_account_id: Uuid,
     pub lines: Vec<NewInvoiceLine>,
@@ -100,6 +104,9 @@ pub struct NewPurchaseInvoice {
     pub source_po_id: Option<Uuid>,
     pub posting_date: chrono::NaiveDate,
     pub due_date: Option<chrono::NaiveDate>,
+    /// Payment term applied; when set, the post verb derives due date + installments + the
+    /// early-pay-discount block (a manual `due_date` alongside a term is refused).
+    pub payment_term_id: Option<Uuid>,
     pub currency: Option<String>,
     pub payable_account_id: Uuid,
     pub lines: Vec<NewInvoiceLine>,
@@ -145,6 +152,21 @@ pub enum BillingError {
         code: String,
         message: String,
     },
+    /// A payment term was not found (unknown id, retired, or another company's — the split-fence
+    /// read makes cross-tenant terms indistinguishable from missing ones).
+    TermNotFound(Uuid),
+    /// A payment term or its invoice application is shape-invalid (validation codes:
+    /// `term_name_required`, `term_lines_required`, `discount_tax_basis_unsupported`,
+    /// `discount_percent_out_of_range`, `discount_days_out_of_range`, `discount_account_required`,
+    /// `term_multiple_balance`, `term_balance_not_last`, `term_percent_out_of_range`,
+    /// `term_fixed_out_of_range`, `term_value_invalid`, `term_days_negative`,
+    /// `term_day_of_month_required`, `term_delay_invalid`, `term_percent_exceeds_total`,
+    /// `term_exceeds_total`, `term_does_not_cover_total`, `term_inactive`,
+    /// `due_date_conflicts_with_term`, `schedule_conflicts_with_term`).
+    TermInvalid {
+        code: String,
+        message: String,
+    },
     Db(sqlx::Error),
 }
 
@@ -162,6 +184,8 @@ impl BillingError {
             BillingError::ReconcileRefused { code, .. } => code.clone(),
             BillingError::TaxEngineUnwired => "tax_engine_unwired".into(),
             BillingError::TaxCompute { code, .. } => code.clone(),
+            BillingError::TermNotFound(_) => "term_not_found".into(),
+            BillingError::TermInvalid { code, .. } => code.clone(),
             BillingError::Db(_) => "internal_error".into(),
         }
     }
@@ -179,6 +203,7 @@ impl std::fmt::Display for BillingError {
             BillingError::GlRejected { code, message } => write!(f, "{code}: {message}"),
             BillingError::ReconcileRefused { code, message } => write!(f, "{code}: {message}"),
             BillingError::TaxCompute { code, message } => write!(f, "{code}: {message}"),
+            BillingError::TermInvalid { code, message } => write!(f, "{code}: {message}"),
             other => write!(f, "{}", other.code()),
         }
     }
@@ -307,6 +332,9 @@ pub struct BillingWriteService {
     pub(super) tax_lines: Arc<InvoiceTaxLineRepository>,
     pub(super) schedules: Arc<PaymentScheduleRepository>,
     pub(super) settlement: Arc<InvoiceSettlementRepository>,
+    /// Payment-terms master (header + lines). Owns the split-fence reads the post hook and the
+    /// discount resolver need.
+    pub(super) terms: Arc<PaymentTermRepository>,
     /// When set, `post_*_invoice` / `reverse_sales_invoice` stage the seam event into
     /// `<schema>.outbox_events` **inside the state-transition transaction** (crash-safe emission —
     /// the go-live durable bus, mirroring `backbone-payment`'s outbox fence). When `None`, only the
@@ -331,6 +359,7 @@ impl BillingWriteService {
             tax_lines: Arc::new(InvoiceTaxLineRepository::new(db_pool.clone())),
             schedules: Arc::new(PaymentScheduleRepository::new(db_pool.clone())),
             settlement: Arc::new(InvoiceSettlementRepository::new()),
+            terms: Arc::new(PaymentTermRepository::new(db_pool.clone())),
             db_pool,
             sink,
             outbox_schema: None,

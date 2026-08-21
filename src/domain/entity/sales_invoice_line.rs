@@ -79,7 +79,7 @@ pub struct SalesInvoiceLine {
 impl SalesInvoiceLine {
     /// Create a builder for SalesInvoiceLine
     pub fn builder() -> SalesInvoiceLineBuilder {
-        SalesInvoiceLineBuilder::default()
+        <SalesInvoiceLineBuilder as Default>::default()
     }
 
     /// Create a new SalesInvoiceLine with required fields

@@ -7,6 +7,8 @@
 
 pub mod invoice_tax_line_repository;
 pub mod payment_schedule_repository;
+pub mod payment_term_line_repository;
+pub mod payment_term_repository;
 pub mod purchase_invoice_line_repository;
 pub mod purchase_invoice_repository;
 pub mod sales_invoice_line_repository;
@@ -20,6 +22,14 @@ pub use invoice_tax_line_repository::{
 pub use payment_schedule_repository::{
     PaymentScheduleFilter, PaymentSchedulePaginatedResult, PaymentSchedulePaginationParams,
     PaymentScheduleRepository,
+};
+pub use payment_term_line_repository::{
+    PaymentTermLineFilter, PaymentTermLinePaginatedResult, PaymentTermLinePaginationParams,
+    PaymentTermLineRepository,
+};
+pub use payment_term_repository::{
+    PaymentTermFilter, PaymentTermPaginatedResult, PaymentTermPaginationParams,
+    PaymentTermRepository,
 };
 pub use purchase_invoice_line_repository::{
     PurchaseInvoiceLineFilter, PurchaseInvoiceLinePaginatedResult,

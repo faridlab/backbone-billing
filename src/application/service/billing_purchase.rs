@@ -30,6 +30,16 @@ impl BillingWriteService {
         &self,
         inv: NewPurchaseInvoice,
     ) -> Result<Uuid, BillingError> {
+        // A term owns the due date; a manual date next to a term is a conflict, refused here at
+        // create rather than at post (the post hook re-checks — defense in depth).
+        if inv.payment_term_id.is_some() && inv.due_date.is_some() {
+            return Err(BillingError::TermInvalid {
+                code: "due_date_conflicts_with_term".into(),
+                message:
+                    "an invoice with a payment term derives its due date; drop the manual due_date"
+                        .into(),
+            });
+        }
         // Template-driven when any line carries a tax template (engine computes the overlay +
         // redistributes the nets under round_globally); supplied lines otherwise.
         let doc = self
@@ -65,6 +75,7 @@ impl BillingWriteService {
                     source_po_id: inv.source_po_id,
                     posting_date: inv.posting_date,
                     due_date: inv.due_date,
+                    payment_term_id: inv.payment_term_id,
                     currency: &currency,
                     net_total: doc.net_total,
                     tax_total: doc.input,
@@ -217,6 +228,33 @@ impl BillingWriteService {
                         .short_circuit_purchase_posted(invoice_id)
                         .await?
                         .ok_or(BillingError::InvoiceNotFound(invoice_id));
+                }
+                // Payment-term materialization rides the post transaction: the derived due date,
+                // the early-pay-discount block, and (multi-slice terms) the installment rows commit
+                // with the posted state or not at all.
+                if let Some(tctx) = self
+                    .terms
+                    .fetch_term_context(&mut *tx, "purchase_invoices", invoice_id)
+                    .await?
+                {
+                    if let Some(term_id) = tctx.payment_term_id {
+                        let manual_scheds = self
+                            .schedules
+                            .has_live_schedules(&mut *tx, invoice_id, "purchase")
+                            .await?;
+                        self.apply_term_on_post(
+                            &mut tx,
+                            "purchase_invoices",
+                            invoice_id,
+                            env.company_id,
+                            term_id,
+                            tctx.posting_date,
+                            tctx.grand_total,
+                            tctx.manual_due_date,
+                            manual_scheds,
+                        )
+                        .await?;
+                    }
                 }
                 // Billed lines (item + qty) for the buying seam.
                 let hdr = self

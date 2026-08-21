@@ -7,6 +7,8 @@
 
 pub mod invoice_tax_line_handler;
 pub mod payment_schedule_handler;
+pub mod payment_term_handler;
+pub mod payment_term_line_handler;
 pub mod purchase_invoice_handler;
 pub mod purchase_invoice_line_handler;
 pub mod sales_invoice_handler;
@@ -24,6 +26,13 @@ pub use invoice_tax_line_handler::{
 pub use payment_schedule_handler::{
     create_payment_schedule_read_routes, create_payment_schedule_routes,
     create_payment_schedule_write_routes,
+};
+pub use payment_term_handler::{
+    create_payment_term_read_routes, create_payment_term_routes, create_payment_term_write_routes,
+};
+pub use payment_term_line_handler::{
+    create_payment_term_line_read_routes, create_payment_term_line_routes,
+    create_payment_term_line_write_routes,
 };
 pub use purchase_invoice_handler::{
     create_purchase_invoice_read_routes, create_purchase_invoice_routes,

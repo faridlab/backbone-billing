@@ -20,6 +20,8 @@ user_owned:
   - "src/application/service/billing_sales.rs"
   - "src/application/service/billing_settlement.rs"
   - "src/application/service/settlement_consumer.rs"
+  # Payment-terms master: pure schedule derivation + the invoice-post materialization hook.
+  - "src/application/service/term_schedule.rs"
   # Own the hand-written AR/AP SQL (the draft header + line + tax-overlay inserts, the post builders'
   # projections, the pending→posted reconcile, the credit note, and the settlement drawdown) that the
   # write service orchestrates. Declared here — not renamed with a `_custom` suffix — so the generator
@@ -33,6 +35,9 @@ user_owned:
   # Not schema-derived at all: the settlement drawdown spans BOTH invoice tables by a runtime kind,
   # so it has no entity of its own.
   - "src/infrastructure/persistence/invoice_settlement_repository.rs"
+  # Payment-terms master SQL (header + lines + the invoice materialization writes) — user-owned
+  # for the same reason as the settlement repository above.
+  - "src/infrastructure/persistence/payment_term_repository.rs"
   - "src/presentation/http/guarded_routes.rs"
   - "tests/billing_golden_cases.rs"
   - "tests/integrity_probes.rs"
@@ -43,8 +48,22 @@ user_owned:
   # edge stays billing→tax) + the template-driven create-path cases.
   - "tests/tax_seam.rs"
   - "tests/document_tax_cases.rs"
+  # Payment-terms behavior suite: derivation goldens, validation refusals, the split-fence
+  # probes, the derived overdue read, and the early-pay-discount resolver's window/clamp cases.
+  - "tests/payment_term_schedule_golden.rs"
+  - "tests/term_validation_refusals.rs"
+  - "tests/global_term_fence_suite.rs"
+  - "tests/overdue_derived_read.rs"
+  - "tests/resolve_early_pay_discount.rs"
   - "migrations/20260820100000_invoice_tax_line_tax_columns.up.sql"
   - "migrations/20260820100000_invoice_tax_line_tax_columns.down.sql"
+  # Hand-written migrations: the invoice-side term/EPD columns + the payment-terms split fence.
+  - "migrations/20260820100003_invoice_payment_term_columns.up.sql"
+  - "migrations/20260820100003_invoice_payment_term_columns.down.sql"
+  - "migrations/20260820100004_payment_terms_split_fence.up.sql"
+  - "migrations/20260820100004_payment_terms_split_fence.down.sql"
+  # The hand-written global-template seed (the seeder target's stub would clobber it).
+  - "migrations/seeds/payment_term_seed.sql"
   - "scripts/**"
   # Hand-authored behavior (services + their HTTP surface). Examples:
   # - "src/application/service/onboarding_service.rs"

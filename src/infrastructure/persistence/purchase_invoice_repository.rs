@@ -57,6 +57,8 @@ pub struct NewPurchaseInvoiceRow<'a> {
     pub source_po_id: Option<Uuid>,
     pub posting_date: chrono::NaiveDate,
     pub due_date: Option<chrono::NaiveDate>,
+    /// Payment term applied; the post verb derives due date + installments from it.
+    pub payment_term_id: Option<Uuid>,
     pub currency: &'a str,
     pub net_total: Decimal,
     /// Bound to the `tax_total` column — the Σ of the overlay's `input` basis lines.
@@ -107,12 +109,12 @@ impl PurchaseInvoiceRepository {
         sqlx::query(
             r#"INSERT INTO billing.purchase_invoices
                 (id, invoice_number, company_id, branch_id, supplier_id, source_po_id, status,
-                 posting_date, due_date, currency, net_total, tax_total, withholding_total, grand_total,
+                 posting_date, due_date, payment_term_id, currency, net_total, tax_total, withholding_total, grand_total,
                  outstanding_amount, payable_account_id, posting_state)
-               VALUES ($1,$2,$3,$4,$5,$6,'draft'::invoice_status,$7,$8,$9,$10,$11,$12,$13,0,$14,'pending'::gl_posting_state)"#,
+               VALUES ($1,$2,$3,$4,$5,$6,'draft'::invoice_status,$7,$8,$9,$10,$11,$12,$13,$14,0,$15,'pending'::gl_posting_state)"#,
         )
         .bind(inv.id).bind(inv.invoice_number).bind(inv.company_id).bind(inv.branch_id).bind(inv.supplier_id)
-        .bind(inv.source_po_id).bind(inv.posting_date).bind(inv.due_date).bind(inv.currency)
+        .bind(inv.source_po_id).bind(inv.posting_date).bind(inv.due_date).bind(inv.payment_term_id).bind(inv.currency)
         .bind(inv.net_total).bind(inv.tax_total).bind(inv.withholding_total).bind(inv.grand_total)
         .bind(inv.payable_account_id)
         .execute(conn)

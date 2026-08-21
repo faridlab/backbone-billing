@@ -4,6 +4,8 @@
 
 pub mod invoice_tax_line_domain_policy;
 pub mod payment_schedule_domain_policy;
+pub mod payment_term_domain_policy;
+pub mod payment_term_line_domain_policy;
 pub mod purchase_invoice_domain_policy;
 pub mod purchase_invoice_line_domain_policy;
 pub mod sales_invoice_domain_policy;
@@ -11,6 +13,8 @@ pub mod sales_invoice_line_domain_policy;
 
 pub use invoice_tax_line_domain_policy::InvoiceTaxLineDomainPolicy;
 pub use payment_schedule_domain_policy::PaymentScheduleDomainPolicy;
+pub use payment_term_domain_policy::PaymentTermDomainPolicy;
+pub use payment_term_line_domain_policy::PaymentTermLineDomainPolicy;
 pub use purchase_invoice_domain_policy::PurchaseInvoiceDomainPolicy;
 pub use purchase_invoice_line_domain_policy::PurchaseInvoiceLineDomainPolicy;
 pub use sales_invoice_domain_policy::SalesInvoiceDomainPolicy;

@@ -56,7 +56,26 @@ models:
 
       due_date:
         type: date?
-        description: "Payment due date"
+        description: "Payment due date (materialized from the payment term at post if one is set)"
+
+      payment_term_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Payment term applied # logical FK to billing.PaymentTerm.id"
+
+      early_pay_discount_percent:
+        type: decimal
+        attributes: ["@default(0)", "@precision(7,4)", "@non_negative"]
+        description: "Materialized early-pay-discount percent (copied from the term at post; history never rewrites)"
+
+      early_pay_discount_deadline:
+        type: date?
+        description: "Materialized discount deadline (posting date + term discount_days)"
+
+      early_pay_discount_account_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Materialized discount account # logical FK to accounting.Account.id"
 
       currency:
         type: string

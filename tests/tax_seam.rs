@@ -129,6 +129,7 @@ async fn sales_post_routes_to_tax_and_assigns_gapless_efaktur() {
             source_so_id: None,
             posting_date: day(),
             due_date: None,
+            payment_term_id: None,
             currency: None,
             receivable_account_id: ar,
             lines: vec![NewInvoiceLine {
@@ -267,6 +268,7 @@ async fn purchase_post_routes_to_tax_without_efaktur() {
             source_po_id: None,
             posting_date: day(),
             due_date: None,
+            payment_term_id: None,
             currency: None,
             payable_account_id: ap,
             lines: vec![NewInvoiceLine {

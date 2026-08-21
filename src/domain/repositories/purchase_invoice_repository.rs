@@ -50,6 +50,8 @@ pub struct PurchaseInvoiceFilter {
     pub supplier_id: Option<Uuid>,
     pub source_po_id: Option<Uuid>,
     pub status: Option<InvoiceStatus>,
+    pub payment_term_id: Option<Uuid>,
+    pub early_pay_discount_account_id: Option<Uuid>,
     pub currency: Option<String>,
     pub payable_account_id: Option<Uuid>,
     pub posting_state: Option<GlPostingState>,
@@ -67,6 +69,8 @@ impl PurchaseInvoiceFilter {
             || self.supplier_id.is_some()
             || self.source_po_id.is_some()
             || self.status.is_some()
+            || self.payment_term_id.is_some()
+            || self.early_pay_discount_account_id.is_some()
             || self.currency.is_some()
             || self.payable_account_id.is_some()
             || self.posting_state.is_some()

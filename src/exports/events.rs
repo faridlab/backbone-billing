@@ -5,8 +5,8 @@
 //! These events are published by this module for other modules to subscribe to.
 //! Events are the primary mechanism for cross-module communication.
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use super::types::*;
 
@@ -61,6 +61,60 @@ pub struct PaymentScheduleUpdatedEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaymentScheduleDeletedEvent {
     pub id: PaymentScheduleId,
+    pub occurred_at: DateTime<Utc>,
+}
+
+// ============================================================================
+// PAYMENTTERM EVENTS
+// ============================================================================
+
+/// Event published when a PaymentTerm is created
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermCreatedEvent {
+    pub id: PaymentTermId,
+    pub data: PaymentTermDto,
+    pub occurred_at: DateTime<Utc>,
+}
+
+/// Event published when a PaymentTerm is updated
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermUpdatedEvent {
+    pub id: PaymentTermId,
+    pub data: PaymentTermDto,
+    pub occurred_at: DateTime<Utc>,
+}
+
+/// Event published when a PaymentTerm is deleted
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermDeletedEvent {
+    pub id: PaymentTermId,
+    pub occurred_at: DateTime<Utc>,
+}
+
+// ============================================================================
+// PAYMENTTERMLINE EVENTS
+// ============================================================================
+
+/// Event published when a PaymentTermLine is created
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermLineCreatedEvent {
+    pub id: PaymentTermLineId,
+    pub data: PaymentTermLineDto,
+    pub occurred_at: DateTime<Utc>,
+}
+
+/// Event published when a PaymentTermLine is updated
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermLineUpdatedEvent {
+    pub id: PaymentTermLineId,
+    pub data: PaymentTermLineDto,
+    pub occurred_at: DateTime<Utc>,
+}
+
+/// Event published when a PaymentTermLine is deleted
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermLineDeletedEvent {
+    pub id: PaymentTermLineId,
     pub occurred_at: DateTime<Utc>,
 }
 
@@ -186,6 +240,12 @@ pub enum BillingEvent {
     PaymentScheduleCreated(PaymentScheduleCreatedEvent),
     PaymentScheduleUpdated(PaymentScheduleUpdatedEvent),
     PaymentScheduleDeleted(PaymentScheduleDeletedEvent),
+    PaymentTermCreated(PaymentTermCreatedEvent),
+    PaymentTermUpdated(PaymentTermUpdatedEvent),
+    PaymentTermDeleted(PaymentTermDeletedEvent),
+    PaymentTermLineCreated(PaymentTermLineCreatedEvent),
+    PaymentTermLineUpdated(PaymentTermLineUpdatedEvent),
+    PaymentTermLineDeleted(PaymentTermLineDeletedEvent),
     PurchaseInvoiceCreated(PurchaseInvoiceCreatedEvent),
     PurchaseInvoiceUpdated(PurchaseInvoiceUpdatedEvent),
     PurchaseInvoiceDeleted(PurchaseInvoiceDeletedEvent),

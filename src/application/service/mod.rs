@@ -9,6 +9,8 @@ pub use error::{ServiceError, ServiceResult};
 
 pub mod invoice_tax_line_service;
 pub mod payment_schedule_service;
+pub mod payment_term_line_service;
+pub mod payment_term_service;
 pub mod purchase_invoice_line_service;
 pub mod purchase_invoice_service;
 pub mod sales_invoice_line_service;
@@ -24,10 +26,14 @@ pub mod billing_purchase;
 pub mod billing_sales;
 pub mod billing_settlement;
 pub mod settlement_consumer;
+// Payment-terms master: pure schedule derivation + the invoice-post materialization hook.
+pub mod term_schedule;
 // END CUSTOM
 
 pub use invoice_tax_line_service::InvoiceTaxLineService;
 pub use payment_schedule_service::PaymentScheduleService;
+pub use payment_term_line_service::PaymentTermLineService;
+pub use payment_term_service::PaymentTermService;
 pub use purchase_invoice_line_service::PurchaseInvoiceLineService;
 pub use purchase_invoice_service::PurchaseInvoiceService;
 pub use sales_invoice_line_service::SalesInvoiceLineService;
@@ -42,7 +48,7 @@ pub use billing_gl::{
     ReconcileLine, ReconcileOrigin, ReconcilePairRequest, ReconcileRejected, ReconcileSink,
     UnreconcilePairRequest,
 };
-pub use billing_settlement::SettlementOutcome;
+pub use billing_settlement::{EarlyPayDiscount, SettlementOutcome};
 pub use billing_write_service::{
     BillingError, BillingWriteService, NewInvoiceLine, NewPurchaseInvoice, NewSalesInvoice,
     NewTaxLine, PostOutcome,
@@ -51,4 +57,5 @@ pub use settlement_consumer::{
     PaymentCancelledDto, PaymentCancelledHandler, PaymentSettledDto, PaymentSettledHandler,
     SettledInvoiceDto,
 };
+pub use term_schedule::{derive_schedule, line_due_date, validate_term, NewTermLine};
 // END CUSTOM

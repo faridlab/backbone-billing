@@ -9,7 +9,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::domain::entity::{InvoiceKind, InvoiceTaxLine, TaxBasis};
+use crate::domain::entity::{InvoiceKind, InvoiceTaxLine, TaxBasis, TaxExigibility};
 
 /// Pagination parameters for list queries
 #[derive(Debug, Clone, Default)]
@@ -50,6 +50,10 @@ pub struct InvoiceTaxLineFilter {
     pub account_id: Option<Uuid>,
     pub basis: Option<TaxBasis>,
     pub description: Option<String>,
+    pub tax_template_id: Option<Uuid>,
+    pub repartition_line_id: Option<Uuid>,
+    pub real_account_id: Option<Uuid>,
+    pub exigibility: Option<TaxExigibility>,
 }
 
 impl InvoiceTaxLineFilter {
@@ -61,6 +65,10 @@ impl InvoiceTaxLineFilter {
             || self.account_id.is_some()
             || self.basis.is_some()
             || self.description.is_some()
+            || self.tax_template_id.is_some()
+            || self.repartition_line_id.is_some()
+            || self.real_account_id.is_some()
+            || self.exigibility.is_some()
     }
 }
 

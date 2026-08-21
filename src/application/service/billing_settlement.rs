@@ -39,6 +39,23 @@ pub struct SettlementOutcome {
     pub remainder: Decimal,
 }
 
+/// An invoice's materialized early-pay-discount decision, resolved at settlement time.
+///
+/// Carries the PERCENT and the invoice's outstanding BASIS (not a precomputed amount): the payment
+/// applies the discount to what it actually ALLOCATES to this invoice, clamped to the basis — so
+/// a partial payment inside the window earns the discount on the paid part only, and an
+/// over-allocating payment cannot farm discount on money the invoice never asked for. An amount
+/// fixed at resolve time would be wrong the moment the allocation differs from the outstanding;
+/// the basis alone travels because the outstanding moves with each knock-off between resolves.
+#[derive(Debug, Clone)]
+pub struct EarlyPayDiscount {
+    pub invoice_ref: Uuid,
+    pub invoice_kind: String,
+    pub percent: Decimal,
+    pub outstanding_basis: Decimal,
+    pub account_id: Uuid,
+}
+
 /// Resolve the settlement seam's wire `kind` into the closed enum the repository dispatches on.
 /// Unknown kinds keep their original domain error.
 fn invoice_kind(kind: &str) -> Result<InvoiceKind, BillingError> {
@@ -69,9 +86,72 @@ fn edge_sides(
 }
 
 impl BillingWriteService {
+    // ---- Early-pay discount resolution ---------------------------------------
+
+    /// Resolve an invoice's early-pay-discount decision for a settlement happening on `on_date`.
+    ///
+    /// Applicable iff the invoice was posted with a materialized discount block whose deadline
+    /// covers `on_date` and whose outstanding is still positive. Returns the percent + the expense
+    /// account; the CALLER computes the amount on what it allocates (see [`EarlyPayDiscount`]).
+    /// Serves either invoice kind; unknown kind keeps its original domain error.
+    pub async fn resolve_early_pay_discount(
+        &self,
+        company_id: Uuid,
+        invoice_ref: Uuid,
+        kind: &str,
+        on_date: chrono::NaiveDate,
+    ) -> Result<Option<EarlyPayDiscount>, BillingError> {
+        let ikind = invoice_kind(kind)?;
+        let table = match ikind {
+            InvoiceKind::Sales => "sales_invoices",
+            InvoiceKind::Purchase => "purchase_invoices",
+        };
+        // Fence-correct read: bind the company on a dedicated transaction (a raw pool query
+        // carries no `app.company_id`, and the strict invoice fence would hide the row entirely).
+        let mut tx = self.db_pool.begin().await.map_err(BillingError::Db)?;
+        company_scope::bind_company_on(&mut tx, company_id)
+            .await
+            .map_err(BillingError::Db)?;
+        let fetched = self
+            .terms
+            .fetch_invoice_epd(&mut *tx, table, invoice_ref)
+            .await
+            .map_err(BillingError::Db)?;
+        tx.commit().await.map_err(BillingError::Db)?;
+        let Some(epd) = fetched else {
+            return Ok(None); // unknown invoice → no discount; the settlement itself will 404
+        };
+        if epd.posting_state != "posted" {
+            return Ok(None); // drafts carry no live discount decision
+        }
+        if epd.early_pay_discount_percent <= Decimal::ZERO
+            || epd.outstanding_amount <= Decimal::ZERO
+        {
+            return Ok(None);
+        }
+        let Some(deadline) = epd.early_pay_discount_deadline else {
+            return Ok(None);
+        };
+        if on_date > deadline {
+            return Ok(None); // outside the window — full amount only
+        }
+        let Some(account_id) = epd.early_pay_discount_account_id else {
+            return Ok(None); // materialization guarantees one; refuse silently rather than guess
+        };
+        Ok(Some(EarlyPayDiscount {
+            invoice_ref,
+            invoice_kind: kind.to_string(),
+            percent: epd.early_pay_discount_percent,
+            outstanding_basis: epd.outstanding_amount,
+            account_id,
+        }))
+    }
+
     // ---- Payment schedule ---------------------------------------------------
 
     /// Attach installment due dates to an invoice (AR or A/P). Lean — settlement is payments' job.
+    /// Refused when the invoice carries a payment term: the term's derived installments and a
+    /// manual schedule cannot coexist (the post hook enforces the same rule from the other side).
     pub async fn add_payment_schedule(
         &self,
         invoice_ref: Uuid,
@@ -79,9 +159,26 @@ impl BillingWriteService {
         company_id: Uuid,
         installments: &[(chrono::NaiveDate, Decimal)],
     ) -> Result<(), BillingError> {
+        let ikind = invoice_kind(kind)?;
         let mut tx = self.db_pool.begin().await?;
         // RLS scope (ADR-0008): company is an explicit argument.
         company_scope::bind_company_on(&mut tx, company_id).await?;
+        let table = match ikind {
+            InvoiceKind::Sales => "sales_invoices",
+            InvoiceKind::Purchase => "purchase_invoices",
+        };
+        if let Some(ctx) = self
+            .terms
+            .fetch_term_context(&mut *tx, table, invoice_ref)
+            .await?
+        {
+            if ctx.payment_term_id.is_some() {
+                return Err(BillingError::TermInvalid {
+                    code: "schedule_conflicts_with_term".into(),
+                    message: "an invoice with a payment term derives its installments; drop the term first".into(),
+                });
+            }
+        }
         for (i, (due, amt)) in installments.iter().enumerate() {
             self.schedules
                 .insert_schedule(
@@ -490,5 +587,25 @@ impl BillingWriteService {
             remaining -= take;
         }
         Ok(restored)
+    }
+
+    /// The derived overdue read: open, GL-posted invoices whose due date has passed (`today`
+    /// injected by the caller — deterministic tests). Both kinds, earliest due first.
+    pub async fn list_overdue_invoices(
+        &self,
+        company_id: Uuid,
+        today: chrono::NaiveDate,
+    ) -> Result<Vec<crate::infrastructure::persistence::OverdueInvoiceRow>, BillingError> {
+        let mut tx = self.db_pool.begin().await.map_err(BillingError::Db)?;
+        company_scope::bind_company_on(&mut tx, company_id)
+            .await
+            .map_err(BillingError::Db)?;
+        let rows = self
+            .settlement
+            .list_overdue_invoices(&mut *tx, company_id, today)
+            .await
+            .map_err(BillingError::Db)?;
+        tx.commit().await.map_err(BillingError::Db)?;
+        Ok(rows)
     }
 }

@@ -8,6 +8,8 @@ pub use backbone_core::{AndSpecification, NotSpecification, OrSpecification, Spe
 
 pub mod invoice_tax_line_specification;
 pub mod payment_schedule_specification;
+pub mod payment_term_line_specification;
+pub mod payment_term_specification;
 pub mod purchase_invoice_line_specification;
 pub mod purchase_invoice_specification;
 pub mod sales_invoice_line_specification;

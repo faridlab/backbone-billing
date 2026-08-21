@@ -150,6 +150,7 @@ async fn sales_invoice_posts_balanced_revenue_into_the_real_gl() {
             source_so_id: None,
             posting_date: day(),
             due_date: None,
+            payment_term_id: None,
             currency: None,
             receivable_account_id: coa["1200"],
             lines: vec![NewInvoiceLine {
@@ -248,6 +249,7 @@ async fn concurrent_double_post_yields_one_journal() {
             source_so_id: None,
             posting_date: day(),
             due_date: None,
+            payment_term_id: None,
             currency: None,
             receivable_account_id: coa["1200"],
             lines: vec![NewInvoiceLine {

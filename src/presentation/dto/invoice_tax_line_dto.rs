@@ -21,6 +21,7 @@ use crate::domain::entity::AuditMetadata;
 use crate::domain::entity::InvoiceKind;
 use crate::domain::entity::InvoiceTaxLine;
 use crate::domain::entity::TaxBasis;
+use crate::domain::entity::TaxExigibility;
 
 // =============================================================================
 // Create DTO
@@ -64,6 +65,25 @@ pub struct CreateInvoiceTaxLineDto {
     pub rate: Decimal,
     #[serde(alias = "tax_amount")]
     pub tax_amount: Decimal,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "tax_template_id"
+    )]
+    pub tax_template_id: Option<Uuid>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "repartition_line_id"
+    )]
+    pub repartition_line_id: Option<Uuid>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "real_account_id"
+    )]
+    pub real_account_id: Option<Uuid>,
+    pub exigibility: TaxExigibility,
 }
 
 // =============================================================================
@@ -108,6 +128,25 @@ pub struct UpdateInvoiceTaxLineDto {
     pub rate: Decimal,
     #[serde(alias = "tax_amount")]
     pub tax_amount: Decimal,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "tax_template_id"
+    )]
+    pub tax_template_id: Option<Uuid>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "repartition_line_id"
+    )]
+    pub repartition_line_id: Option<Uuid>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "real_account_id"
+    )]
+    pub real_account_id: Option<Uuid>,
+    pub exigibility: TaxExigibility,
 }
 
 // =============================================================================
@@ -154,6 +193,14 @@ pub struct PatchInvoiceTaxLineDto {
     pub rate: Option<Decimal>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "tax_amount")]
     pub tax_amount: Option<Decimal>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "tax_template_id")]
+    pub tax_template_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "repartition_line_id")]
+    pub repartition_line_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "real_account_id")]
+    pub real_account_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exigibility: Option<TaxExigibility>,
 }
 
 impl PatchInvoiceTaxLineDto {
@@ -168,6 +215,10 @@ impl PatchInvoiceTaxLineDto {
             || self.taxable_base.is_some()
             || self.rate.is_some()
             || self.tax_amount.is_some()
+            || self.tax_template_id.is_some()
+            || self.repartition_line_id.is_some()
+            || self.real_account_id.is_some()
+            || self.exigibility.is_some()
     }
 }
 
@@ -209,6 +260,10 @@ pub struct InvoiceTaxLineResponseDto {
     pub taxable_base: Decimal,
     pub rate: Decimal,
     pub tax_amount: Decimal,
+    pub tax_template_id: Option<Uuid>,
+    pub repartition_line_id: Option<Uuid>,
+    pub real_account_id: Option<Uuid>,
+    pub exigibility: TaxExigibility,
     pub metadata: AuditMetadata,
 }
 
@@ -294,6 +349,10 @@ impl From<InvoiceTaxLine> for InvoiceTaxLineResponseDto {
             taxable_base: entity.taxable_base,
             rate: entity.rate,
             tax_amount: entity.tax_amount,
+            tax_template_id: entity.tax_template_id,
+            repartition_line_id: entity.repartition_line_id,
+            real_account_id: entity.real_account_id,
+            exigibility: entity.exigibility,
             metadata: entity.metadata,
         }
     }
@@ -325,6 +384,10 @@ impl From<CreateInvoiceTaxLineDto> for InvoiceTaxLine {
             taxable_base: dto.taxable_base,
             rate: dto.rate,
             tax_amount: dto.tax_amount,
+            tax_template_id: dto.tax_template_id,
+            repartition_line_id: dto.repartition_line_id,
+            real_account_id: dto.real_account_id,
+            exigibility: dto.exigibility,
             metadata: AuditMetadata::default(),
         }
     }
@@ -343,6 +406,10 @@ impl From<&InvoiceTaxLine> for InvoiceTaxLineResponseDto {
             taxable_base: entity.taxable_base.clone(),
             rate: entity.rate.clone(),
             tax_amount: entity.tax_amount.clone(),
+            tax_template_id: entity.tax_template_id.clone(),
+            repartition_line_id: entity.repartition_line_id.clone(),
+            real_account_id: entity.real_account_id.clone(),
+            exigibility: entity.exigibility.clone(),
             metadata: entity.metadata.clone(),
         }
     }
@@ -365,6 +432,10 @@ impl backbone_core::ApplyUpdateDto<UpdateInvoiceTaxLineDto> for InvoiceTaxLine {
         self.taxable_base = dto.taxable_base;
         self.rate = dto.rate;
         self.tax_amount = dto.tax_amount;
+        self.tax_template_id = dto.tax_template_id;
+        self.repartition_line_id = dto.repartition_line_id;
+        self.real_account_id = dto.real_account_id;
+        self.exigibility = dto.exigibility;
         Ok(self)
     }
 }

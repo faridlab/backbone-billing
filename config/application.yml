@@ -62,6 +62,20 @@ entities:
     pagination:
       default_limit: 20
       max_limit: 100
+  payment_term:
+    collection: payment_terms
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
+  payment_term_line:
+    collection: payment_term_lines
+    enabled: true
+    cache_ttl: 300
+    pagination:
+      default_limit: 20
+      max_limit: 100
 tracing:
   enabled: true
   exporter: otlp

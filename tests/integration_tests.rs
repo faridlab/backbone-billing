@@ -39,6 +39,34 @@ async fn test_payment_schedule_api() {
 }
 
 #[tokio::test]
+async fn test_payment_term_api() {
+    let mut test = PaymentTermApiTest::new();
+    let results = test.run_all().await;
+
+    let failed: Vec<_> = results.iter().filter(|r| !r.success).collect();
+    if !failed.is_empty() {
+        for f in &failed {
+            eprintln!("FAILED: {} - {}", f.test_name, f.details);
+        }
+        panic!("{} tests failed", failed.len());
+    }
+}
+
+#[tokio::test]
+async fn test_payment_term_line_api() {
+    let mut test = PaymentTermLineApiTest::new();
+    let results = test.run_all().await;
+
+    let failed: Vec<_> = results.iter().filter(|r| !r.success).collect();
+    if !failed.is_empty() {
+        for f in &failed {
+            eprintln!("FAILED: {} - {}", f.test_name, f.details);
+        }
+        panic!("{} tests failed", failed.len());
+    }
+}
+
+#[tokio::test]
 async fn test_purchase_invoice_api() {
     let mut test = PurchaseInvoiceApiTest::new();
     let results = test.run_all().await;

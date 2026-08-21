@@ -5,11 +5,11 @@
 //! These DTOs are the ONLY types other modules should use.
 //! They are decoupled from internal domain entities.
 
+use crate::domain::entity::*;
+use chrono::{DateTime, NaiveDate, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc, NaiveDate};
-use rust_decimal::Decimal;
-use crate::domain::entity::*;
 
 // ============================================================================
 // INVOICETAXLINE TYPES
@@ -58,6 +58,10 @@ pub struct InvoiceTaxLineDto {
     pub taxable_base: Decimal,
     pub rate: Decimal,
     pub tax_amount: Decimal,
+    pub tax_template_id: Option<Uuid>,
+    pub repartition_line_id: Option<Uuid>,
+    pub real_account_id: Option<Uuid>,
+    pub exigibility: TaxExigibility,
     pub metadata: serde_json::Value,
 }
 
@@ -136,6 +140,133 @@ pub struct PaymentScheduleRef {
 }
 
 // ============================================================================
+// PAYMENTTERM TYPES
+// ============================================================================
+
+/// Type-safe ID for PaymentTerm
+///
+/// Use this instead of raw Uuid for type safety across modules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PaymentTermId(pub Uuid);
+
+impl PaymentTermId {
+    pub fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
+}
+
+impl From<Uuid> for PaymentTermId {
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
+}
+
+impl From<PaymentTermId> for Uuid {
+    fn from(id: PaymentTermId) -> Self {
+        id.0
+    }
+}
+
+/// Data transfer object for PaymentTerm
+///
+/// This is the public representation of PaymentTerm for other modules.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermDto {
+    pub id: PaymentTermId,
+    pub company_id: Option<Uuid>,
+    pub name: String,
+    pub note: Option<String>,
+    pub sequence: i32,
+    pub status: PaymentTermStatus,
+    pub early_discount: bool,
+    pub discount_percent: Decimal,
+    pub discount_days: i32,
+    pub discount_account_id: Option<Uuid>,
+    pub discount_tax_basis: DiscountTaxBasis,
+    pub metadata: serde_json::Value,
+}
+
+/// Summary view of PaymentTerm for list displays
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermSummary {
+    pub id: PaymentTermId,
+    pub name: String,
+    pub status: PaymentTermStatus,
+}
+
+/// Reference to PaymentTerm for foreign key relationships
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermRef {
+    pub id: PaymentTermId,
+}
+
+// ============================================================================
+// PAYMENTTERMLINE TYPES
+// ============================================================================
+
+/// Type-safe ID for PaymentTermLine
+///
+/// Use this instead of raw Uuid for type safety across modules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PaymentTermLineId(pub Uuid);
+
+impl PaymentTermLineId {
+    pub fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
+}
+
+impl From<Uuid> for PaymentTermLineId {
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
+}
+
+impl From<PaymentTermLineId> for Uuid {
+    fn from(id: PaymentTermLineId) -> Self {
+        id.0
+    }
+}
+
+/// Data transfer object for PaymentTermLine
+///
+/// This is the public representation of PaymentTermLine for other modules.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermLineDto {
+    pub id: PaymentTermLineId,
+    pub term_id: Uuid,
+    pub company_id: Option<Uuid>,
+    pub value: PaymentTermLineValue,
+    pub value_amount: Decimal,
+    pub nb_days: i32,
+    pub day_of_month: Option<i32>,
+    pub delay_type: PaymentTermDelayType,
+    pub anchor: PaymentTermAnchor,
+    pub sequence: i32,
+    pub metadata: serde_json::Value,
+}
+
+/// Summary view of PaymentTermLine for list displays
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermLineSummary {
+    pub id: PaymentTermLineId,
+}
+
+/// Reference to PaymentTermLine for foreign key relationships
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentTermLineRef {
+    pub id: PaymentTermLineId,
+}
+
+// ============================================================================
 // PURCHASEINVOICE TYPES
 // ============================================================================
 
@@ -181,6 +312,10 @@ pub struct PurchaseInvoiceDto {
     pub status: InvoiceStatus,
     pub posting_date: NaiveDate,
     pub due_date: Option<NaiveDate>,
+    pub payment_term_id: Option<Uuid>,
+    pub early_pay_discount_percent: Decimal,
+    pub early_pay_discount_deadline: Option<NaiveDate>,
+    pub early_pay_discount_account_id: Option<Uuid>,
     pub currency: String,
     pub net_total: Decimal,
     pub tax_total: Decimal,
@@ -316,6 +451,10 @@ pub struct SalesInvoiceDto {
     pub status: InvoiceStatus,
     pub posting_date: NaiveDate,
     pub due_date: Option<NaiveDate>,
+    pub payment_term_id: Option<Uuid>,
+    pub early_pay_discount_percent: Decimal,
+    pub early_pay_discount_deadline: Option<NaiveDate>,
+    pub early_pay_discount_account_id: Option<Uuid>,
     pub currency: String,
     pub net_total: Decimal,
     pub tax_total: Decimal,

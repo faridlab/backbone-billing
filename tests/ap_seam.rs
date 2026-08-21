@@ -213,6 +213,7 @@ async fn purchase_invoice_bills_po_across_three_modules() {
             source_po_id: Some(po),
             posting_date: day(),
             due_date: None,
+            payment_term_id: None,
             currency: None,
             payable_account_id: coa["2100"],
             lines: vec![NewInvoiceLine {

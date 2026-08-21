@@ -7,6 +7,8 @@
 
 pub mod invoice_tax_line_dto;
 pub mod payment_schedule_dto;
+pub mod payment_term_dto;
+pub mod payment_term_line_dto;
 pub mod purchase_invoice_dto;
 pub mod purchase_invoice_line_dto;
 pub mod sales_invoice_dto;
@@ -20,6 +22,14 @@ pub use invoice_tax_line_dto::{
 pub use payment_schedule_dto::{
     CreatePaymentScheduleDto, PatchPaymentScheduleDto, PaymentScheduleListResponseDto,
     PaymentScheduleResponseDto, PaymentScheduleSummaryDto, UpdatePaymentScheduleDto,
+};
+pub use payment_term_dto::{
+    CreatePaymentTermDto, PatchPaymentTermDto, PaymentTermListResponseDto, PaymentTermResponseDto,
+    PaymentTermSummaryDto, UpdatePaymentTermDto,
+};
+pub use payment_term_line_dto::{
+    CreatePaymentTermLineDto, PatchPaymentTermLineDto, PaymentTermLineListResponseDto,
+    PaymentTermLineResponseDto, PaymentTermLineSummaryDto, UpdatePaymentTermLineDto,
 };
 pub use purchase_invoice_dto::{
     CreatePurchaseInvoiceDto, PatchPurchaseInvoiceDto, PurchaseInvoiceListResponseDto,

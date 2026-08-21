@@ -16,7 +16,12 @@ description: "Billing: region-neutral AR/AP invoicing (Sales + Purchase Invoice)
 
 # ADR-0014 company fence: every entity here is company-scoped and fenced strict —
 # invoice headers and their child lines (tax lines, payment schedules) each carry
-# company_id and are fenced; no cross-company invoice data. No exceptions.
+# company_id and are fenced; no cross-company invoice data. ONE exception:
+# payment_terms / payment_term_lines carry a NULLABLE company_id (NULL = global
+# template every tenant reads, none mutates) and are fenced SPLIT — read admits
+# global rows, write stays own-only (the corporate currency_exchanges shape).
+# The generator derives plain-strict stanzas for them; the payment-terms fence
+# migration re-states the split shape, and a regen that reverts it is a REGRESSION.
 company_fence: strict
 
 config:
@@ -72,3 +77,4 @@ imports:
   - purchase_invoice.model.yaml
   - invoice_tax_line.model.yaml
   - payment_schedule.model.yaml
+  - payment_term.model.yaml

@@ -69,6 +69,7 @@ async fn sales(w: &BillingWriteService, company: Uuid, so: Option<Uuid>) -> Uuid
         source_so_id: so,
         posting_date: day(),
         due_date: None,
+        payment_term_id: None,
         currency: None,
         receivable_account_id: ar,
         lines: vec![NewInvoiceLine {

@@ -11,6 +11,8 @@ use std::sync::Arc;
 // Import all services
 use crate::application::service::InvoiceTaxLineService;
 use crate::application::service::PaymentScheduleService;
+use crate::application::service::PaymentTermService;
+use crate::application::service::PaymentTermLineService;
 use crate::application::service::PurchaseInvoiceService;
 use crate::application::service::PurchaseInvoiceLineService;
 use crate::application::service::SalesInvoiceService;
@@ -38,6 +40,10 @@ pub struct AppState {
     pub invoice_tax_line_service: Arc<InvoiceTaxLineService>,
     /// PaymentSchedule service
     pub payment_schedule_service: Arc<PaymentScheduleService>,
+    /// PaymentTerm service
+    pub payment_term_service: Arc<PaymentTermService>,
+    /// PaymentTermLine service
+    pub payment_term_line_service: Arc<PaymentTermLineService>,
     /// PurchaseInvoice service
     pub purchase_invoice_service: Arc<PurchaseInvoiceService>,
     /// PurchaseInvoiceLine service
@@ -53,6 +59,8 @@ impl AppState {
     pub fn new(
         invoice_tax_line_service: Arc<InvoiceTaxLineService>,
         payment_schedule_service: Arc<PaymentScheduleService>,
+        payment_term_service: Arc<PaymentTermService>,
+        payment_term_line_service: Arc<PaymentTermLineService>,
         purchase_invoice_service: Arc<PurchaseInvoiceService>,
         purchase_invoice_line_service: Arc<PurchaseInvoiceLineService>,
         sales_invoice_service: Arc<SalesInvoiceService>,
@@ -61,6 +69,8 @@ impl AppState {
         Self {
             invoice_tax_line_service,
             payment_schedule_service,
+            payment_term_service,
+            payment_term_line_service,
             purchase_invoice_service,
             purchase_invoice_line_service,
             sales_invoice_service,
@@ -73,6 +83,8 @@ impl AppState {
         Self {
             invoice_tax_line_service: module.invoice_tax_line_service.clone(),
             payment_schedule_service: module.payment_schedule_service.clone(),
+            payment_term_service: module.payment_term_service.clone(),
+            payment_term_line_service: module.payment_term_line_service.clone(),
             purchase_invoice_service: module.purchase_invoice_service.clone(),
             purchase_invoice_line_service: module.purchase_invoice_line_service.clone(),
             sales_invoice_service: module.sales_invoice_service.clone(),
@@ -88,6 +100,8 @@ impl AppState {
 pub struct AppStateBuilder {
     invoice_tax_line_service: Option<Arc<InvoiceTaxLineService>>,
     payment_schedule_service: Option<Arc<PaymentScheduleService>>,
+    payment_term_service: Option<Arc<PaymentTermService>>,
+    payment_term_line_service: Option<Arc<PaymentTermLineService>>,
     purchase_invoice_service: Option<Arc<PurchaseInvoiceService>>,
     purchase_invoice_line_service: Option<Arc<PurchaseInvoiceLineService>>,
     sales_invoice_service: Option<Arc<SalesInvoiceService>>,
@@ -109,6 +123,18 @@ impl AppStateBuilder {
     /// Set the PaymentSchedule service.
     pub fn with_payment_schedule_service(mut self, service: Arc<PaymentScheduleService>) -> Self {
         self.payment_schedule_service = Some(service);
+        self
+    }
+
+    /// Set the PaymentTerm service.
+    pub fn with_payment_term_service(mut self, service: Arc<PaymentTermService>) -> Self {
+        self.payment_term_service = Some(service);
+        self
+    }
+
+    /// Set the PaymentTermLine service.
+    pub fn with_payment_term_line_service(mut self, service: Arc<PaymentTermLineService>) -> Self {
+        self.payment_term_line_service = Some(service);
         self
     }
 
@@ -145,6 +171,8 @@ impl AppStateBuilder {
         AppState {
             invoice_tax_line_service: self.invoice_tax_line_service.expect("invoice_tax_line_service is required"),
             payment_schedule_service: self.payment_schedule_service.expect("payment_schedule_service is required"),
+            payment_term_service: self.payment_term_service.expect("payment_term_service is required"),
+            payment_term_line_service: self.payment_term_line_service.expect("payment_term_line_service is required"),
             purchase_invoice_service: self.purchase_invoice_service.expect("purchase_invoice_service is required"),
             purchase_invoice_line_service: self.purchase_invoice_line_service.expect("purchase_invoice_line_service is required"),
             sales_invoice_service: self.sales_invoice_service.expect("sales_invoice_service is required"),

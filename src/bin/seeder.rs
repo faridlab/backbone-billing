@@ -14,6 +14,8 @@ use std::env;
 // Import seeders
 use backbone_billing::seeders::SeedInvoiceTaxLineSeeder;
 use backbone_billing::seeders::SeedPaymentScheduleSeeder;
+use backbone_billing::seeders::SeedPaymentTermLineSeeder;
+use backbone_billing::seeders::SeedPaymentTermSeeder;
 use backbone_billing::seeders::SeedPurchaseInvoiceLineSeeder;
 use backbone_billing::seeders::SeedPurchaseInvoiceSeeder;
 use backbone_billing::seeders::SeedSalesInvoiceLineSeeder;
@@ -30,7 +32,8 @@ async fn main() -> Result<()> {
         .find(|a| !a.starts_with("-"))
         .map(|s| s.as_str());
 
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database_url =
+        env::var("DATABASE_URL").map_err(|e| anyhow::anyhow!("DATABASE_URL must be set: {e}"))?;
 
     println!("Connecting to database...");
 
@@ -48,6 +51,8 @@ async fn main() -> Result<()> {
     let mut seeders: Vec<Box<dyn Seeder + Send + Sync>> = Vec::new();
     seeders.push(Box::new(SeedInvoiceTaxLineSeeder::new()));
     seeders.push(Box::new(SeedPaymentScheduleSeeder::new()));
+    seeders.push(Box::new(SeedPaymentTermSeeder::new()));
+    seeders.push(Box::new(SeedPaymentTermLineSeeder::new()));
     seeders.push(Box::new(SeedPurchaseInvoiceSeeder::new()));
     seeders.push(Box::new(SeedPurchaseInvoiceLineSeeder::new()));
     seeders.push(Box::new(SeedSalesInvoiceSeeder::new()));

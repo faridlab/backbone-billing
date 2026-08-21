@@ -8,17 +8,17 @@
 //! ## Usage from other modules
 //!
 //! ```text
-//! use billing::exports::{InvoiceTaxLineDto, BillingQueryService};
+//! use billing::exports::{InvoiceTaxLineDto};
 //! ```
 
-mod types;
-mod services;
 mod events;
+mod services;
+mod types;
 
 // Re-export all public types
-pub use types::*;
-pub use services::*;
 pub use events::*;
+pub use services::*;
+pub use types::*;
 
 // ============================================================================
 // EXPORT SUMMARY
@@ -33,6 +33,12 @@ pub use events::*;
 /// - `PaymentScheduleDto` - Data transfer object for PaymentSchedule
 /// - `PaymentScheduleSummary` - Summary view of PaymentSchedule
 /// - `PaymentScheduleId` - Type-safe ID wrapper
+/// - `PaymentTermDto` - Data transfer object for PaymentTerm
+/// - `PaymentTermSummary` - Summary view of PaymentTerm
+/// - `PaymentTermId` - Type-safe ID wrapper
+/// - `PaymentTermLineDto` - Data transfer object for PaymentTermLine
+/// - `PaymentTermLineSummary` - Summary view of PaymentTermLine
+/// - `PaymentTermLineId` - Type-safe ID wrapper
 /// - `PurchaseInvoiceDto` - Data transfer object for PurchaseInvoice
 /// - `PurchaseInvoiceSummary` - Summary view of PurchaseInvoice
 /// - `PurchaseInvoiceId` - Type-safe ID wrapper
@@ -46,9 +52,6 @@ pub use events::*;
 /// - `SalesInvoiceLineSummary` - Summary view of SalesInvoiceLine
 /// - `SalesInvoiceLineId` - Type-safe ID wrapper
 ///
-/// ## Public Services
-/// - `BillingQueryService` - Read-only queries
-///
 /// ## Public Events
 /// - `InvoiceTaxLineCreatedEvent` - Published when InvoiceTaxLine is created
 /// - `InvoiceTaxLineUpdatedEvent` - Published when InvoiceTaxLine is updated
@@ -56,6 +59,12 @@ pub use events::*;
 /// - `PaymentScheduleCreatedEvent` - Published when PaymentSchedule is created
 /// - `PaymentScheduleUpdatedEvent` - Published when PaymentSchedule is updated
 /// - `PaymentScheduleDeletedEvent` - Published when PaymentSchedule is deleted
+/// - `PaymentTermCreatedEvent` - Published when PaymentTerm is created
+/// - `PaymentTermUpdatedEvent` - Published when PaymentTerm is updated
+/// - `PaymentTermDeletedEvent` - Published when PaymentTerm is deleted
+/// - `PaymentTermLineCreatedEvent` - Published when PaymentTermLine is created
+/// - `PaymentTermLineUpdatedEvent` - Published when PaymentTermLine is updated
+/// - `PaymentTermLineDeletedEvent` - Published when PaymentTermLine is deleted
 /// - `PurchaseInvoiceCreatedEvent` - Published when PurchaseInvoice is created
 /// - `PurchaseInvoiceUpdatedEvent` - Published when PurchaseInvoice is updated
 /// - `PurchaseInvoiceDeletedEvent` - Published when PurchaseInvoice is deleted

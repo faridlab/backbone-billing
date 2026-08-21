@@ -15,6 +15,10 @@ tags:
     description: InvoiceTaxLine management endpoints
   - name: PaymentSchedules
     description: PaymentSchedule management endpoints
+  - name: PaymentTerms
+    description: PaymentTerm management endpoints
+  - name: PaymentTermLines
+    description: PaymentTermLine management endpoints
   - name: PurchaseInvoices
     description: PurchaseInvoice management endpoints
   - name: PurchaseInvoiceLines
@@ -743,6 +747,738 @@ paths:
         - PaymentSchedules
       summary: Bulk permanently-delete PaymentSchedules from trash by ids (atomic)
       operationId: bulkPermanentDeletePaymentSchedules
+      requestBody:
+        $ref: '#/components/requestBodies/BatchIds'
+      responses:
+        '200':
+          description: Permanently deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permanently_deleted: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/payment_terms:
+    get:
+      tags:
+        - PaymentTerms
+      summary: List PaymentTerms
+      description: Get a paginated list of PaymentTerms with optional filtering and sorting
+      operationId: listPaymentTerms
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortByParam'
+        - $ref: '#/components/parameters/SortOrderParam'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - PaymentTerms
+      summary: Create PaymentTerm
+      description: Create a new PaymentTerm
+      operationId: createPaymentTerm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentTermRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTerm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/payment_terms/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+
+    get:
+      tags:
+        - PaymentTerms
+      summary: Get PaymentTerm by ID
+      operationId: getPaymentTerm
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTerm'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - PaymentTerms
+      summary: Update PaymentTerm (full)
+      operationId: updatePaymentTerm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentTermRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTerm'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - PaymentTerms
+      summary: Update PaymentTerm (partial)
+      operationId: patchPaymentTerm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchPaymentTermRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTerm'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - PaymentTerms
+      summary: Delete PaymentTerm (soft)
+      operationId: deletePaymentTerm
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/payment_terms/bulk:
+    post:
+      tags:
+        - PaymentTerms
+      summary: Bulk create PaymentTerms
+      operationId: bulkCreatePaymentTerms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/CreatePaymentTermRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentTerm'
+    put:
+      tags:
+        - PaymentTerms
+      summary: Bulk update PaymentTerms (full, atomic)
+      operationId: bulkUpdatePaymentTerms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                allOf:
+                  - type: object
+                    required: [id]
+                    properties:
+                      id:
+                        type: string
+                  - $ref: '#/components/schemas/UpdatePaymentTermRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermBulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    patch:
+      tags:
+        - PaymentTerms
+      summary: Bulk partial-update PaymentTerms (atomic)
+      operationId: bulkPatchPaymentTerms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [ids, patch]
+                  properties:
+                    ids:
+                      type: array
+                      items: { type: string }
+                    patch:
+                      type: object
+                      additionalProperties: true
+                - type: object
+                  required: [items]
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        type: object
+                        required: [id, patch]
+                        properties:
+                          id: { type: string }
+                          patch: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermBulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/payment_terms/upsert:
+    post:
+      tags:
+        - PaymentTerms
+      summary: Upsert PaymentTerm
+      operationId: upsertPaymentTerm
+      parameters:
+        - name: key_field
+          in: query
+          schema:
+            type: string
+        - name: key_value
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentTermRequest'
+      responses:
+        '200':
+          description: Upserted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTerm'
+
+  /api/v1/payment_terms/trash:
+    get:
+      tags:
+        - PaymentTerms
+      summary: List deleted PaymentTerms
+      operationId: listDeletedPaymentTerms
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermList'
+
+  /api/v1/payment_terms/{id}/restore:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      tags:
+        - PaymentTerms
+      summary: Restore deleted PaymentTerm
+      operationId: restorePaymentTerm
+      responses:
+        '200':
+          description: Restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTerm'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/payment_terms/empty:
+    delete:
+      tags:
+        - PaymentTerms
+      summary: Empty trash for PaymentTerms
+      operationId: emptyTrashPaymentTerms
+      responses:
+        '200':
+          description: Trash emptied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted_count:
+                    type: integer
+
+  /api/v1/payment_terms/delete/bulk:
+    post:
+      tags:
+        - PaymentTerms
+      summary: Bulk soft-delete PaymentTerms by ids (atomic)
+      operationId: bulkDeletePaymentTerms
+      requestBody:
+        $ref: '#/components/requestBodies/BatchIds'
+      responses:
+        '200':
+          description: Soft-deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  soft_deleted: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/payment_terms/restore/bulk:
+    post:
+      tags:
+        - PaymentTerms
+      summary: Bulk restore PaymentTerms by ids (atomic)
+      operationId: bulkRestorePaymentTerms
+      requestBody:
+        $ref: '#/components/requestBodies/BatchIds'
+      responses:
+        '200':
+          description: Restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermBulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/payment_terms/restore/all:
+    post:
+      tags:
+        - PaymentTerms
+      summary: Restore all soft-deleted PaymentTerms
+      operationId: restoreAllPaymentTerms
+      responses:
+        '200':
+          description: Restored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  restored: { type: integer }
+
+  /api/v1/payment_terms/trash/bulk:
+    delete:
+      tags:
+        - PaymentTerms
+      summary: Bulk permanently-delete PaymentTerms from trash by ids (atomic)
+      operationId: bulkPermanentDeletePaymentTerms
+      requestBody:
+        $ref: '#/components/requestBodies/BatchIds'
+      responses:
+        '200':
+          description: Permanently deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permanently_deleted: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/payment_term_lines:
+    get:
+      tags:
+        - PaymentTermLines
+      summary: List PaymentTermLines
+      description: Get a paginated list of PaymentTermLines with optional filtering and sorting
+      operationId: listPaymentTermLines
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortByParam'
+        - $ref: '#/components/parameters/SortOrderParam'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLineList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - PaymentTermLines
+      summary: Create PaymentTermLine
+      description: Create a new PaymentTermLine
+      operationId: createPaymentTermLine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentTermLineRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLine'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/payment_term_lines/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+
+    get:
+      tags:
+        - PaymentTermLines
+      summary: Get PaymentTermLine by ID
+      operationId: getPaymentTermLine
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLine'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - PaymentTermLines
+      summary: Update PaymentTermLine (full)
+      operationId: updatePaymentTermLine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentTermLineRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLine'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - PaymentTermLines
+      summary: Update PaymentTermLine (partial)
+      operationId: patchPaymentTermLine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchPaymentTermLineRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLine'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - PaymentTermLines
+      summary: Delete PaymentTermLine (soft)
+      operationId: deletePaymentTermLine
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/payment_term_lines/bulk:
+    post:
+      tags:
+        - PaymentTermLines
+      summary: Bulk create PaymentTermLines
+      operationId: bulkCreatePaymentTermLines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/CreatePaymentTermLineRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentTermLine'
+    put:
+      tags:
+        - PaymentTermLines
+      summary: Bulk update PaymentTermLines (full, atomic)
+      operationId: bulkUpdatePaymentTermLines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                allOf:
+                  - type: object
+                    required: [id]
+                    properties:
+                      id:
+                        type: string
+                  - $ref: '#/components/schemas/UpdatePaymentTermLineRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLineBulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    patch:
+      tags:
+        - PaymentTermLines
+      summary: Bulk partial-update PaymentTermLines (atomic)
+      operationId: bulkPatchPaymentTermLines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [ids, patch]
+                  properties:
+                    ids:
+                      type: array
+                      items: { type: string }
+                    patch:
+                      type: object
+                      additionalProperties: true
+                - type: object
+                  required: [items]
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        type: object
+                        required: [id, patch]
+                        properties:
+                          id: { type: string }
+                          patch: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLineBulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/payment_term_lines/upsert:
+    post:
+      tags:
+        - PaymentTermLines
+      summary: Upsert PaymentTermLine
+      operationId: upsertPaymentTermLine
+      parameters:
+        - name: key_field
+          in: query
+          schema:
+            type: string
+        - name: key_value
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentTermLineRequest'
+      responses:
+        '200':
+          description: Upserted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLine'
+
+  /api/v1/payment_term_lines/trash:
+    get:
+      tags:
+        - PaymentTermLines
+      summary: List deleted PaymentTermLines
+      operationId: listDeletedPaymentTermLines
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLineList'
+
+  /api/v1/payment_term_lines/{id}/restore:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      tags:
+        - PaymentTermLines
+      summary: Restore deleted PaymentTermLine
+      operationId: restorePaymentTermLine
+      responses:
+        '200':
+          description: Restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLine'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/payment_term_lines/empty:
+    delete:
+      tags:
+        - PaymentTermLines
+      summary: Empty trash for PaymentTermLines
+      operationId: emptyTrashPaymentTermLines
+      responses:
+        '200':
+          description: Trash emptied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted_count:
+                    type: integer
+
+  /api/v1/payment_term_lines/delete/bulk:
+    post:
+      tags:
+        - PaymentTermLines
+      summary: Bulk soft-delete PaymentTermLines by ids (atomic)
+      operationId: bulkDeletePaymentTermLines
+      requestBody:
+        $ref: '#/components/requestBodies/BatchIds'
+      responses:
+        '200':
+          description: Soft-deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  soft_deleted: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/payment_term_lines/restore/bulk:
+    post:
+      tags:
+        - PaymentTermLines
+      summary: Bulk restore PaymentTermLines by ids (atomic)
+      operationId: bulkRestorePaymentTermLines
+      requestBody:
+        $ref: '#/components/requestBodies/BatchIds'
+      responses:
+        '200':
+          description: Restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTermLineBulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/payment_term_lines/restore/all:
+    post:
+      tags:
+        - PaymentTermLines
+      summary: Restore all soft-deleted PaymentTermLines
+      operationId: restoreAllPaymentTermLines
+      responses:
+        '200':
+          description: Restored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  restored: { type: integer }
+
+  /api/v1/payment_term_lines/trash/bulk:
+    delete:
+      tags:
+        - PaymentTermLines
+      summary: Bulk permanently-delete PaymentTermLines from trash by ids (atomic)
+      operationId: bulkPermanentDeletePaymentTermLines
       requestBody:
         $ref: '#/components/requestBodies/BatchIds'
       responses:
@@ -2235,6 +2971,7 @@ components:
         - taxable_base
         - rate
         - tax_amount
+        - exigibility
         - metadata
       properties:
         id:
@@ -2263,6 +3000,20 @@ components:
           type: string
         tax_amount:
           type: string
+        tax_template_id:
+          nullable: true
+          type: string
+          format: uuid
+        repartition_line_id:
+          nullable: true
+          type: string
+          format: uuid
+        real_account_id:
+          nullable: true
+          type: string
+          format: uuid
+        exigibility:
+          type: string
         metadata:
           type: object
 
@@ -2290,6 +3041,7 @@ components:
         - taxable_base
         - rate
         - tax_amount
+        - exigibility
         - metadata
       properties:
         invoice_ref:
@@ -2314,6 +3066,20 @@ components:
         rate:
           type: string
         tax_amount:
+          type: string
+        tax_template_id:
+          nullable: true
+          type: string
+          format: uuid
+        repartition_line_id:
+          nullable: true
+          type: string
+          format: uuid
+        real_account_id:
+          nullable: true
+          type: string
+          format: uuid
+        exigibility:
           type: string
         metadata:
           type: object
@@ -2329,6 +3095,7 @@ components:
         - taxable_base
         - rate
         - tax_amount
+        - exigibility
         - metadata
       properties:
         invoice_ref:
@@ -2353,6 +3120,20 @@ components:
         rate:
           type: string
         tax_amount:
+          type: string
+        tax_template_id:
+          nullable: true
+          type: string
+          format: uuid
+        repartition_line_id:
+          nullable: true
+          type: string
+          format: uuid
+        real_account_id:
+          nullable: true
+          type: string
+          format: uuid
+        exigibility:
           type: string
         metadata:
           type: object
@@ -2382,6 +3163,20 @@ components:
         rate:
           type: string
         tax_amount:
+          type: string
+        tax_template_id:
+          nullable: true
+          type: string
+          format: uuid
+        repartition_line_id:
+          nullable: true
+          type: string
+          format: uuid
+        real_account_id:
+          nullable: true
+          type: string
+          format: uuid
+        exigibility:
           type: string
         metadata:
           type: object
@@ -2557,6 +3352,378 @@ components:
         meta:
           $ref: '#/components/schemas/PaginationMeta'
 
+    PaymentTerm:
+      type: object
+      required:
+        - id
+        - name
+        - sequence
+        - status
+        - early_discount
+        - discount_percent
+        - discount_days
+        - discount_tax_basis
+        - metadata
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_id:
+          nullable: true
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        note:
+          nullable: true
+          type: string
+          maxLength: 500
+        sequence:
+          type: integer
+          format: int32
+        status:
+          type: string
+        early_discount:
+          type: boolean
+        discount_percent:
+          type: string
+        discount_days:
+          type: integer
+          format: int32
+        discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
+        discount_tax_basis:
+          type: string
+        metadata:
+          type: object
+
+    PaymentTermBulkResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentTerm'
+        total: { type: integer }
+        failed: { type: integer }
+        errors:
+          type: array
+          items: { type: string }
+
+    CreatePaymentTermRequest:
+      type: object
+      required:
+        - name
+        - sequence
+        - status
+        - early_discount
+        - discount_percent
+        - discount_days
+        - discount_tax_basis
+        - metadata
+      properties:
+        company_id:
+          nullable: true
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        note:
+          nullable: true
+          type: string
+          maxLength: 500
+        sequence:
+          type: integer
+          format: int32
+        status:
+          type: string
+        early_discount:
+          type: boolean
+        discount_percent:
+          type: string
+        discount_days:
+          type: integer
+          format: int32
+        discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
+        discount_tax_basis:
+          type: string
+        metadata:
+          type: object
+
+    UpdatePaymentTermRequest:
+      type: object
+      required:
+        - name
+        - sequence
+        - status
+        - early_discount
+        - discount_percent
+        - discount_days
+        - discount_tax_basis
+        - metadata
+      properties:
+        company_id:
+          nullable: true
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        note:
+          nullable: true
+          type: string
+          maxLength: 500
+        sequence:
+          type: integer
+          format: int32
+        status:
+          type: string
+        early_discount:
+          type: boolean
+        discount_percent:
+          type: string
+        discount_days:
+          type: integer
+          format: int32
+        discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
+        discount_tax_basis:
+          type: string
+        metadata:
+          type: object
+
+    PatchPaymentTermRequest:
+      type: object
+      properties:
+        company_id:
+          nullable: true
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        note:
+          nullable: true
+          type: string
+          maxLength: 500
+        sequence:
+          type: integer
+          format: int32
+        status:
+          type: string
+        early_discount:
+          type: boolean
+        discount_percent:
+          type: string
+        discount_days:
+          type: integer
+          format: int32
+        discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
+        discount_tax_basis:
+          type: string
+        metadata:
+          type: object
+
+    PaymentTermList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentTerm'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaymentTermLine:
+      type: object
+      required:
+        - id
+        - term_id
+        - value
+        - value_amount
+        - nb_days
+        - delay_type
+        - anchor
+        - sequence
+        - metadata
+      properties:
+        id:
+          type: string
+          format: uuid
+        term_id:
+          type: string
+          format: uuid
+        company_id:
+          nullable: true
+          type: string
+          format: uuid
+        value:
+          type: string
+        value_amount:
+          type: string
+        nb_days:
+          type: integer
+          format: int32
+        day_of_month:
+          nullable: true
+          type: integer
+          format: int32
+        delay_type:
+          type: string
+        anchor:
+          type: string
+        sequence:
+          type: integer
+          format: int32
+        metadata:
+          type: object
+
+    PaymentTermLineBulkResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentTermLine'
+        total: { type: integer }
+        failed: { type: integer }
+        errors:
+          type: array
+          items: { type: string }
+
+    CreatePaymentTermLineRequest:
+      type: object
+      required:
+        - term_id
+        - value
+        - value_amount
+        - nb_days
+        - delay_type
+        - anchor
+        - sequence
+        - metadata
+      properties:
+        term_id:
+          type: string
+          format: uuid
+        company_id:
+          nullable: true
+          type: string
+          format: uuid
+        value:
+          type: string
+        value_amount:
+          type: string
+        nb_days:
+          type: integer
+          format: int32
+        day_of_month:
+          nullable: true
+          type: integer
+          format: int32
+        delay_type:
+          type: string
+        anchor:
+          type: string
+        sequence:
+          type: integer
+          format: int32
+        metadata:
+          type: object
+
+    UpdatePaymentTermLineRequest:
+      type: object
+      required:
+        - term_id
+        - value
+        - value_amount
+        - nb_days
+        - delay_type
+        - anchor
+        - sequence
+        - metadata
+      properties:
+        term_id:
+          type: string
+          format: uuid
+        company_id:
+          nullable: true
+          type: string
+          format: uuid
+        value:
+          type: string
+        value_amount:
+          type: string
+        nb_days:
+          type: integer
+          format: int32
+        day_of_month:
+          nullable: true
+          type: integer
+          format: int32
+        delay_type:
+          type: string
+        anchor:
+          type: string
+        sequence:
+          type: integer
+          format: int32
+        metadata:
+          type: object
+
+    PatchPaymentTermLineRequest:
+      type: object
+      properties:
+        term_id:
+          type: string
+          format: uuid
+        company_id:
+          nullable: true
+          type: string
+          format: uuid
+        value:
+          type: string
+        value_amount:
+          type: string
+        nb_days:
+          type: integer
+          format: int32
+        day_of_month:
+          nullable: true
+          type: integer
+          format: int32
+        delay_type:
+          type: string
+        anchor:
+          type: string
+        sequence:
+          type: integer
+          format: int32
+        metadata:
+          type: object
+
+    PaymentTermLineList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentTermLine'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
     PurchaseInvoice:
       type: object
       required:
@@ -2566,6 +3733,7 @@ components:
         - supplier_id
         - status
         - posting_date
+        - early_pay_discount_percent
         - currency
         - net_total
         - tax_total
@@ -2605,6 +3773,20 @@ components:
           nullable: true
           type: string
           format: date
+        payment_term_id:
+          nullable: true
+          type: string
+          format: uuid
+        early_pay_discount_percent:
+          type: string
+        early_pay_discount_deadline:
+          nullable: true
+          type: string
+          format: date
+        early_pay_discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
         currency:
           type: string
           maxLength: 3
@@ -2663,6 +3845,7 @@ components:
         - supplier_id
         - status
         - posting_date
+        - early_pay_discount_percent
         - currency
         - net_total
         - tax_total
@@ -2699,6 +3882,20 @@ components:
           nullable: true
           type: string
           format: date
+        payment_term_id:
+          nullable: true
+          type: string
+          format: uuid
+        early_pay_discount_percent:
+          type: string
+        early_pay_discount_deadline:
+          nullable: true
+          type: string
+          format: date
+        early_pay_discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
         currency:
           type: string
           maxLength: 3
@@ -2744,6 +3941,7 @@ components:
         - supplier_id
         - status
         - posting_date
+        - early_pay_discount_percent
         - currency
         - net_total
         - tax_total
@@ -2780,6 +3978,20 @@ components:
           nullable: true
           type: string
           format: date
+        payment_term_id:
+          nullable: true
+          type: string
+          format: uuid
+        early_pay_discount_percent:
+          type: string
+        early_pay_discount_deadline:
+          nullable: true
+          type: string
+          format: date
+        early_pay_discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
         currency:
           type: string
           maxLength: 3
@@ -2846,6 +4058,20 @@ components:
           nullable: true
           type: string
           format: date
+        payment_term_id:
+          nullable: true
+          type: string
+          format: uuid
+        early_pay_discount_percent:
+          type: string
+        early_pay_discount_deadline:
+          nullable: true
+          type: string
+          format: date
+        early_pay_discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
         currency:
           type: string
           maxLength: 3
@@ -3068,6 +4294,7 @@ components:
         - customer_id
         - status
         - posting_date
+        - early_pay_discount_percent
         - currency
         - net_total
         - tax_total
@@ -3106,6 +4333,20 @@ components:
           nullable: true
           type: string
           format: date
+        payment_term_id:
+          nullable: true
+          type: string
+          format: uuid
+        early_pay_discount_percent:
+          type: string
+        early_pay_discount_deadline:
+          nullable: true
+          type: string
+          format: date
+        early_pay_discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
         currency:
           type: string
           maxLength: 3
@@ -3162,6 +4403,7 @@ components:
         - customer_id
         - status
         - posting_date
+        - early_pay_discount_percent
         - currency
         - net_total
         - tax_total
@@ -3197,6 +4439,20 @@ components:
           nullable: true
           type: string
           format: date
+        payment_term_id:
+          nullable: true
+          type: string
+          format: uuid
+        early_pay_discount_percent:
+          type: string
+        early_pay_discount_deadline:
+          nullable: true
+          type: string
+          format: date
+        early_pay_discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
         currency:
           type: string
           maxLength: 3
@@ -3240,6 +4496,7 @@ components:
         - customer_id
         - status
         - posting_date
+        - early_pay_discount_percent
         - currency
         - net_total
         - tax_total
@@ -3275,6 +4532,20 @@ components:
           nullable: true
           type: string
           format: date
+        payment_term_id:
+          nullable: true
+          type: string
+          format: uuid
+        early_pay_discount_percent:
+          type: string
+        early_pay_discount_deadline:
+          nullable: true
+          type: string
+          format: date
+        early_pay_discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
         currency:
           type: string
           maxLength: 3
@@ -3339,6 +4610,20 @@ components:
           nullable: true
           type: string
           format: date
+        payment_term_id:
+          nullable: true
+          type: string
+          format: uuid
+        early_pay_discount_percent:
+          type: string
+        early_pay_discount_deadline:
+          nullable: true
+          type: string
+          format: date
+        early_pay_discount_account_id:
+          nullable: true
+          type: string
+          format: uuid
         currency:
           type: string
           maxLength: 3

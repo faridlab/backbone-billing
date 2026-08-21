@@ -7,6 +7,7 @@ use uuid::Uuid;
 use super::AuditMetadata;
 use super::InvoiceKind;
 use super::TaxBasis;
+use super::TaxExigibility;
 
 /// Strongly-typed ID for InvoiceTaxLine
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -75,6 +76,10 @@ pub struct InvoiceTaxLine {
     pub taxable_base: Decimal,
     pub rate: Decimal,
     pub tax_amount: Decimal,
+    pub tax_template_id: Option<Uuid>,
+    pub repartition_line_id: Option<Uuid>,
+    pub real_account_id: Option<Uuid>,
+    pub exigibility: TaxExigibility,
     #[serde(default)]
     #[sqlx(json)]
     pub metadata: AuditMetadata,
@@ -83,7 +88,7 @@ pub struct InvoiceTaxLine {
 impl InvoiceTaxLine {
     /// Create a builder for InvoiceTaxLine
     pub fn builder() -> InvoiceTaxLineBuilder {
-        InvoiceTaxLineBuilder::default()
+        <InvoiceTaxLineBuilder as Default>::default()
     }
 
     /// Create a new InvoiceTaxLine with required fields
@@ -96,6 +101,7 @@ impl InvoiceTaxLine {
         taxable_base: Decimal,
         rate: Decimal,
         tax_amount: Decimal,
+        exigibility: TaxExigibility,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -108,6 +114,10 @@ impl InvoiceTaxLine {
             taxable_base,
             rate,
             tax_amount,
+            tax_template_id: None,
+            repartition_line_id: None,
+            real_account_id: None,
+            exigibility,
             metadata: AuditMetadata::default(),
         }
     }
@@ -172,6 +182,24 @@ impl InvoiceTaxLine {
         self
     }
 
+    /// Set the tax_template_id field (chainable)
+    pub fn with_tax_template_id(mut self, value: Uuid) -> Self {
+        self.tax_template_id = Some(value);
+        self
+    }
+
+    /// Set the repartition_line_id field (chainable)
+    pub fn with_repartition_line_id(mut self, value: Uuid) -> Self {
+        self.repartition_line_id = Some(value);
+        self
+    }
+
+    /// Set the real_account_id field (chainable)
+    pub fn with_real_account_id(mut self, value: Uuid) -> Self {
+        self.real_account_id = Some(value);
+        self
+    }
+
     // ==========================================================
     // Partial Update
     // ==========================================================
@@ -223,6 +251,26 @@ impl InvoiceTaxLine {
                 "tax_amount" => {
                     if let Ok(v) = serde_json::from_value(value) {
                         self.tax_amount = v;
+                    }
+                }
+                "tax_template_id" => {
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.tax_template_id = v;
+                    }
+                }
+                "repartition_line_id" => {
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.repartition_line_id = v;
+                    }
+                }
+                "real_account_id" => {
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.real_account_id = v;
+                    }
+                }
+                "exigibility" => {
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.exigibility = v;
                     }
                 }
                 _ => {} // ignore unknown fields
@@ -281,8 +329,12 @@ impl backbone_orm::EntityRepoMeta for InvoiceTaxLine {
         m.insert("id".to_string(), "uuid".to_string());
         m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("account_id".to_string(), "uuid".to_string());
+        m.insert("tax_template_id".to_string(), "uuid".to_string());
+        m.insert("repartition_line_id".to_string(), "uuid".to_string());
+        m.insert("real_account_id".to_string(), "uuid".to_string());
         m.insert("invoice_kind".to_string(), "invoice_kind".to_string());
         m.insert("basis".to_string(), "tax_basis".to_string());
+        m.insert("exigibility".to_string(), "tax_exigibility".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
@@ -308,6 +360,10 @@ pub struct InvoiceTaxLineBuilder {
     taxable_base: Option<Decimal>,
     rate: Option<Decimal>,
     tax_amount: Option<Decimal>,
+    tax_template_id: Option<Uuid>,
+    repartition_line_id: Option<Uuid>,
+    real_account_id: Option<Uuid>,
+    exigibility: Option<TaxExigibility>,
 }
 
 impl InvoiceTaxLineBuilder {
@@ -365,6 +421,30 @@ impl InvoiceTaxLineBuilder {
         self
     }
 
+    /// Set the tax_template_id field (optional)
+    pub fn tax_template_id(mut self, value: Uuid) -> Self {
+        self.tax_template_id = Some(value);
+        self
+    }
+
+    /// Set the repartition_line_id field (optional)
+    pub fn repartition_line_id(mut self, value: Uuid) -> Self {
+        self.repartition_line_id = Some(value);
+        self
+    }
+
+    /// Set the real_account_id field (optional)
+    pub fn real_account_id(mut self, value: Uuid) -> Self {
+        self.real_account_id = Some(value);
+        self
+    }
+
+    /// Set the exigibility field (default: `TaxExigibility::default()`)
+    pub fn exigibility(mut self, value: TaxExigibility) -> Self {
+        self.exigibility = Some(value);
+        self
+    }
+
     /// Build the InvoiceTaxLine entity
     ///
     /// Returns Err if any required field without a default is missing.
@@ -397,6 +477,10 @@ impl InvoiceTaxLineBuilder {
             taxable_base: self.taxable_base.unwrap_or(Decimal::from(0)),
             rate: self.rate.unwrap_or(Decimal::from(0)),
             tax_amount,
+            tax_template_id: self.tax_template_id,
+            repartition_line_id: self.repartition_line_id,
+            real_account_id: self.real_account_id,
+            exigibility: self.exigibility.unwrap_or_default(),
             metadata: AuditMetadata::default(),
         })
     }

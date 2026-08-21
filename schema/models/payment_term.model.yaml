@@ -1,0 +1,209 @@
+# =============================================================================
+# Domain: Billing
+# Entity: PaymentTerm (+ PaymentTermLine)
+# Description: Payment terms master — how an invoice's balance falls due
+# (installments) and whether an early-payment discount applies. The
+# early-pay-discount block sits on the HEADER (Odoo 19 shape), not the lines.
+# company_id NULL = a global template every tenant may read but none may
+# mutate (split RLS fence — see the payment-terms fence migration). Lines are
+# real intra-module children. Dunning stays deferred; settlement is
+# backbone-payment's concern via the SettlementDiscountPort.
+# =============================================================================
+
+models:
+  - name: PaymentTerm
+    collection: payment_terms
+    description: "Payment terms master: installment shape + early-pay-discount block"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique term id"
+
+      company_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Books owner # logical FK to organization.Company.id; NULL = global template"
+
+      name:
+        type: string
+        attributes: ["@required", "@max(100)"]
+        description: "Human name (e.g. 'Net 30', '2/10 Net 30', '3 Installments')"
+
+      note:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Free-text explanation shown to clerks"
+
+      sequence:
+        type: int
+        attributes: ["@default(10)"]
+        description: "Display order among selectable terms"
+
+      status:
+        type: PaymentTermStatus
+        attributes: ["@default(active)"]
+        description: "Lifecycle (inactive terms are hidden from new invoices, history keeps them)"
+
+      # ---- early-pay-discount block (header-level, Odoo 19 shape) ----
+      early_discount:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Whether paying inside the discount window earns the discount"
+
+      discount_percent:
+        type: decimal
+        attributes: ["@default(0)", "@precision(7,4)", "@non_negative"]
+        description: "Discount percent of the settled amount (e.g. 2.0000 = 2%)"
+
+      discount_days:
+        type: int
+        attributes: ["@default(0)"]
+        description: "Discount window length in days from the invoice posting date"
+
+      discount_account_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Discount expense account # logical FK to accounting.Account.id"
+
+      discount_tax_basis:
+        type: DiscountTaxBasis
+        attributes: ["@default(included)"]
+        description: "Whether the percent applies to the tax-inclusive total or the pre-tax base"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    relations:
+      lines:
+        type: PaymentTermLine[]
+        attributes: ["@one_to_many"]
+        description: "Installment shape"
+        inverse: term
+
+    indexes:
+      - type: index
+        fields: [company_id, status]
+
+  - name: PaymentTermLine
+    collection: payment_term_lines
+    description: "One installment slice of a payment term"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique line id"
+
+      term_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(PaymentTerm.id)"]
+        description: "Owning term"
+
+      company_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Denormalized owner of the term (NULL for global templates) so the line passes the fence on its own"
+
+      value:
+        type: PaymentTermLineValue
+        attributes: ["@default(balance)"]
+        description: "How this slice's amount is derived"
+
+      value_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,4)", "@non_negative"]
+        description: "Percent (value=percent, e.g. 30.0000 = 30%) or absolute amount (value=fixed); ignored for balance"
+
+      nb_days:
+        type: int
+        attributes: ["@required"]
+        description: "Calendar-day offset from the anchor"
+
+      day_of_month:
+        type: int?
+        description: "Target day-of-month for the day-following/month delay types (clamped to month end)"
+
+      delay_type:
+        type: PaymentTermDelayType
+        attributes: ["@default(days)"]
+        description: "How the offset lands on a date"
+
+      anchor:
+        type: PaymentTermAnchor
+        attributes: ["@default(invoice_date)"]
+        description: "When the delay clock starts"
+
+      sequence:
+        type: int
+        attributes: ["@default(10)"]
+        description: "Slice order"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    relations:
+      term:
+        type: PaymentTerm
+        attributes: ["@one", "@foreign_key(term_id)"]
+        description: "Owning term"
+        inverse: lines
+
+    indexes:
+      - type: index
+        fields: [term_id, sequence]
+
+enums:
+  - name: PaymentTermStatus
+    description: "Payment-term lifecycle"
+    variants:
+      - name: active
+        description: "Selectable on new invoices"
+        default: true
+      - name: inactive
+        description: "Hidden from new invoices; historical invoices keep their materialized schedule"
+
+  - name: PaymentTermLineValue
+    description: "How an installment slice's amount is derived"
+    variants:
+      - name: balance
+        description: "The remaining unpaid balance (must be the last slice)"
+        default: true
+      - name: percent
+        description: "value_amount percent of the invoice grand total"
+      - name: fixed
+        description: "value_amount as an absolute amount"
+
+  - name: PaymentTermDelayType
+    description: "How a slice's day offset lands on a due date"
+    variants:
+      - name: days
+        description: "Anchor + nb_days calendar days"
+        default: true
+      - name: day_following_month
+        description: "day_of_month of the month following the anchor month (+ nb_days months beyond)"
+      - name: day_current_month
+        description: "day_of_month of the anchor month itself (+ nb_days months beyond)"
+
+  - name: PaymentTermAnchor
+    description: "When a slice's delay clock starts"
+    variants:
+      - name: invoice_date
+        description: "The invoice's posting date"
+        default: true
+      - name: end_of_invoice_month
+        description: "The last day of the anchor invoice month"
+
+  - name: DiscountTaxBasis
+    description: "Which total the early-pay-discount percent applies to"
+    variants:
+      - name: included
+        description: "The tax-inclusive grand total"
+        default: true
+      - name: reduced_price
+        description: "The pre-tax net total (needs the tax recompute pass; refused at create for now)"
