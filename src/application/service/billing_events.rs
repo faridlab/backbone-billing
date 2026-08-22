@@ -55,10 +55,13 @@ pub struct PurchaseInvoicePosted {
     pub withholding_total: Decimal,
 }
 
-/// An invoice was cancelled (a reversal post is emitted separately).
+/// An invoice was cancelled (a reversal post is emitted separately). `company_id` lets a
+/// consumer bound its RLS scope from the payload alone — the other posted events carry it for
+/// the same reason.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InvoiceCancelled {
     pub invoice_id: Uuid,
+    pub company_id: Uuid,
     pub kind: String, // "sales" | "purchase"
 }
 

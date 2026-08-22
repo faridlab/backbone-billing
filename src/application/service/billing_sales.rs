@@ -349,6 +349,7 @@ impl BillingWriteService {
                 if affected == 1 {
                     let event = InvoiceCancelled {
                         invoice_id,
+                        company_id: env.company_id,
                         kind: "sales".into(),
                     };
                     if let Some(schema) = self.outbox_schema.clone() {
