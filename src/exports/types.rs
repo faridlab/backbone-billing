@@ -5,11 +5,11 @@
 //! These DTOs are the ONLY types other modules should use.
 //! They are decoupled from internal domain entities.
 
-use crate::domain::entity::*;
-use chrono::{DateTime, NaiveDate, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use chrono::{DateTime, Utc, NaiveDate};
+use rust_decimal::Decimal;
+use crate::domain::entity::*;
 
 // ============================================================================
 // INVOICETAXLINE TYPES
@@ -51,7 +51,6 @@ pub struct InvoiceTaxLineDto {
     pub id: InvoiceTaxLineId,
     pub invoice_ref: Uuid,
     pub invoice_kind: InvoiceKind,
-    pub company_id: Uuid,
     pub account_id: Uuid,
     pub basis: TaxBasis,
     pub description: Option<String>,
@@ -117,7 +116,6 @@ pub struct PaymentScheduleDto {
     pub id: PaymentScheduleId,
     pub invoice_ref: Uuid,
     pub invoice_kind: InvoiceKind,
-    pub company_id: Uuid,
     pub installment_no: i32,
     pub due_date: NaiveDate,
     pub amount: Decimal,
@@ -177,7 +175,6 @@ impl From<PaymentTermId> for Uuid {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaymentTermDto {
     pub id: PaymentTermId,
-    pub company_id: Option<Uuid>,
     pub name: String,
     pub note: Option<String>,
     pub sequence: i32,
@@ -243,7 +240,6 @@ impl From<PaymentTermLineId> for Uuid {
 pub struct PaymentTermLineDto {
     pub id: PaymentTermLineId,
     pub term_id: Uuid,
-    pub company_id: Option<Uuid>,
     pub value: PaymentTermLineValue,
     pub value_amount: Decimal,
     pub nb_days: i32,
@@ -305,7 +301,6 @@ impl From<PurchaseInvoiceId> for Uuid {
 pub struct PurchaseInvoiceDto {
     pub id: PurchaseInvoiceId,
     pub invoice_number: String,
-    pub company_id: Uuid,
     pub branch_id: Option<Uuid>,
     pub supplier_id: Uuid,
     pub source_po_id: Option<Uuid>,
@@ -383,7 +378,6 @@ impl From<PurchaseInvoiceLineId> for Uuid {
 pub struct PurchaseInvoiceLineDto {
     pub id: PurchaseInvoiceLineId,
     pub invoice_id: Uuid,
-    pub company_id: Uuid,
     pub item_id: Uuid,
     pub expense_account_id: Uuid,
     pub description: Option<String>,
@@ -444,7 +438,6 @@ impl From<SalesInvoiceId> for Uuid {
 pub struct SalesInvoiceDto {
     pub id: SalesInvoiceId,
     pub invoice_number: String,
-    pub company_id: Uuid,
     pub branch_id: Option<Uuid>,
     pub customer_id: Uuid,
     pub source_so_id: Option<Uuid>,
@@ -521,7 +514,6 @@ impl From<SalesInvoiceLineId> for Uuid {
 pub struct SalesInvoiceLineDto {
     pub id: SalesInvoiceLineId,
     pub invoice_id: Uuid,
-    pub company_id: Uuid,
     pub item_id: Uuid,
     pub revenue_account_id: Uuid,
     pub description: Option<String>,

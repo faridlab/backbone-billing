@@ -48,11 +48,10 @@ impl GlPostSink for OkGl {
 }
 
 /// A term with a 2% / 10-day discount window + the invoice posted under it.
-async fn posted_with_epd(w: &BillingWriteService, company: Uuid, kind: &str) -> Uuid {
+async fn posted_with_epd(w: &BillingWriteService, kind: &str) -> Uuid {
     let epd_account = Uuid::new_v4();
     let term = w
         .create_payment_term(
-            company,
             &uq("TERM"),
             None,
             10,
@@ -85,7 +84,6 @@ async fn posted_with_epd(w: &BillingWriteService, company: Uuid, kind: &str) -> 
         let id = w
             .create_sales_invoice(NewSalesInvoice {
                 invoice_number: uq("SI"),
-                company_id: company,
                 branch_id: None,
                 customer_id: Uuid::new_v4(),
                 source_so_id: None,
@@ -113,7 +111,6 @@ async fn posted_with_epd(w: &BillingWriteService, company: Uuid, kind: &str) -> 
         let id = w
             .create_purchase_invoice(NewPurchaseInvoice {
                 invoice_number: uq("PI"),
-                company_id: company,
                 branch_id: None,
                 supplier_id: Uuid::new_v4(),
                 source_po_id: None,
@@ -148,7 +145,7 @@ async fn window_is_deadline_inclusive() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
     let company = Uuid::new_v4();
-    let inv = posted_with_epd(&w, company, "sales").await;
+    let inv = posted_with_epd(&w, "sales").await;
 
     let on_deadline = w
         .resolve_early_pay_discount(company, inv, "sales", day(2026, 7, 15))
@@ -176,7 +173,7 @@ async fn purchase_kind_resolves() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
     let company = Uuid::new_v4();
-    let inv = posted_with_epd(&w, company, "purchase").await;
+    let inv = posted_with_epd(&w, "purchase").await;
     let r = w
         .resolve_early_pay_discount(company, inv, "purchase", day(2026, 7, 10))
         .await
@@ -194,7 +191,7 @@ async fn non_applicable_states_resolve_none() {
     let w = BillingWriteService::new(pool.clone());
     let company = Uuid::new_v4();
     let other = Uuid::new_v4();
-    let inv = posted_with_epd(&w, company, "sales").await;
+    let inv = posted_with_epd(&w, "sales").await;
 
     // unknown invoice
     assert!(w
@@ -217,60 +214,8 @@ async fn non_applicable_states_resolve_none() {
         .is_none());
 }
 
-// EPD-4: the tenant leg — a restricted (non-BYPASSRLS) service must resolve the owning company's
-// discount and resolve NOTHING for a different company. (The default test pool is superuser,
-// which bypasses RLS by construction, so this leg needs the real posture.)
-#[tokio::test]
-async fn tenant_fence_resolves_none_for_other_company() {
-    let admin = pool().await;
-    let w = BillingWriteService::new(admin.clone());
-    let company = Uuid::new_v4();
-    let inv = posted_with_epd(&w, company, "sales").await;
-
-    sqlx::query("SELECT pg_advisory_lock(hashtext('billing_fence_probe'))")
-        .execute(&admin)
-        .await
-        .unwrap();
-    let _ = sqlx::query(
-        "CREATE ROLE billing_fence_probe LOGIN PASSWORD 'probe' \
-           NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE",
-    )
-    .execute(&admin)
-    .await;
-    for grant in [
-        "GRANT CONNECT ON DATABASE backbone_billing TO billing_fence_probe",
-        "GRANT USAGE ON SCHEMA billing TO billing_fence_probe",
-        "GRANT SELECT ON TABLE billing.sales_invoices TO billing_fence_probe",
-        "GRANT SELECT, INSERT, UPDATE ON TABLE billing.payment_terms TO billing_fence_probe",
-        "GRANT SELECT, INSERT, UPDATE ON TABLE billing.payment_term_lines TO billing_fence_probe",
-    ] {
-        sqlx::query(grant).execute(&admin).await.unwrap();
-    }
-    sqlx::query("SELECT pg_advisory_unlock(hashtext('billing_fence_probe'))")
-        .execute(&admin)
-        .await
-        .unwrap();
-
-    let probe =
-        PgPool::connect("postgresql://billing_fence_probe:probe@localhost:5433/backbone_billing")
-            .await
-            .expect("connect as restricted probe");
-    let w_probe = BillingWriteService::new(probe);
-    let when = day(2026, 7, 10);
-    assert!(
-        w_probe
-            .resolve_early_pay_discount(company, inv, "sales", when)
-            .await
-            .unwrap()
-            .is_some(),
-        "owning company resolves under the restricted role"
-    );
-    assert!(
-        w_probe
-            .resolve_early_pay_discount(Uuid::new_v4(), inv, "sales", when)
-            .await
-            .unwrap()
-            .is_none(),
-        "another company resolves nothing — the invoice fence hides the row"
-    );
-}
+// EPD-4 retired with the tenancy strip (ADR-0029): the module no longer carries a company
+// fence — its RLS policies and tenant columns are gone, and a restricted role seeing rows is
+// the documented module posture (see tests/tenancy_posture_probe.rs). The cross-scope
+// resolution proof now lives in the composing service's decorator probes, where the fence is
+// installed.

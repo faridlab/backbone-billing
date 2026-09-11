@@ -5,10 +5,10 @@
 //! DTOs provide a clean separation between domain entities and API
 //! representations, with validation and OpenAPI documentation support.
 
-use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 
 #[cfg(feature = "openapi")]
 #[cfg(feature = "openapi")]
@@ -17,10 +17,10 @@ use utoipa::ToSchema;
 #[cfg(feature = "validation")]
 use validator::Validate;
 
+use crate::domain::entity::PaymentTermLine;
 use crate::domain::entity::AuditMetadata;
 use crate::domain::entity::PaymentTermAnchor;
 use crate::domain::entity::PaymentTermDelayType;
-use crate::domain::entity::PaymentTermLine;
 use crate::domain::entity::PaymentTermLineValue;
 
 // =============================================================================
@@ -36,25 +36,16 @@ use crate::domain::entity::PaymentTermLineValue;
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct CreatePaymentTermLineDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "term_id")]
     pub term_id: Uuid,
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     pub value: PaymentTermLineValue,
     #[serde(alias = "value_amount")]
     pub value_amount: Decimal,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     #[serde(alias = "nb_days")]
     pub nb_days: i32,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "day_of_month"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "day_of_month")]
     pub day_of_month: Option<i32>,
     #[serde(alias = "delay_type")]
     pub delay_type: PaymentTermDelayType,
@@ -76,25 +67,16 @@ pub struct CreatePaymentTermLineDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePaymentTermLineDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "term_id")]
     pub term_id: Uuid,
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     pub value: PaymentTermLineValue,
     #[serde(alias = "value_amount")]
     pub value_amount: Decimal,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     #[serde(alias = "nb_days")]
     pub nb_days: i32,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "day_of_month"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "day_of_month")]
     pub day_of_month: Option<i32>,
     #[serde(alias = "delay_type")]
     pub delay_type: PaymentTermDelayType,
@@ -116,14 +98,9 @@ pub struct UpdatePaymentTermLineDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct PatchPaymentTermLineDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "term_id")]
     pub term_id: Option<Uuid>,
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<PaymentTermLineValue>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "value_amount")]
@@ -145,15 +122,7 @@ pub struct PatchPaymentTermLineDto {
 impl PatchPaymentTermLineDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.term_id.is_some()
-            || self.company_id.is_some()
-            || self.value.is_some()
-            || self.value_amount.is_some()
-            || self.nb_days.is_some()
-            || self.day_of_month.is_some()
-            || self.delay_type.is_some()
-            || self.anchor.is_some()
-            || self.sequence.is_some()
+        self.term_id.is_some() || self.value.is_some() || self.value_amount.is_some() || self.nb_days.is_some() || self.day_of_month.is_some() || self.delay_type.is_some() || self.anchor.is_some() || self.sequence.is_some()
     }
 }
 
@@ -169,17 +138,10 @@ impl PatchPaymentTermLineDto {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentTermLineResponseDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub term_id: Uuid,
-    pub company_id: Option<Uuid>,
     pub value: PaymentTermLineValue,
     pub value_amount: Decimal,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -222,12 +184,7 @@ pub struct PaymentTermLineListResponseDto {
 
 impl PaymentTermLineListResponseDto {
     /// Create a new list response from items and pagination info
-    pub fn new(
-        items: Vec<PaymentTermLineResponseDto>,
-        total: u64,
-        page: u32,
-        per_page: u32,
-    ) -> Self {
+    pub fn new(items: Vec<PaymentTermLineResponseDto>, total: u64, page: u32, per_page: u32) -> Self {
         let total_pages = if per_page > 0 {
             ((total as f64) / (per_page as f64)).ceil() as u32
         } else {
@@ -252,8 +209,8 @@ impl PaymentTermLineListResponseDto {
 pub struct PaymentTermLineSummaryDto {
     pub id: Uuid,
     pub term_id: Uuid,
-    pub company_id: Option<Uuid>,
     pub value: PaymentTermLineValue,
+    pub value_amount: Decimal,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -266,7 +223,6 @@ impl From<PaymentTermLine> for PaymentTermLineResponseDto {
         Self {
             id: entity.id,
             term_id: entity.term_id,
-            company_id: entity.company_id,
             value: entity.value,
             value_amount: entity.value_amount,
             nb_days: entity.nb_days,
@@ -285,8 +241,8 @@ impl From<PaymentTermLine> for PaymentTermLineSummaryDto {
         Self {
             id: entity.id,
             term_id: entity.term_id,
-            company_id: entity.company_id,
             value: entity.value,
+            value_amount: entity.value_amount,
             created_at,
         }
     }
@@ -297,7 +253,6 @@ impl From<CreatePaymentTermLineDto> for PaymentTermLine {
         Self {
             id: Uuid::new_v4(),
             term_id: dto.term_id,
-            company_id: dto.company_id,
             value: dto.value,
             value_amount: dto.value_amount,
             nb_days: dto.nb_days,
@@ -315,7 +270,6 @@ impl From<&PaymentTermLine> for PaymentTermLineResponseDto {
         Self {
             id: entity.id.clone(),
             term_id: entity.term_id.clone(),
-            company_id: entity.company_id.clone(),
             value: entity.value.clone(),
             value_amount: entity.value_amount.clone(),
             nb_days: entity.nb_days.clone(),
@@ -337,7 +291,6 @@ impl backbone_core::FromCreateDto<CreatePaymentTermLineDto> for PaymentTermLine 
 impl backbone_core::ApplyUpdateDto<UpdatePaymentTermLineDto> for PaymentTermLine {
     fn apply_update(mut self, dto: UpdatePaymentTermLineDto) -> backbone_core::ServiceResult<Self> {
         self.term_id = dto.term_id;
-        self.company_id = dto.company_id;
         self.value = dto.value;
         self.value_amount = dto.value_amount;
         self.nb_days = dto.nb_days;

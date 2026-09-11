@@ -12,7 +12,6 @@
 //! Split out of `billing_write_service.rs` like its siblings; `BillingWriteService`'s struct and
 //! errors stay there.
 
-use backbone_orm::company_scope;
 use chrono::Datelike;
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -21,7 +20,7 @@ use crate::infrastructure::persistence::{
     NewPaymentTermLineRow, NewPaymentTermRow, PaymentTermRepository, TermHeaderRow, TermLineRow,
 };
 
-use super::billing_write_service::{money, BillingError, BillingWriteService};
+use super::billing_write_service::{money, relay_ambient_scope, BillingError, BillingWriteService};
 
 /// Days-in-month for a (year, month) — used to clamp `day_of_month` targets (Feb 31 → Feb 28/29),
 /// the same clamp calendar libraries apply.
@@ -322,27 +321,27 @@ pub fn derive_schedule(
     Ok(collapsed)
 }
 
-/// Begin a transaction with the company fence bound — the only correct way to reach fenced tables
-/// from the pool. A bare pool execute never carries `app.company_id` (the task-local scope alone
-/// does not fence raw queries), so every pool-based read or write here goes through this.
+/// Begin a transaction with the caller's ambient org scope relayed onto it (ADR-0029). The scope
+/// is task-local — a fresh pool transaction carries none of it, so every transaction-owned read or
+/// write here goes through this. With no ambient scope (standalone deployment, jobs) the
+/// transaction stays plain: the module is tenant-agnostic and the composed decorator owns
+/// isolation.
 async fn scoped_tx(
     pool: &sqlx::PgPool,
-    company_id: Uuid,
 ) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, BillingError> {
     let mut tx = pool.begin().await.map_err(BillingError::Db)?;
-    company_scope::bind_company_on(&mut tx, company_id)
-        .await
-        .map_err(BillingError::Db)?;
+    relay_ambient_scope(&mut tx).await?;
     Ok(tx)
 }
 
 impl BillingWriteService {
-    /// Create a payment term (header + lines) in one transaction. Tenant terms carry the caller's
-    /// company; global templates are seeded owner-side (the split fence refuses a tenant forging
-    /// `company_id = NULL`). Shape validation runs BEFORE any insert.
+    /// Create a payment term (header + lines) in one transaction. A term is just a row: the
+    /// module is tenant-agnostic (ADR-0029), and a composing service that wants the
+    /// global-template catalog declares these tables ROOT-ANCHORED SHARED (allow_root) in its
+    /// tenancy.yaml — the rows it seeds land on the root org unit and every tenant's read union
+    /// picks them up. Shape validation runs BEFORE any insert.
     pub async fn create_payment_term(
         &self,
-        company_id: Uuid,
         name: &str,
         note: Option<&str>,
         sequence: i32,
@@ -364,13 +363,12 @@ impl BillingWriteService {
         )?;
         let id = Uuid::new_v4();
         let mut tx = self.db_pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, company_id).await?;
+        relay_ambient_scope(&mut tx).await?;
         self.terms
             .insert_term(
                 &mut *tx,
                 &NewPaymentTermRow {
                     id,
-                    company_id: Some(company_id),
                     name,
                     note,
                     sequence,
@@ -389,7 +387,6 @@ impl BillingWriteService {
                     &NewPaymentTermLineRow {
                         id: Uuid::new_v4(),
                         term_id: id,
-                        company_id: Some(company_id),
                         value: &l.value,
                         value_amount: l.value_amount,
                         nb_days: l.nb_days,
@@ -405,29 +402,26 @@ impl BillingWriteService {
         Ok(id)
     }
 
-    /// List the terms a company may pick from: its own plus the global templates, active only,
-    /// globals first. Served on a company-scoped session so the split fence admits both sources
-    /// while an unscoped session sees neither.
-    pub async fn list_payment_terms(
-        &self,
-        company_id: Uuid,
-    ) -> Result<Vec<TermHeaderRow>, BillingError> {
-        let mut tx = scoped_tx(&self.db_pool, company_id).await?;
-        let rows = self.terms.list_terms(&mut *tx, company_id).await?;
+    /// List the pickable terms: active only, schedule order. Under a composed tenancy decorator
+    /// the request's fence scopes the read and a root-anchored SHARED (allow_root) composition
+    /// unions the template rows into every tenant's result; an undecorated deployment lists all.
+    pub async fn list_payment_terms(&self) -> Result<Vec<TermHeaderRow>, BillingError> {
+        let mut tx = scoped_tx(&self.db_pool).await?;
+        let rows = self.terms.list_terms(&mut *tx).await?;
         tx.commit().await.map_err(BillingError::Db)?;
         Ok(rows)
     }
 
     /// Soft-retire (or re-activate) a term. Historical invoices keep their materialized schedule;
-    /// the term just leaves new-invoice selection. Own-company rows only — a global template or
-    /// another company's term is invisible to the scoped UPDATE and reads as `TermNotFound`.
+    /// the term just leaves new-invoice selection. Under a composed tenancy decorator the
+    /// decorator's WITH CHECK keeps the UPDATE inside the acting tenant's rows — anything else
+    /// matches zero rows and reads as `TermNotFound`.
     pub async fn set_payment_term_status(
         &self,
-        company_id: Uuid,
         term_id: Uuid,
         status: &str,
     ) -> Result<u64, BillingError> {
-        let mut tx = scoped_tx(&self.db_pool, company_id).await?;
+        let mut tx = scoped_tx(&self.db_pool).await?;
         let affected = self.terms.set_status(&mut *tx, term_id, status).await?;
         tx.commit().await.map_err(BillingError::Db)?;
         Ok(affected)
@@ -437,12 +431,11 @@ impl BillingWriteService {
     /// read-only seam the pickers use; the same derivation the post hook materializes.
     pub async fn preview_payment_term(
         &self,
-        company_id: Uuid,
         term_id: Uuid,
         posting_date: chrono::NaiveDate,
         grand_total: Decimal,
     ) -> Result<Vec<(chrono::NaiveDate, Decimal)>, BillingError> {
-        let mut tx = scoped_tx(&self.db_pool, company_id).await?;
+        let mut tx = scoped_tx(&self.db_pool).await?;
         let fetched = self.terms.fetch_term(&mut *tx, term_id).await?;
         tx.commit().await.map_err(BillingError::Db)?;
         let Some((header, lines)) = fetched else {
@@ -458,9 +451,10 @@ impl BillingWriteService {
     }
 
     /// The invoice-post hook: materialize one invoice's term. Rides the caller's post transaction
-    /// (company already bound). Refuses the two conflicts — a manual `due_date` competing with the
-    /// term's derivation, and pre-existing schedule rows — then stamps the derived `due_date` +
-    /// EPD block and seeds the installment rows when the term splits the balance.
+    /// (the ambient org scope already relayed onto it). Refuses the two conflicts — a manual
+    /// `due_date` competing with the term's derivation, and pre-existing schedule rows — then
+    /// stamps the derived `due_date` + EPD block and seeds the installment rows when the term
+    /// splits the balance.
     ///
     /// A single-slice term writes ONLY the due date (one installment would duplicate the header);
     /// a multi-slice term writes the rows and the header's `due_date` = the LAST slice's date
@@ -470,7 +464,6 @@ impl BillingWriteService {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         table: &str,
         invoice_id: Uuid,
-        company_id: Uuid,
         term_id: Uuid,
         posting_date: chrono::NaiveDate,
         grand_total: Decimal,
@@ -480,11 +473,8 @@ impl BillingWriteService {
         let Some((header, lines)) = self.terms.fetch_term(&mut **tx, term_id).await? else {
             return Err(BillingError::TermNotFound(term_id));
         };
-        // The split fence read admits global templates; an own-company term passes trivially. A
-        // term belonging to ANOTHER company is invisible here → TermNotFound, never cross-tenant.
-        if header.company_id.is_some() && header.company_id != Some(company_id) {
-            return Err(BillingError::TermNotFound(term_id));
-        }
+        // Under a composed tenancy decorator the read is fenced: another tenant's term is
+        // invisible here → TermNotFound, never cross-tenant.
         if manual_due_date.is_some() {
             return Err(term_err(
                 "due_date_conflicts_with_term",
@@ -533,7 +523,6 @@ impl BillingWriteService {
                             } else {
                                 "purchase"
                             },
-                            company_id,
                             installment_no: (i + 1) as i32,
                             due_date: *due,
                             amount: *amt,

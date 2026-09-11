@@ -12,7 +12,12 @@ use rust_decimal::Decimal;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope;
+// The scalar read twin lives only in the legacy `company_scope` module. Its connection
+// discipline is what this repository needs — request-dedicated connection when the composing
+// service bound one, plain pool otherwise. The helper's legacy task-local branch is never
+// taken: this module sets no legacy scope of its own (ADR-0029).
+use backbone_orm::company_scope::fetch_optional_scalar_scoped;
 
 use crate::domain::entity::SalesInvoice;
 
@@ -49,7 +54,6 @@ impl SalesInvoiceRepository {
 pub struct NewSalesInvoiceRow<'a> {
     pub id: Uuid,
     pub invoice_number: &'a str,
-    pub company_id: Uuid,
     pub branch_id: Option<Uuid>,
     pub customer_id: Uuid,
     pub source_so_id: Option<Uuid>,
@@ -68,7 +72,6 @@ pub struct NewSalesInvoiceRow<'a> {
 /// The A/R post builder's header projection.
 pub struct ArHeaderRow {
     pub invoice_number: String,
-    pub company_id: Uuid,
     pub branch_id: Option<Uuid>,
     pub customer_id: Uuid,
     pub source_so_id: Option<Uuid>,
@@ -102,7 +105,8 @@ impl SalesInvoiceRepository {
     /// to `grand_total`.
     ///
     /// Takes the CALLER'S connection so the header, its lines, and the tax overlay commit as one unit.
-    /// The caller has already bound the company on it (`bind_company_on`) — don't re-bind here.
+    /// The caller relays the AMBIENT org scope onto it (`org_scope::bind_org_scope_on`) — don't
+    /// re-bind here.
     ///
     /// Returns the raw `sqlx::Error` deliberately: the caller inspects it for a unique violation to
     /// turn a duplicate invoice number into `DuplicateNumber`.
@@ -113,12 +117,12 @@ impl SalesInvoiceRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO billing.sales_invoices
-                (id, invoice_number, company_id, branch_id, customer_id, source_so_id, status,
+                (id, invoice_number, branch_id, customer_id, source_so_id, status,
                  posting_date, due_date, payment_term_id, currency, net_total, tax_total, grand_total, outstanding_amount,
                  receivable_account_id, posting_state)
-               VALUES ($1,$2,$3,$4,$5,$6,'draft'::invoice_status,$7,$8,$9,$10,$11,$12,$13,0,$14,'pending'::gl_posting_state)"#,
+               VALUES ($1,$2,$3,$4,$5,'draft'::invoice_status,$6,$7,$8,$9,$10,$11,$12,0,$13,'pending'::gl_posting_state)"#,
         )
-        .bind(inv.id).bind(inv.invoice_number).bind(inv.company_id).bind(inv.branch_id).bind(inv.customer_id)
+        .bind(inv.id).bind(inv.invoice_number).bind(inv.branch_id).bind(inv.customer_id)
         .bind(inv.source_so_id).bind(inv.posting_date).bind(inv.due_date).bind(inv.payment_term_id).bind(inv.currency)
         .bind(inv.net_total).bind(inv.tax_total).bind(inv.grand_total).bind(inv.receivable_account_id)
         .execute(conn)
@@ -128,17 +132,18 @@ impl SalesInvoiceRepository {
 
     /// Read the header the A/R post is built from. `Ok(None)` = no such live invoice in scope.
     ///
-    /// ID-only: no company argument. `fetch_optional_row_scoped` means it rides a connection carrying
-    /// the caller's `app.company_id` (ADR-0008), so it is fenced by the request/inherited scope.
+    /// ID-only: no tenant argument. `fetch_optional_row_scoped` rides the request-dedicated
+    /// connection when the composing service bound one (carrying the decorator's fence variables),
+    /// plainly on the pool otherwise (ADR-0029).
     pub async fn fetch_ar_header(
         &self,
         pool: &PgPool,
         invoice_id: Uuid,
     ) -> Result<Option<ArHeaderRow>, sqlx::Error> {
-        let row = company_scope::fetch_optional_row_scoped(
+        let row = org_scope::fetch_optional_row_scoped(
             pool,
             sqlx::query(
-                r#"SELECT invoice_number, company_id, branch_id, customer_id, source_so_id, posting_date,
+                r#"SELECT invoice_number, branch_id, customer_id, source_so_id, posting_date,
                           currency, grand_total, receivable_account_id
                    FROM billing.sales_invoices WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
             )
@@ -147,7 +152,6 @@ impl SalesInvoiceRepository {
         .await?;
         Ok(row.map(|r| ArHeaderRow {
             invoice_number: r.get("invoice_number"),
-            company_id: r.get("company_id"),
             branch_id: r.get("branch_id"),
             customer_id: r.get("customer_id"),
             source_so_id: r.get("source_so_id"),
@@ -160,13 +164,13 @@ impl SalesInvoiceRepository {
 
     /// Probe the GL posting state for the posted short-circuit. `Ok(None)` = no such live invoice.
     ///
-    /// ID-only, same request/inherited scope fence as [`Self::fetch_ar_header`].
+    /// ID-only, same request-scope discipline as [`Self::fetch_ar_header`].
     pub async fn fetch_posting_state(
         &self,
         pool: &PgPool,
         invoice_id: Uuid,
     ) -> Result<Option<PostingStateRow>, sqlx::Error> {
-        let row = company_scope::fetch_optional_row_scoped(
+        let row = org_scope::fetch_optional_row_scoped(
             pool,
             sqlx::query(
                 r#"SELECT posting_state::text AS ps, journal_id, accounting_post_id
@@ -183,13 +187,13 @@ impl SalesInvoiceRepository {
     }
 
     /// Read the accounting post id the credit note reverses. The outer `Option` is "no such live
-    /// invoice"; the inner is "never posted". Same ID-only scope fence as above.
+    /// invoice"; the inner is "never posted". Same ID-only scope discipline as above.
     pub async fn fetch_accounting_post_id(
         &self,
         pool: &PgPool,
         invoice_id: Uuid,
     ) -> Result<Option<Option<Uuid>>, sqlx::Error> {
-        company_scope::fetch_optional_scalar_scoped(
+        fetch_optional_scalar_scoped(
             pool,
             sqlx::query_scalar(
                 "SELECT accounting_post_id FROM billing.sales_invoices WHERE id=$1 AND (metadata->>'deleted_at') IS NULL",
@@ -204,13 +208,14 @@ impl SalesInvoiceRepository {
     /// (0 = lost the race, and the loser must NOT re-publish the seam event).
     ///
     /// Record a GL rejection on the pool. The GL-rejected path runs outside the post transaction, so
-    /// this stays pool-based (caller wraps it in `with_company_scope(Some(company))`).
+    /// this stays pool-based — under a composer's request scope it rides the request-dedicated
+    /// connection; with no scope bound it is a plain unfenced execute.
     pub async fn mark_posting_failed(
         &self,
         pool: &PgPool,
         invoice_id: Uuid,
     ) -> Result<(), sqlx::Error> {
-        company_scope::execute_scoped(
+        org_scope::execute_scoped(
             pool,
             sqlx::query("UPDATE billing.sales_invoices SET posting_state='failed'::gl_posting_state WHERE id=$1")
                 .bind(invoice_id),
@@ -220,9 +225,10 @@ impl SalesInvoiceRepository {
     }
 
     // --- Transaction-accepting twins (outbox fence) -------------------------------------------
-    // The caller has already bound the company scope onto `conn` (RLS), so these run the SAME SQL as
-    // their pool counterparts directly on the shared transition transaction — staging the seam event
-    // into the outbox atomically with the state change (mirrors backbone-payment).
+    // The caller has already relayed the ambient org scope onto `conn`
+    // (`org_scope::bind_org_scope_on`), so these run the SAME SQL as their pool counterparts
+    // directly on the shared transition transaction — staging the seam event into the outbox
+    // atomically with the state change (mirrors backbone-payment).
 
     /// Transaction-accepting twin of [`Self::mark_posted`] — returns rows affected (1 = winner).
     pub async fn mark_posted_on(

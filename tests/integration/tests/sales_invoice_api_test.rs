@@ -25,7 +25,6 @@ impl TestDataGenerator for SalesInvoiceTestData {
         json!({
             "id": Uuid::new_v4().to_string(),
             "invoice_number": format!("Test {}", Uuid::new_v4().to_string().split('-').next().unwrap()),
-            "company_id": Uuid::new_v4().to_string(),
             "branch_id": null,
             "customer_id": Uuid::new_v4().to_string(),
             "source_so_id": null,
@@ -56,7 +55,6 @@ impl TestDataGenerator for SalesInvoiceTestData {
         json!({
             "id": id,
             "invoice_number": format!("Test {}", Uuid::new_v4().to_string().split('-').next().unwrap()),
-            "company_id": Uuid::new_v4().to_string(),
             "branch_id": null,
             "customer_id": Uuid::new_v4().to_string(),
             "source_so_id": null,

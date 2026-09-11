@@ -48,11 +48,12 @@ user_owned:
   # edge stays billing→tax) + the template-driven create-path cases.
   - "tests/tax_seam.rs"
   - "tests/document_tax_cases.rs"
-  # Payment-terms behavior suite: derivation goldens, validation refusals, the split-fence
-  # probes, the derived overdue read, and the early-pay-discount resolver's window/clamp cases.
+  # Payment-terms behavior suite: derivation goldens, validation refusals, the derived
+  # overdue read, the early-pay-discount resolver's window/clamp cases, and the tenancy
+  # posture probe (half-fence pin: RLS flags armed, module ships no policy).
   - "tests/payment_term_schedule_golden.rs"
   - "tests/term_validation_refusals.rs"
-  - "tests/global_term_fence_suite.rs"
+  - "tests/tenancy_posture_probe.rs"
   - "tests/overdue_derived_read.rs"
   - "tests/resolve_early_pay_discount.rs"
   - "migrations/20260820100000_invoice_tax_line_tax_columns.up.sql"
@@ -62,6 +63,10 @@ user_owned:
   - "migrations/20260820100003_invoice_payment_term_columns.down.sql"
   - "migrations/20260820100004_payment_terms_split_fence.up.sql"
   - "migrations/20260820100004_payment_terms_split_fence.down.sql"
+  # The guarded company-artifact strip — the strip's ordering guard is hand-authored logic
+  # (decorator-first: never drop the last tenancy key on a populated table).
+  - "migrations/20260911120000_strip_tenancy.up.sql"
+  - "migrations/20260911120000_strip_tenancy.down.sql"
   # The hand-written global-template seed (the seeder target's stub would clobber it).
   - "migrations/seeds/payment_term_seed.sql"
   - "scripts/**"

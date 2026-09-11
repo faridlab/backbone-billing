@@ -5,13 +5,11 @@
 //! This trait defines the repository contract for the PaymentTermLine aggregate.
 //! Implementation is in the infrastructure layer.
 
-use anyhow::Result;
 use async_trait::async_trait;
+use anyhow::Result;
 use uuid::Uuid;
 
-use crate::domain::entity::{
-    PaymentTermAnchor, PaymentTermDelayType, PaymentTermLine, PaymentTermLineValue,
-};
+use crate::domain::entity::{PaymentTermLine, PaymentTermAnchor, PaymentTermDelayType, PaymentTermLineValue};
 
 /// Pagination parameters for list queries
 #[derive(Debug, Clone, Default)]
@@ -47,7 +45,6 @@ pub struct PaymentTermLinePaginatedResult {
 #[derive(Debug, Clone, Default)]
 pub struct PaymentTermLineFilter {
     pub term_id: Option<Uuid>,
-    pub company_id: Option<Uuid>,
     pub value: Option<PaymentTermLineValue>,
     pub delay_type: Option<PaymentTermDelayType>,
     pub anchor: Option<PaymentTermAnchor>,
@@ -56,11 +53,7 @@ pub struct PaymentTermLineFilter {
 impl PaymentTermLineFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.term_id.is_some()
-            || self.company_id.is_some()
-            || self.value.is_some()
-            || self.delay_type.is_some()
-            || self.anchor.is_some()
+        self.term_id.is_some() || self.value.is_some() || self.delay_type.is_some() || self.anchor.is_some()
     }
 }
 
@@ -70,6 +63,7 @@ impl PaymentTermLineFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait PaymentTermLineRepository: Send + Sync {
+
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -94,17 +88,10 @@ pub trait PaymentTermLineRepository: Send + Sync {
     // =========================================================================
 
     /// List payment_term_line with pagination
-    async fn list(
-        &self,
-        params: PaymentTermLinePaginationParams,
-    ) -> Result<PaymentTermLinePaginatedResult>;
+    async fn list(&self, params: PaymentTermLinePaginationParams) -> Result<PaymentTermLinePaginatedResult>;
 
     /// List payment_term_line with pagination and filters
-    async fn list_with_filters(
-        &self,
-        params: PaymentTermLinePaginationParams,
-        filters: PaymentTermLineFilter,
-    ) -> Result<PaymentTermLinePaginatedResult>;
+    async fn list_with_filters(&self, params: PaymentTermLinePaginationParams, filters: PaymentTermLineFilter) -> Result<PaymentTermLinePaginatedResult>;
 
     /// Count all payment_term_line entities
     async fn count(&self) -> Result<u64>;
@@ -126,10 +113,7 @@ pub trait PaymentTermLineRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<PaymentTermLine>>;
 
     /// List soft-deleted payment_term_line entities
-    async fn list_deleted(
-        &self,
-        params: PaymentTermLinePaginationParams,
-    ) -> Result<PaymentTermLinePaginatedResult>;
+    async fn list_deleted(&self, params: PaymentTermLinePaginationParams) -> Result<PaymentTermLinePaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;

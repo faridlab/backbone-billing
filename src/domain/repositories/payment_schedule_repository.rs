@@ -5,11 +5,11 @@
 //! This trait defines the repository contract for the PaymentSchedule aggregate.
 //! Implementation is in the infrastructure layer.
 
-use anyhow::Result;
 use async_trait::async_trait;
+use anyhow::Result;
 use uuid::Uuid;
 
-use crate::domain::entity::{InvoiceKind, PaymentSchedule, PaymentScheduleStatus};
+use crate::domain::entity::{PaymentSchedule, InvoiceKind, PaymentScheduleStatus};
 
 /// Pagination parameters for list queries
 #[derive(Debug, Clone, Default)]
@@ -46,17 +46,13 @@ pub struct PaymentSchedulePaginatedResult {
 pub struct PaymentScheduleFilter {
     pub invoice_ref: Option<Uuid>,
     pub invoice_kind: Option<InvoiceKind>,
-    pub company_id: Option<Uuid>,
     pub status: Option<PaymentScheduleStatus>,
 }
 
 impl PaymentScheduleFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.invoice_ref.is_some()
-            || self.invoice_kind.is_some()
-            || self.company_id.is_some()
-            || self.status.is_some()
+        self.invoice_ref.is_some() || self.invoice_kind.is_some() || self.status.is_some()
     }
 }
 
@@ -66,6 +62,7 @@ impl PaymentScheduleFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait PaymentScheduleRepository: Send + Sync {
+
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -90,17 +87,10 @@ pub trait PaymentScheduleRepository: Send + Sync {
     // =========================================================================
 
     /// List payment_schedule with pagination
-    async fn list(
-        &self,
-        params: PaymentSchedulePaginationParams,
-    ) -> Result<PaymentSchedulePaginatedResult>;
+    async fn list(&self, params: PaymentSchedulePaginationParams) -> Result<PaymentSchedulePaginatedResult>;
 
     /// List payment_schedule with pagination and filters
-    async fn list_with_filters(
-        &self,
-        params: PaymentSchedulePaginationParams,
-        filters: PaymentScheduleFilter,
-    ) -> Result<PaymentSchedulePaginatedResult>;
+    async fn list_with_filters(&self, params: PaymentSchedulePaginationParams, filters: PaymentScheduleFilter) -> Result<PaymentSchedulePaginatedResult>;
 
     /// Count all payment_schedule entities
     async fn count(&self) -> Result<u64>;
@@ -122,10 +112,7 @@ pub trait PaymentScheduleRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<PaymentSchedule>>;
 
     /// List soft-deleted payment_schedule entities
-    async fn list_deleted(
-        &self,
-        params: PaymentSchedulePaginationParams,
-    ) -> Result<PaymentSchedulePaginatedResult>;
+    async fn list_deleted(&self, params: PaymentSchedulePaginationParams) -> Result<PaymentSchedulePaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;

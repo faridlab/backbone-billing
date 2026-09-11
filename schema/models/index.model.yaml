@@ -14,15 +14,17 @@ version: 2
 schema: billing
 description: "Billing: region-neutral AR/AP invoicing (Sales + Purchase Invoice) emitting revenue/expense AccountingPosts into backbone-accounting; tax via a removable InvoiceTaxLine overlay; drives buying.mark_billed via PurchaseInvoicePosted."
 
-# ADR-0014 company fence: every entity here is company-scoped and fenced strict —
-# invoice headers and their child lines (tax lines, payment schedules) each carry
-# company_id and are fenced; no cross-company invoice data. ONE exception:
-# payment_terms / payment_term_lines carry a NULLABLE company_id (NULL = global
-# template every tenant reads, none mutates) and are fenced SPLIT — read admits
-# global rows, write stays own-only (the corporate currency_exchanges shape).
-# The generator derives plain-strict stanzas for them; the payment-terms fence
-# migration re-states the split shape, and a regen that reverts it is a REGRESSION.
-company_fence: strict
+# Tenancy: none, by design (ADR-0029). The module is tenant-agnostic and reusable —
+# it ships no scoping column and no fence declaration. A composing backend-service
+# that wants these tables org-scoped declares them in its tenancy.yaml; the
+# decorator installs org_unit_id, the RLS policy, and the org-scoped per-unit
+# indexes (the customer/supplier and due-date/status listing indexes) at
+# composition time.
+#
+# Shared-row note: the payment_terms / payment_term_lines tables formerly carried
+# NULL-company global templates under a split fence. A composing service that
+# wants that catalog shared declares them ROOT-ANCHORED SHARED (allow_root) in
+# its tenancy.yaml and backfills the former NULL rows onto its root org unit.
 
 config:
   database: postgresql

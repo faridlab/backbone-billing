@@ -18,12 +18,12 @@
 #![allow(unused_imports)]
 
 // Generated modules
-pub mod application;
 pub mod domain;
-pub mod exports;
 pub mod infrastructure;
+pub mod application;
 pub mod presentation;
 pub mod seeders;
+pub mod exports;
 
 // Re-exports for convenience - Domain entities
 pub use domain::entity::*;
@@ -34,10 +34,10 @@ pub use infrastructure::persistence::*;
 // Re-exports - Application services
 pub use application::service::InvoiceTaxLineService;
 pub use application::service::PaymentScheduleService;
-pub use application::service::PaymentTermLineService;
 pub use application::service::PaymentTermService;
-pub use application::service::PurchaseInvoiceLineService;
+pub use application::service::PaymentTermLineService;
 pub use application::service::PurchaseInvoiceService;
+pub use application::service::PurchaseInvoiceLineService;
 pub use application::service::SalesInvoiceService;
 // <<< CUSTOM
 // The AR/AP seam contract — re-exported at the crate root so sibling modules depend on
@@ -60,9 +60,9 @@ pub use application::service::SalesInvoiceLineService;
 // Re-exports - Workflows
 pub use application::workflows::*;
 
+use std::sync::Arc;
 use axum::Router;
 use sqlx::PgPool;
-use std::sync::Arc;
 
 /// Billing module configuration
 ///
@@ -102,37 +102,25 @@ impl BillingModule {
     /// real deployment; use this only in trusted/admin/seeding contexts.
     pub fn all_crud_routes(&self) -> Router {
         use presentation::http::{
-            create_invoice_tax_line_routes, create_payment_schedule_routes,
-            create_payment_term_line_routes, create_payment_term_routes,
-            create_purchase_invoice_line_routes, create_purchase_invoice_routes,
-            create_sales_invoice_line_routes, create_sales_invoice_routes,
+            create_invoice_tax_line_routes,
+            create_payment_schedule_routes,
+            create_payment_term_routes,
+            create_payment_term_line_routes,
+            create_purchase_invoice_routes,
+            create_purchase_invoice_line_routes,
+            create_sales_invoice_routes,
+            create_sales_invoice_line_routes,
         };
 
         Router::new()
-            .merge(create_invoice_tax_line_routes(
-                self.invoice_tax_line_service.clone(),
-            ))
-            .merge(create_payment_schedule_routes(
-                self.payment_schedule_service.clone(),
-            ))
-            .merge(create_payment_term_routes(
-                self.payment_term_service.clone(),
-            ))
-            .merge(create_payment_term_line_routes(
-                self.payment_term_line_service.clone(),
-            ))
-            .merge(create_purchase_invoice_routes(
-                self.purchase_invoice_service.clone(),
-            ))
-            .merge(create_purchase_invoice_line_routes(
-                self.purchase_invoice_line_service.clone(),
-            ))
-            .merge(create_sales_invoice_routes(
-                self.sales_invoice_service.clone(),
-            ))
-            .merge(create_sales_invoice_line_routes(
-                self.sales_invoice_line_service.clone(),
-            ))
+            .merge(create_invoice_tax_line_routes(self.invoice_tax_line_service.clone()))
+            .merge(create_payment_schedule_routes(self.payment_schedule_service.clone()))
+            .merge(create_payment_term_routes(self.payment_term_service.clone()))
+            .merge(create_payment_term_line_routes(self.payment_term_line_service.clone()))
+            .merge(create_purchase_invoice_routes(self.purchase_invoice_service.clone()))
+            .merge(create_purchase_invoice_line_routes(self.purchase_invoice_line_service.clone()))
+            .merge(create_sales_invoice_routes(self.sales_invoice_service.clone()))
+            .merge(create_sales_invoice_line_routes(self.sales_invoice_line_service.clone()))
     }
 
     /// Deprecated alias for [`Self::all_crud_routes`]. `routes()` reads like
@@ -140,9 +128,7 @@ impl BillingModule {
     /// mount exposes unguarded writes. Compose a guarded router (read + validated
     /// writes) for production, or call `all_crud_routes()` to opt into the full
     /// unguarded surface explicitly.
-    #[deprecated(
-        note = "mounts unvalidated generic CRUD; prefer readonly_routes() + validated writes, or all_crud_routes() for the full/unguarded surface"
-    )]
+    #[deprecated(note = "mounts unvalidated generic CRUD; prefer readonly_routes() + validated writes, or all_crud_routes() for the full/unguarded surface")]
     pub fn routes(&self) -> Router {
         self.all_crud_routes()
     }
@@ -154,37 +140,25 @@ impl BillingModule {
     /// merge validated write routes (or a write service's HTTP layer) onto it.
     pub fn readonly_routes(&self) -> Router {
         use presentation::http::{
-            create_invoice_tax_line_read_routes, create_payment_schedule_read_routes,
-            create_payment_term_line_read_routes, create_payment_term_read_routes,
-            create_purchase_invoice_line_read_routes, create_purchase_invoice_read_routes,
-            create_sales_invoice_line_read_routes, create_sales_invoice_read_routes,
+            create_invoice_tax_line_read_routes,
+            create_payment_schedule_read_routes,
+            create_payment_term_read_routes,
+            create_payment_term_line_read_routes,
+            create_purchase_invoice_read_routes,
+            create_purchase_invoice_line_read_routes,
+            create_sales_invoice_read_routes,
+            create_sales_invoice_line_read_routes,
         };
 
         Router::new()
-            .merge(create_invoice_tax_line_read_routes(
-                self.invoice_tax_line_service.clone(),
-            ))
-            .merge(create_payment_schedule_read_routes(
-                self.payment_schedule_service.clone(),
-            ))
-            .merge(create_payment_term_read_routes(
-                self.payment_term_service.clone(),
-            ))
-            .merge(create_payment_term_line_read_routes(
-                self.payment_term_line_service.clone(),
-            ))
-            .merge(create_purchase_invoice_read_routes(
-                self.purchase_invoice_service.clone(),
-            ))
-            .merge(create_purchase_invoice_line_read_routes(
-                self.purchase_invoice_line_service.clone(),
-            ))
-            .merge(create_sales_invoice_read_routes(
-                self.sales_invoice_service.clone(),
-            ))
-            .merge(create_sales_invoice_line_read_routes(
-                self.sales_invoice_line_service.clone(),
-            ))
+            .merge(create_invoice_tax_line_read_routes(self.invoice_tax_line_service.clone()))
+            .merge(create_payment_schedule_read_routes(self.payment_schedule_service.clone()))
+            .merge(create_payment_term_read_routes(self.payment_term_service.clone()))
+            .merge(create_payment_term_line_read_routes(self.payment_term_line_service.clone()))
+            .merge(create_purchase_invoice_read_routes(self.purchase_invoice_service.clone()))
+            .merge(create_purchase_invoice_line_read_routes(self.purchase_invoice_line_service.clone()))
+            .merge(create_sales_invoice_read_routes(self.sales_invoice_service.clone()))
+            .merge(create_sales_invoice_line_read_routes(self.sales_invoice_line_service.clone()))
     }
 
     // <<< CUSTOM METHODS
@@ -199,7 +173,9 @@ pub struct BillingModuleBuilder {
 impl BillingModuleBuilder {
     /// Create a new builder
     pub fn new() -> Self {
-        Self { db_pool: None }
+        Self {
+            db_pool: None,
+        }
     }
 
     /// Set the database connection pool
@@ -213,60 +189,40 @@ impl BillingModuleBuilder {
 
     /// Build the module with configured dependencies
     pub fn build(self) -> anyhow::Result<BillingModule> {
-        let db_pool = self
-            .db_pool
+        let db_pool = self.db_pool
             .ok_or_else(|| anyhow::anyhow!("Database pool not configured"))?;
 
         // InvoiceTaxLine service
         let invoice_tax_line_repository = Arc::new(InvoiceTaxLineRepository::new(db_pool.clone()));
-        let invoice_tax_line_service = Arc::new(InvoiceTaxLineService::with_repository(
-            invoice_tax_line_repository.clone(),
-        ));
+        let invoice_tax_line_service = Arc::new(InvoiceTaxLineService::with_repository(invoice_tax_line_repository.clone()));
 
         // PaymentSchedule service
         let payment_schedule_repository = Arc::new(PaymentScheduleRepository::new(db_pool.clone()));
-        let payment_schedule_service = Arc::new(PaymentScheduleService::with_repository(
-            payment_schedule_repository.clone(),
-        ));
+        let payment_schedule_service = Arc::new(PaymentScheduleService::with_repository(payment_schedule_repository.clone()));
 
         // PaymentTerm service
         let payment_term_repository = Arc::new(PaymentTermRepository::new(db_pool.clone()));
-        let payment_term_service = Arc::new(PaymentTermService::with_repository(
-            payment_term_repository.clone(),
-        ));
+        let payment_term_service = Arc::new(PaymentTermService::with_repository(payment_term_repository.clone()));
 
         // PaymentTermLine service
-        let payment_term_line_repository =
-            Arc::new(PaymentTermLineRepository::new(db_pool.clone()));
-        let payment_term_line_service = Arc::new(PaymentTermLineService::with_repository(
-            payment_term_line_repository.clone(),
-        ));
+        let payment_term_line_repository = Arc::new(PaymentTermLineRepository::new(db_pool.clone()));
+        let payment_term_line_service = Arc::new(PaymentTermLineService::with_repository(payment_term_line_repository.clone()));
 
         // PurchaseInvoice service
         let purchase_invoice_repository = Arc::new(PurchaseInvoiceRepository::new(db_pool.clone()));
-        let purchase_invoice_service = Arc::new(PurchaseInvoiceService::with_repository(
-            purchase_invoice_repository.clone(),
-        ));
+        let purchase_invoice_service = Arc::new(PurchaseInvoiceService::with_repository(purchase_invoice_repository.clone()));
 
         // PurchaseInvoiceLine service
-        let purchase_invoice_line_repository =
-            Arc::new(PurchaseInvoiceLineRepository::new(db_pool.clone()));
-        let purchase_invoice_line_service = Arc::new(PurchaseInvoiceLineService::with_repository(
-            purchase_invoice_line_repository.clone(),
-        ));
+        let purchase_invoice_line_repository = Arc::new(PurchaseInvoiceLineRepository::new(db_pool.clone()));
+        let purchase_invoice_line_service = Arc::new(PurchaseInvoiceLineService::with_repository(purchase_invoice_line_repository.clone()));
 
         // SalesInvoice service
         let sales_invoice_repository = Arc::new(SalesInvoiceRepository::new(db_pool.clone()));
-        let sales_invoice_service = Arc::new(SalesInvoiceService::with_repository(
-            sales_invoice_repository.clone(),
-        ));
+        let sales_invoice_service = Arc::new(SalesInvoiceService::with_repository(sales_invoice_repository.clone()));
 
         // SalesInvoiceLine service
-        let sales_invoice_line_repository =
-            Arc::new(SalesInvoiceLineRepository::new(db_pool.clone()));
-        let sales_invoice_line_service = Arc::new(SalesInvoiceLineService::with_repository(
-            sales_invoice_line_repository.clone(),
-        ));
+        let sales_invoice_line_repository = Arc::new(SalesInvoiceLineRepository::new(db_pool.clone()));
+        let sales_invoice_line_service = Arc::new(SalesInvoiceLineService::with_repository(sales_invoice_line_repository.clone()));
 
         // <<< CUSTOM
         // END CUSTOM

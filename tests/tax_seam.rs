@@ -123,7 +123,6 @@ async fn sales_post_routes_to_tax_and_assigns_gapless_efaktur() {
     let inv = bill
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,
@@ -201,11 +200,12 @@ async fn sales_post_routes_to_tax_and_assigns_gapless_efaktur() {
     let efaktur = efaktur.expect("sales with output → e-Faktur assigned");
 
     // 4) TaxTransaction recorded; e-Faktur number is gapless DJP format.
+    // ID-only, per the tenancy strip: tax tables carry no tenant column, so the count pins the
+    // invoice this test minted.
     let txn_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM tax.tax_transactions WHERE invoice_ref=$1 AND company_id=$2",
+        "SELECT COUNT(*) FROM tax.tax_transactions WHERE invoice_ref=$1",
     )
     .bind(inv)
-    .bind(company)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -236,8 +236,8 @@ async fn sales_post_routes_to_tax_and_assigns_gapless_efaktur() {
         "re-delivery reuses the same EFakturDocument"
     );
     let efaktur_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM tax.efaktur_documents WHERE company_id=$1")
-            .bind(company)
+        sqlx::query_scalar("SELECT COUNT(*) FROM tax.efaktur_documents WHERE tax_transaction_id=$1")
+            .bind(txn)
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -262,7 +262,6 @@ async fn purchase_post_routes_to_tax_without_efaktur() {
     let inv = bill
         .create_purchase_invoice(NewPurchaseInvoice {
             invoice_number: uq("PI"),
-            company_id: company,
             branch_id: None,
             supplier_id: Uuid::new_v4(),
             source_po_id: None,
@@ -328,10 +327,9 @@ async fn purchase_post_routes_to_tax_without_efaktur() {
         .unwrap();
     assert!(efaktur.is_none(), "purchase → no e-Faktur assigned");
     let txn_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM tax.tax_transactions WHERE invoice_ref=$1 AND company_id=$2",
+        "SELECT COUNT(*) FROM tax.tax_transactions WHERE invoice_ref=$1",
     )
     .bind(inv)
-    .bind(company)
     .fetch_one(&pool)
     .await
     .unwrap();

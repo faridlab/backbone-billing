@@ -5,11 +5,11 @@
 //! This trait defines the repository contract for the PaymentTerm aggregate.
 //! Implementation is in the infrastructure layer.
 
-use anyhow::Result;
 use async_trait::async_trait;
+use anyhow::Result;
 use uuid::Uuid;
 
-use crate::domain::entity::{DiscountTaxBasis, PaymentTerm, PaymentTermStatus};
+use crate::domain::entity::{PaymentTerm, DiscountTaxBasis, PaymentTermStatus};
 
 /// Pagination parameters for list queries
 #[derive(Debug, Clone, Default)]
@@ -44,7 +44,6 @@ pub struct PaymentTermPaginatedResult {
 /// Filter parameters for list queries
 #[derive(Debug, Clone, Default)]
 pub struct PaymentTermFilter {
-    pub company_id: Option<Uuid>,
     pub name: Option<String>,
     pub note: Option<String>,
     pub status: Option<PaymentTermStatus>,
@@ -56,13 +55,7 @@ pub struct PaymentTermFilter {
 impl PaymentTermFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some()
-            || self.name.is_some()
-            || self.note.is_some()
-            || self.status.is_some()
-            || self.early_discount.is_some()
-            || self.discount_account_id.is_some()
-            || self.discount_tax_basis.is_some()
+        self.name.is_some() || self.note.is_some() || self.status.is_some() || self.early_discount.is_some() || self.discount_account_id.is_some() || self.discount_tax_basis.is_some()
     }
 }
 
@@ -72,6 +65,7 @@ impl PaymentTermFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait PaymentTermRepository: Send + Sync {
+
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -96,15 +90,10 @@ pub trait PaymentTermRepository: Send + Sync {
     // =========================================================================
 
     /// List payment_term with pagination
-    async fn list(&self, params: PaymentTermPaginationParams)
-        -> Result<PaymentTermPaginatedResult>;
+    async fn list(&self, params: PaymentTermPaginationParams) -> Result<PaymentTermPaginatedResult>;
 
     /// List payment_term with pagination and filters
-    async fn list_with_filters(
-        &self,
-        params: PaymentTermPaginationParams,
-        filters: PaymentTermFilter,
-    ) -> Result<PaymentTermPaginatedResult>;
+    async fn list_with_filters(&self, params: PaymentTermPaginationParams, filters: PaymentTermFilter) -> Result<PaymentTermPaginatedResult>;
 
     /// Count all payment_term entities
     async fn count(&self) -> Result<u64>;
@@ -126,10 +115,7 @@ pub trait PaymentTermRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<PaymentTerm>>;
 
     /// List soft-deleted payment_term entities
-    async fn list_deleted(
-        &self,
-        params: PaymentTermPaginationParams,
-    ) -> Result<PaymentTermPaginatedResult>;
+    async fn list_deleted(&self, params: PaymentTermPaginationParams) -> Result<PaymentTermPaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;

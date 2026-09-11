@@ -3,6 +3,10 @@
 //! `SalesInvoicePosted` lets consumers (e.g. the tax faktur-pajak overlay, loyalty) react;
 //! `PurchaseInvoicePosted` carries the billed lines so an ACL routes them to
 //! `backbone-buying::mark_billed` — retiring buying's simulated billing leg.
+//!
+//! **Tenancy (ADR-0029).** The module keys no statement on a tenant; the `company_id` these
+//! payloads carry is the LEGACY TWIN — the ambient org scope's legacy company id echoed for
+//! still-company-fenced consumers (until those strip too), nil when no scope is bound.
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -13,6 +17,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SalesInvoicePosted {
     pub invoice_id: Uuid,
+    /// Legacy tenant twin (ADR-0029) for unstripped consumers — see the module docs.
     pub company_id: Uuid,
     pub journal_id: Uuid,
     pub post_id: Uuid,
@@ -41,6 +46,7 @@ pub struct BilledLine {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PurchaseInvoicePosted {
     pub invoice_id: Uuid,
+    /// Legacy tenant twin (ADR-0029) for unstripped consumers — see the module docs.
     pub company_id: Uuid,
     pub journal_id: Uuid,
     pub post_id: Uuid,
@@ -55,12 +61,13 @@ pub struct PurchaseInvoicePosted {
     pub withholding_total: Decimal,
 }
 
-/// An invoice was cancelled (a reversal post is emitted separately). `company_id` lets a
-/// consumer bound its RLS scope from the payload alone — the other posted events carry it for
-/// the same reason.
+/// An invoice was cancelled (a reversal post is emitted separately). `company_id` lets an
+/// unstripped consumer bound its RLS scope from the payload alone — the other posted events
+/// carry it for the same reason (the legacy twin, ADR-0029).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InvoiceCancelled {
     pub invoice_id: Uuid,
+    /// Legacy tenant twin (ADR-0029) for unstripped consumers — see the module docs.
     pub company_id: Uuid,
     pub kind: String, // "sales" | "purchase"
 }

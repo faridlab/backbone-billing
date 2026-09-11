@@ -2,7 +2,8 @@
 //! accounting → buying** — retiring buying's *simulated* billing leg with a real Purchase Invoice.
 //! Zero normal Cargo edges (buying + accounting are dev-deps only).
 //!
-//! Flow: buying confirms a PO + records receipt (→ `to_bill`) → billing raises a Purchase Invoice
+//! Flow: buying confirms a PO + records receipt (→ `purchase`, the five-state band's name for the
+//! confirmed-and-received-awaiting-invoice state) → billing raises a Purchase Invoice
 //! against that PO → posts A/P into the REAL ledger (Dr Expense · Dr PPN Input · Cr A/P · Cr PPh) +
 //! emits `PurchaseInvoicePosted{source_po_id, billed_lines}`; an ACL routes it → buying `mark_billed`
 //! → `billed_qty` advances → PO `completed`. All three schemas co-locate in one DB.
@@ -127,9 +128,9 @@ async fn seed_coa(pool: &PgPool) -> (Uuid, HashMap<&'static str, Uuid>) {
     let mut m = HashMap::new();
     for (code, name, at, st, nb) in coa {
         let id = Uuid::new_v4();
-        sqlx::query(r#"INSERT INTO accounting.accounts (id, company_id, account_number, account_code, name, account_type, account_subtype, normal_balance, is_header, is_detail, status)
-            VALUES ($1,$2,$3,$4,$5,$6::account_type,$7::account_subtype,$8::normal_balance,false,true,'active'::account_status)"#)
-            .bind(id).bind(company).bind(code).bind(code).bind(name).bind(at).bind(st).bind(nb)
+        sqlx::query(r#"INSERT INTO accounting.accounts (id, account_number, account_code, name, account_type, account_subtype, normal_balance, is_header, is_detail, status)
+            VALUES ($1,$2,$3,$4,$5::account_type,$6::account_subtype,$7::normal_balance,false,true,'active'::account_status)"#)
+            .bind(id).bind(code).bind(code).bind(name).bind(at).bind(st).bind(nb)
             .execute(pool).await.expect("seed acct");
         m.insert(*code, id);
     }
@@ -170,7 +171,8 @@ async fn purchase_invoice_bills_po_across_three_modules() {
         )),
     };
 
-    // 1) buying: PO for 10 @ 90,000, confirm, record receipt → to_bill.
+    // 1) buying: PO for 10 @ 90,000, confirm, record receipt → `purchase` (the five-state
+    //    band's confirmed+received state; the invoice watermark now lives on invoice_status).
     let po = buying
         .create_purchase_order(NewPurchaseOrder {
             po_number: uq("PO"),
@@ -182,6 +184,9 @@ async fn purchase_invoice_bills_po_across_three_modules() {
             order_date: day(),
             schedule_date: None,
             currency: None,
+            currency_rate: None,
+            agreement_id: None,
+            project_id: None,
             tax_rate: Decimal::ZERO,
             notes: None,
             lines: vec![NewLine {
@@ -190,15 +195,17 @@ async fn purchase_invoice_bills_po_across_three_modules() {
                 description: None,
                 quantity: d("10"),
                 rate: d("90000"),
+                qty_received_method: None,
+                purchase_method: None,
             }],
         })
         .await
         .unwrap();
-    buying.confirm_purchase_order(po).await.unwrap();
-    buying.mark_received(po, &[(item, d("10"))]).await.unwrap();
+    buying.confirm_purchase_order(po, false).await.unwrap();
+    buying.mark_received(po, company, &[(item, d("10"))]).await.unwrap();
     assert_eq!(
         po_status(&pool, po).await,
-        "to_bill",
+        "purchase",
         "received, awaiting the real invoice"
     );
 
@@ -207,7 +214,6 @@ async fn purchase_invoice_bills_po_across_three_modules() {
     let inv = billing
         .create_purchase_invoice(NewPurchaseInvoice {
             invoice_number: uq("PI"),
-            company_id: company,
             branch_id: None,
             supplier_id: supplier,
             source_po_id: Some(po),
@@ -277,10 +283,20 @@ async fn purchase_invoice_bills_po_across_three_modules() {
         .iter()
         .map(|l| (l.item_id, l.quantity))
         .collect();
-    buying.mark_billed(po, &billed).await.unwrap();
+    buying.mark_billed(po, company, &billed).await.unwrap();
 
     // 5) the PO is now fully billed against a real invoice → completed.
-    assert_eq!(po_status(&pool, po).await, "completed");
+    // Five-state band: fully-received-and-billed no longer renames `status` — the maturity
+    // lives on the invoice_status watermark (status stays `purchase`).
+    let (status, invoice_status): (String, String) = sqlx::query_as(
+        "SELECT status::text, invoice_status::text FROM buying.purchase_orders WHERE id=$1",
+    )
+    .bind(po)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "purchase");
+    assert_eq!(invoice_status, "invoiced", "billing the full receipt matures the PO");
     let bq: Decimal =
         sqlx::query_scalar("SELECT billed_qty FROM buying.purchase_order_items WHERE order_id=$1")
             .bind(po)

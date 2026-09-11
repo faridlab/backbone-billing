@@ -110,18 +110,24 @@ async fn seed_coa(pool: &PgPool) -> (Uuid, HashMap<&'static str, Uuid>) {
     let mut m = HashMap::new();
     for (code, name, at, st, nb) in coa {
         let id = Uuid::new_v4();
-        sqlx::query(r#"INSERT INTO accounting.accounts (id, company_id, account_number, account_code, name, account_type, account_subtype, normal_balance, is_header, is_detail, status)
-            VALUES ($1,$2,$3,$4,$5,$6::account_type,$7::account_subtype,$8::normal_balance,false,true,'active'::account_status)"#)
-            .bind(id).bind(company).bind(code).bind(code).bind(name).bind(at).bind(st).bind(nb)
+        sqlx::query(r#"INSERT INTO accounting.accounts (id, account_number, account_code, name, account_type, account_subtype, normal_balance, is_header, is_detail, status)
+            VALUES ($1,$2,$3,$4,$5::account_type,$6::account_subtype,$7::normal_balance,false,true,'active'::account_status)"#)
+            .bind(id).bind(code).bind(code).bind(name).bind(at).bind(st).bind(nb)
             .execute(pool).await.expect("seed acct");
         m.insert(*code, id);
     }
     (company, m)
 }
 
-async fn journal_count(pool: &PgPool, company: Uuid) -> i64 {
-    sqlx::query_scalar("SELECT COUNT(*) FROM accounting.journals WHERE company_id=$1")
-        .bind(company)
+/// ID-only, per the tenancy strip: accounting.journals carries no tenant column, so the count
+/// pins the journals that touched THIS test's freshly-minted COA accounts.
+async fn journal_count(pool: &PgPool, coa: &HashMap<&'static str, Uuid>) -> i64 {
+    let accounts: Vec<Uuid> = coa.values().copied().collect();
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM accounting.journals j WHERE EXISTS (\
+           SELECT 1 FROM accounting.journal_lines jl \
+           WHERE jl.journal_id = j.id AND jl.account_id = ANY($1))")
+        .bind(&accounts)
         .fetch_one(pool)
         .await
         .unwrap()
@@ -132,7 +138,7 @@ async fn journal_count(pool: &PgPool, company: Uuid) -> i64 {
 #[tokio::test]
 async fn sales_invoice_posts_balanced_revenue_into_the_real_gl() {
     let pool = pool().await;
-    let (company, coa) = seed_coa(&pool).await;
+    let (_company, coa) = seed_coa(&pool).await;
     let customer = Uuid::new_v4();
     let item = Uuid::new_v4();
     let billing = BillingWriteService::new(pool.clone());
@@ -144,7 +150,6 @@ async fn sales_invoice_posts_balanced_revenue_into_the_real_gl() {
     let inv = billing
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: customer,
             source_so_id: None,
@@ -236,14 +241,13 @@ async fn sales_invoice_posts_balanced_revenue_into_the_real_gl() {
 #[tokio::test]
 async fn concurrent_double_post_yields_one_journal() {
     let pool = pool().await;
-    let (company, coa) = seed_coa(&pool).await;
+    let (_company, coa) = seed_coa(&pool).await;
     let customer = Uuid::new_v4();
     let billing = BillingWriteService::new(pool.clone());
 
     let inv = billing
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: customer,
             source_so_id: None,
@@ -282,7 +286,7 @@ async fn concurrent_double_post_yields_one_journal() {
     assert!(second.idempotent_reuse, "a re-post reuses the recorded ack");
     assert_eq!(first.journal_id, second.journal_id);
     assert_eq!(
-        journal_count(&pool, company).await,
+        journal_count(&pool, &coa).await,
         1,
         "exactly one journal for the company"
     );

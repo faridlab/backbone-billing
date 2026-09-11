@@ -24,11 +24,6 @@ models:
         attributes: ["@required", "@max(40)"]
         description: "Human reference (the post's source_reference)"
 
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "Books owner # logical FK to organization.Company.id"
-
       branch_id:
         type: uuid?
         attributes: ["@exclude_from_foreign_key_check"]
@@ -145,11 +140,12 @@ models:
         inverse: invoice
 
     indexes:
+      # No tenancy indexes (ADR-0029): the module is tenant-agnostic. The per-unit
+      # customer/status listing index is installed by the composing service's tenancy
+      # decorator (org_unit_id-leading), not declared here.
       - type: unique
         fields: [invoice_number]
         where: "deleted_at IS NULL"
-      - type: index
-        fields: [company_id, customer_id, status]
       - type: index
         fields: [posting_state]
 
@@ -167,11 +163,6 @@ models:
         type: uuid
         attributes: ["@required", "@foreign_key(SalesInvoice.id)"]
         description: "Owning invoice"
-
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "Books owner # logical FK to organization.Company.id (denormalized from the header so the line row passes the ADR-0008 RLS fence on its own)"
 
       item_id:
         type: uuid

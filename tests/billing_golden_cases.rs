@@ -101,8 +101,7 @@ fn tax(acct: Uuid, basis: &str, amt: &str) -> NewTaxLine {
 async fn sales_invoice_math_and_ar_post() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, rev, ar, ppn) = (
-        Uuid::new_v4(),
+    let (item, rev, ar, ppn) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -111,7 +110,6 @@ async fn sales_invoice_math_and_ar_post() {
     let id = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,
@@ -162,8 +160,7 @@ async fn sales_invoice_math_and_ar_post() {
 async fn purchase_invoice_math_and_ap_post() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, exp, ap, ppn_in, pph) = (
-        Uuid::new_v4(),
+    let (item, exp, ap, ppn_in, pph) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -173,7 +170,6 @@ async fn purchase_invoice_math_and_ap_post() {
     let id = w
         .create_purchase_invoice(NewPurchaseInvoice {
             invoice_number: uq("PI"),
-            company_id: company,
             branch_id: None,
             supplier_id: Uuid::new_v4(),
             source_po_id: None,
@@ -212,8 +208,7 @@ async fn purchase_invoice_math_and_ap_post() {
 async fn posting_is_idempotent() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, rev, ar) = (
-        Uuid::new_v4(),
+    let (item, rev, ar) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -221,7 +216,6 @@ async fn posting_is_idempotent() {
     let id = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,
@@ -253,15 +247,13 @@ async fn posting_is_idempotent() {
 async fn validation_gates() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, rev, ar) = (
-        Uuid::new_v4(),
+    let (item, rev, ar) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
     );
     let base = |num: String, lines: Vec<NewInvoiceLine>| NewSalesInvoice {
         invoice_number: num,
-        company_id: company,
         branch_id: None,
         customer_id: Uuid::new_v4(),
         source_so_id: None,
@@ -305,8 +297,7 @@ async fn validation_gates() {
 async fn tax_free_invoice_posts_net_only() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, rev, ar) = (
-        Uuid::new_v4(),
+    let (item, rev, ar) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -314,7 +305,6 @@ async fn tax_free_invoice_posts_net_only() {
     let id = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,
@@ -348,8 +338,7 @@ async fn tax_free_invoice_posts_net_only() {
 async fn sales_invoice_revenue_grouped_by_account() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let (company, item, ar, rev_a, rev_b) = (
-        Uuid::new_v4(),
+    let (item, ar, rev_a, rev_b) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -358,7 +347,6 @@ async fn sales_invoice_revenue_grouped_by_account() {
     let id = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,

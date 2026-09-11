@@ -59,11 +59,10 @@ impl GlPostSink for OkGl {
     }
 }
 
-async fn sales(w: &BillingWriteService, company: Uuid, so: Option<Uuid>) -> Uuid {
+async fn sales(w: &BillingWriteService, so: Option<Uuid>) -> Uuid {
     let (item, rev, ar) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
     w.create_sales_invoice(NewSalesInvoice {
         invoice_number: uq("SI"),
-        company_id: company,
         branch_id: None,
         customer_id: Uuid::new_v4(),
         source_so_id: so,
@@ -91,8 +90,11 @@ async fn sales(w: &BillingWriteService, company: Uuid, so: Option<Uuid>) -> Uuid
 async fn payment_schedule_installments() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
+    // add_payment_schedule keeps its company parameter as the LEGACY TWIN (the settlement seam
+    // is payment-driven and payment still publishes it) — a value is required to pass, but with
+    // no decorator bound it fences nothing module-side.
     let company = Uuid::new_v4();
-    let inv = sales(&w, company, None).await;
+    let inv = sales(&w, None).await;
     w.add_payment_schedule(
         inv,
         "sales",
@@ -121,9 +123,8 @@ async fn sales_invoice_posted_event_is_emitted() {
     let pool = pool().await;
     let rec = Recorder::default();
     let w = BillingWriteService::with_sink(pool.clone(), Arc::new(rec.clone()));
-    let company = Uuid::new_v4();
     let so = Uuid::new_v4();
-    let inv = sales(&w, company, Some(so)).await;
+    let inv = sales(&w, Some(so)).await;
     w.post_sales_invoice(
         inv,
         &OkGl {
@@ -144,5 +145,7 @@ async fn sales_invoice_posted_event_is_emitted() {
         .expect("SalesInvoicePosted emitted");
     assert_eq!(posted.source_so_id, Some(so));
     assert_eq!(posted.grand_total, d("300000.00"));
-    assert_eq!(posted.company_id, company);
+    // No ambient scope bound in this test (undecorated deployment): the event's company_id is
+    // the legacy twin (ADR-0029) and echoes nil until a composing service binds a scope.
+    assert_eq!(posted.company_id, Uuid::nil());
 }

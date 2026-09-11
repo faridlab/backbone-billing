@@ -1,12 +1,12 @@
-use chrono::{DateTime, NaiveDate, Utc};
-use rust_decimal::Decimal;
+use chrono::{DateTime, Utc, NaiveDate};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
+use rust_decimal::Decimal;
 
-use super::AuditMetadata;
 use super::InvoiceKind;
 use super::PaymentScheduleStatus;
+use super::AuditMetadata;
 
 /// Strongly-typed ID for PaymentSchedule
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -14,15 +14,9 @@ use super::PaymentScheduleStatus;
 pub struct PaymentScheduleId(pub Uuid);
 
 impl PaymentScheduleId {
-    pub fn new(id: Uuid) -> Self {
-        Self(id)
-    }
-    pub fn generate() -> Self {
-        Self(Uuid::new_v4())
-    }
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
+    pub fn new(id: Uuid) -> Self { Self(id) }
+    pub fn generate() -> Self { Self(Uuid::new_v4()) }
+    pub fn into_inner(self) -> Uuid { self.0 }
 }
 
 impl std::fmt::Display for PaymentScheduleId {
@@ -39,28 +33,20 @@ impl std::str::FromStr for PaymentScheduleId {
 }
 
 impl From<Uuid> for PaymentScheduleId {
-    fn from(id: Uuid) -> Self {
-        Self(id)
-    }
+    fn from(id: Uuid) -> Self { Self(id) }
 }
 
 impl From<PaymentScheduleId> for Uuid {
-    fn from(id: PaymentScheduleId) -> Self {
-        id.0
-    }
+    fn from(id: PaymentScheduleId) -> Self { id.0 }
 }
 
 impl AsRef<Uuid> for PaymentScheduleId {
-    fn as_ref(&self) -> &Uuid {
-        &self.0
-    }
+    fn as_ref(&self) -> &Uuid { &self.0 }
 }
 
 impl std::ops::Deref for PaymentScheduleId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -68,7 +54,6 @@ pub struct PaymentSchedule {
     pub id: Uuid,
     pub invoice_ref: Uuid,
     pub invoice_kind: InvoiceKind,
-    pub company_id: Uuid,
     pub installment_no: i32,
     pub due_date: NaiveDate,
     pub amount: Decimal,
@@ -86,21 +71,11 @@ impl PaymentSchedule {
     }
 
     /// Create a new PaymentSchedule with required fields
-    pub fn new(
-        invoice_ref: Uuid,
-        invoice_kind: InvoiceKind,
-        company_id: Uuid,
-        installment_no: i32,
-        due_date: NaiveDate,
-        amount: Decimal,
-        paid_amount: Decimal,
-        status: PaymentScheduleStatus,
-    ) -> Self {
+    pub fn new(invoice_ref: Uuid, invoice_kind: InvoiceKind, installment_no: i32, due_date: NaiveDate, amount: Decimal, paid_amount: Decimal, status: PaymentScheduleStatus) -> Self {
         Self {
             id: Uuid::new_v4(),
             invoice_ref,
             invoice_kind,
-            company_id,
             installment_no,
             due_date,
             amount,
@@ -165,6 +140,7 @@ impl PaymentSchedule {
         &self.status
     }
 
+
     // ==========================================================
     // Partial Update
     // ==========================================================
@@ -174,44 +150,25 @@ impl PaymentSchedule {
         for (key, value) in fields {
             match key.as_str() {
                 "invoice_ref" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.invoice_ref = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.invoice_ref = v; }
                 }
                 "invoice_kind" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.invoice_kind = v;
-                    }
-                }
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.company_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.invoice_kind = v; }
                 }
                 "installment_no" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.installment_no = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.installment_no = v; }
                 }
                 "due_date" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.due_date = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.due_date = v; }
                 }
                 "amount" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.amount = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.amount = v; }
                 }
                 "paid_amount" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.paid_amount = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.paid_amount = v; }
                 }
                 "status" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.status = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.status = v; }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -267,16 +224,12 @@ impl backbone_orm::EntityRepoMeta for PaymentSchedule {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("invoice_kind".to_string(), "invoice_kind".to_string());
         m.insert("status".to_string(), "payment_schedule_status".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
         &[]
-    }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
     }
 }
 
@@ -288,7 +241,6 @@ impl backbone_orm::EntityRepoMeta for PaymentSchedule {
 pub struct PaymentScheduleBuilder {
     invoice_ref: Option<Uuid>,
     invoice_kind: Option<InvoiceKind>,
-    company_id: Option<Uuid>,
     installment_no: Option<i32>,
     due_date: Option<NaiveDate>,
     amount: Option<Decimal>,
@@ -306,12 +258,6 @@ impl PaymentScheduleBuilder {
     /// Set the invoice_kind field (required)
     pub fn invoice_kind(mut self, value: InvoiceKind) -> Self {
         self.invoice_kind = Some(value);
-        self
-    }
-
-    /// Set the company_id field (required)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
         self
     }
 
@@ -349,30 +295,16 @@ impl PaymentScheduleBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<PaymentSchedule, String> {
-        let invoice_ref = self
-            .invoice_ref
-            .ok_or_else(|| "invoice_ref is required".to_string())?;
-        let invoice_kind = self
-            .invoice_kind
-            .ok_or_else(|| "invoice_kind is required".to_string())?;
-        let company_id = self
-            .company_id
-            .ok_or_else(|| "company_id is required".to_string())?;
-        let installment_no = self
-            .installment_no
-            .ok_or_else(|| "installment_no is required".to_string())?;
-        let due_date = self
-            .due_date
-            .ok_or_else(|| "due_date is required".to_string())?;
-        let amount = self
-            .amount
-            .ok_or_else(|| "amount is required".to_string())?;
+        let invoice_ref = self.invoice_ref.ok_or_else(|| "invoice_ref is required".to_string())?;
+        let invoice_kind = self.invoice_kind.ok_or_else(|| "invoice_kind is required".to_string())?;
+        let installment_no = self.installment_no.ok_or_else(|| "installment_no is required".to_string())?;
+        let due_date = self.due_date.ok_or_else(|| "due_date is required".to_string())?;
+        let amount = self.amount.ok_or_else(|| "amount is required".to_string())?;
 
         Ok(PaymentSchedule {
             id: Uuid::new_v4(),
             invoice_ref,
             invoice_kind,
-            company_id,
             installment_no,
             due_date,
             amount,

@@ -7,9 +7,9 @@
 //!
 //! Holds no SQL — every statement lives in `SalesInvoiceRepository` / `SalesInvoiceLineRepository` /
 //! `InvoiceTaxLineRepository` (the module's 4-layer rule). This file orchestrates: it owns the unit
-//! of work, decides the company scope (ADR-0008), and publishes the seam events.
+//! of work, relays the ambient org scope onto its own transactions (ADR-0029 — the composing
+//! service's tenancy decorator owns isolation), and publishes the seam events.
 
-use backbone_orm::company_scope;
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -19,7 +19,8 @@ use crate::infrastructure::persistence::{NewSalesInvoiceLineRow, NewSalesInvoice
 use super::billing_events::{BilledLine, BillingEvent, InvoiceCancelled, SalesInvoicePosted};
 use super::billing_gl::{AccountingPostEnvelope, GlPostLine, GlPostSink};
 use super::billing_write_service::{
-    is_dup, posted_outcome, BillingError, BillingWriteService, NewSalesInvoice, PostOutcome,
+    is_dup, legacy_company_echo, posted_outcome, relay_ambient_scope, BillingError,
+    BillingWriteService, NewSalesInvoice, PostOutcome,
 };
 
 impl BillingWriteService {
@@ -39,20 +40,15 @@ impl BillingWriteService {
         // Template-driven when any line carries a tax template (engine computes the overlay +
         // redistributes the nets under round_globally); supplied lines otherwise.
         let doc = self
-            .price_document(
-                &inv.lines,
-                &inv.tax_lines,
-                inv.company_id,
-                inv.posting_date,
-                "sales",
-            )
+            .price_document(&inv.lines, &inv.tax_lines, inv.posting_date, "sales")
             .await?;
         let grand = doc.net_total + doc.output;
         let id = Uuid::new_v4();
         let currency = inv.currency.unwrap_or_else(|| "IDR".into());
         let mut tx = self.db_pool.begin().await?;
-        // RLS scope (ADR-0008): company on the DTO.
-        company_scope::bind_company_on(&mut tx, inv.company_id).await?;
+        // Relay the caller's ambient org scope onto this transaction (ADR-0029): the composing
+        // service's decorator set it task-locally; the fresh transaction carries none of it.
+        relay_ambient_scope(&mut tx).await?;
         let r = self
             .sales
             .insert_draft(
@@ -60,7 +56,6 @@ impl BillingWriteService {
                 &NewSalesInvoiceRow {
                     id,
                     invoice_number: &inv.invoice_number,
-                    company_id: inv.company_id,
                     branch_id: inv.branch_id,
                     customer_id: inv.customer_id,
                     source_so_id: inv.source_so_id,
@@ -89,7 +84,6 @@ impl BillingWriteService {
                     &NewSalesInvoiceLineRow {
                         id: Uuid::new_v4(),
                         invoice_id: id,
-                        company_id: inv.company_id,
                         item_id: p.item_id,
                         account_id: p.account_id,
                         description: p.description.as_deref(),
@@ -100,7 +94,7 @@ impl BillingWriteService {
                 )
                 .await?;
         }
-        self.insert_tax_lines(&mut tx, id, inv.company_id, "sales", &doc.tax_lines)
+        self.insert_tax_lines(&mut tx, id, "sales", &doc.tax_lines)
             .await?;
         tx.commit().await?;
         Ok(id)
@@ -112,7 +106,8 @@ impl BillingWriteService {
         &self,
         invoice_id: Uuid,
     ) -> Result<AccountingPostEnvelope, BillingError> {
-        // RLS scope (ADR-0008), ID-only: fenced by the request/inherited scope.
+        // ID-only read: cross-tenant isolation is the composing service's tenancy decorator
+        // (ADR-0029) — an undecorated deployment is unfenced by design.
         let inv = self
             .sales
             .fetch_ar_header(&self.db_pool, invoice_id)
@@ -124,23 +119,19 @@ impl BillingWriteService {
         }
 
         // Cr Revenue per income account.
-        let rev_rows = company_scope::with_company_scope(
-            Some(inv.company_id),
-            self.sales_lines
-                .fetch_revenue_amounts(&self.db_pool, invoice_id),
-        )
-        .await?;
+        let rev_rows = self
+            .sales_lines
+            .fetch_revenue_amounts(&self.db_pool, invoice_id)
+            .await?;
         let mut revenue: BTreeMap<Uuid, Decimal> = BTreeMap::new();
         for r in &rev_rows {
             *revenue.entry(r.revenue_account_id).or_insert(Decimal::ZERO) += r.net_amount;
         }
         // Cr PPN Output per overlay output line.
-        let tax_rows = company_scope::with_company_scope(
-            Some(inv.company_id),
-            self.tax_lines
-                .fetch_amounts_by_basis(&self.db_pool, invoice_id, "sales", "output"),
-        )
-        .await?;
+        let tax_rows = self
+            .tax_lines
+            .fetch_amounts_by_basis(&self.db_pool, invoice_id, "sales", "output")
+            .await?;
 
         let mut lines = vec![
             GlPostLine::debit(inv.receivable_account_id, inv.grand_total)
@@ -158,7 +149,9 @@ impl BillingWriteService {
 
         let env = AccountingPostEnvelope {
             idempotency_key: invoice_id.to_string(),
-            company_id: inv.company_id,
+            // Legacy twin (ADR-0029): the envelope wire shape still carries the tenant for the
+            // unstripped GL sink; the module keys no statement on it.
+            company_id: legacy_company_echo(),
             branch_id: inv.branch_id,
             source_type: "order".into(),
             source_id: invoice_id,
@@ -193,7 +186,7 @@ impl BillingWriteService {
                 // concurrent double-post (rows_affected == 1) stages + publishes; the loser reconciles
                 // from the persisted row without re-emitting.
                 let mut tx = self.db_pool.begin().await?;
-                company_scope::bind_company_on(&mut tx, env.company_id).await?;
+                relay_ambient_scope(&mut tx).await?;
                 let affected = self
                     .sales
                     .mark_posted_on(&mut *tx, invoice_id, ack.journal_id, ack.post_id)
@@ -222,7 +215,6 @@ impl BillingWriteService {
                             &mut tx,
                             "sales_invoices",
                             invoice_id,
-                            env.company_id,
                             term_id,
                             tctx.posting_date,
                             tctx.grand_total,
@@ -250,7 +242,9 @@ impl BillingWriteService {
                     .collect();
                 let event = SalesInvoicePosted {
                     invoice_id,
-                    company_id: env.company_id,
+                    // Legacy twin (ADR-0029) for still-company-fenced consumers; the module
+                    // itself keys nothing on it.
+                    company_id: legacy_company_echo(),
                     journal_id: ack.journal_id,
                     post_id: ack.post_id,
                     source_so_id: hdr.source_so_id,
@@ -267,7 +261,6 @@ impl BillingWriteService {
                         "SalesInvoicePosted",
                         "SalesInvoice",
                         invoice_id,
-                        env.company_id,
                         &event,
                     )
                     .await?;
@@ -282,11 +275,7 @@ impl BillingWriteService {
                 })
             }
             Err(rej) => {
-                let _ = company_scope::with_company_scope(
-                    Some(env.company_id),
-                    self.sales.mark_posting_failed(&self.db_pool, invoice_id),
-                )
-                .await;
+                let _ = self.sales.mark_posting_failed(&self.db_pool, invoice_id).await;
                 Err(BillingError::GlRejected {
                     code: rej.code,
                     message: rej.message,
@@ -307,7 +296,7 @@ impl BillingWriteService {
         invoice_id: Uuid,
         sink: &dyn GlPostSink,
     ) -> Result<PostOutcome, BillingError> {
-        // RLS scope (ADR-0008), ID-only: fenced by the request/inherited scope.
+        // ID-only read: isolation is the composing service's tenancy decorator (ADR-0029).
         let orig_post: Option<Uuid> = self
             .sales
             .fetch_accounting_post_id(&self.db_pool, invoice_id)
@@ -344,12 +333,13 @@ impl BillingWriteService {
                 // post path + backbone-payment). Only the call that flips → cancelled (affected == 1)
                 // stages + publishes; an idempotent re-credit commits without re-emitting.
                 let mut tx = self.db_pool.begin().await?;
-                company_scope::bind_company_on(&mut tx, env.company_id).await?;
+                relay_ambient_scope(&mut tx).await?;
                 let affected = self.sales.mark_cancelled_on(&mut *tx, invoice_id).await?;
                 if affected == 1 {
                     let event = InvoiceCancelled {
                         invoice_id,
-                        company_id: env.company_id,
+                        // Legacy twin (ADR-0029) for still-company-fenced consumers.
+                        company_id: legacy_company_echo(),
                         kind: "sales".into(),
                     };
                     if let Some(schema) = self.outbox_schema.clone() {
@@ -359,7 +349,6 @@ impl BillingWriteService {
                             "InvoiceCancelled",
                             "SalesInvoice",
                             invoice_id,
-                            env.company_id,
                             &event,
                         )
                         .await?;

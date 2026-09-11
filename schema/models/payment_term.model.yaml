@@ -4,10 +4,17 @@
 # Description: Payment terms master — how an invoice's balance falls due
 # (installments) and whether an early-payment discount applies. The
 # early-pay-discount block sits on the HEADER (Odoo 19 shape), not the lines.
-# company_id NULL = a global template every tenant may read but none may
-# mutate (split RLS fence — see the payment-terms fence migration). Lines are
-# real intra-module children. Dunning stays deferred; settlement is
+# Lines are real intra-module children. Dunning stays deferred; settlement is
 # backbone-payment's concern via the SettlementDiscountPort.
+#
+# Shared-row posture (ADR-0029): the module is tenant-agnostic, so a payment
+# term is just a row — the module-level table has no tenancy column and no
+# fence. A composing service that wants the OLD global-template behavior
+# (every tenant reads the same catalog, none mutates another's) declares
+# payment_terms / payment_term_lines ROOT-ANCHORED SHARED in its tenancy.yaml
+# (allow_root): template rows live at the org root and every tenant's read
+# union includes root rows. The former NULL-company template rows backfill
+# onto the composing tenant's root org unit.
 # =============================================================================
 
 models:
@@ -20,11 +27,6 @@ models:
         type: uuid
         attributes: ["@id", "@default(uuid)"]
         description: "Unique term id"
-
-      company_id:
-        type: uuid?
-        attributes: ["@exclude_from_foreign_key_check"]
-        description: "Books owner # logical FK to organization.Company.id; NULL = global template"
 
       name:
         type: string
@@ -85,8 +87,9 @@ models:
         inverse: term
 
     indexes:
-      - type: index
-        fields: [company_id, status]
+      # No tenancy indexes (ADR-0029): the module is tenant-agnostic; the composing
+      # service's tenancy decorator owns org scoping for this table (root-anchored
+      # shared rows when the global-template posture is wanted — see the header note).
 
   - name: PaymentTermLine
     collection: payment_term_lines
@@ -102,11 +105,6 @@ models:
         type: uuid
         attributes: ["@required", "@foreign_key(PaymentTerm.id)"]
         description: "Owning term"
-
-      company_id:
-        type: uuid?
-        attributes: ["@exclude_from_foreign_key_check"]
-        description: "Denormalized owner of the term (NULL for global templates) so the line passes the fence on its own"
 
       value:
         type: PaymentTermLineValue

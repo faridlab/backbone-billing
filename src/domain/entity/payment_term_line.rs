@@ -1,13 +1,13 @@
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
+use rust_decimal::Decimal;
 
-use super::AuditMetadata;
-use super::PaymentTermAnchor;
-use super::PaymentTermDelayType;
 use super::PaymentTermLineValue;
+use super::PaymentTermDelayType;
+use super::PaymentTermAnchor;
+use super::AuditMetadata;
 
 /// Strongly-typed ID for PaymentTermLine
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -15,15 +15,9 @@ use super::PaymentTermLineValue;
 pub struct PaymentTermLineId(pub Uuid);
 
 impl PaymentTermLineId {
-    pub fn new(id: Uuid) -> Self {
-        Self(id)
-    }
-    pub fn generate() -> Self {
-        Self(Uuid::new_v4())
-    }
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
+    pub fn new(id: Uuid) -> Self { Self(id) }
+    pub fn generate() -> Self { Self(Uuid::new_v4()) }
+    pub fn into_inner(self) -> Uuid { self.0 }
 }
 
 impl std::fmt::Display for PaymentTermLineId {
@@ -40,35 +34,26 @@ impl std::str::FromStr for PaymentTermLineId {
 }
 
 impl From<Uuid> for PaymentTermLineId {
-    fn from(id: Uuid) -> Self {
-        Self(id)
-    }
+    fn from(id: Uuid) -> Self { Self(id) }
 }
 
 impl From<PaymentTermLineId> for Uuid {
-    fn from(id: PaymentTermLineId) -> Self {
-        id.0
-    }
+    fn from(id: PaymentTermLineId) -> Self { id.0 }
 }
 
 impl AsRef<Uuid> for PaymentTermLineId {
-    fn as_ref(&self) -> &Uuid {
-        &self.0
-    }
+    fn as_ref(&self) -> &Uuid { &self.0 }
 }
 
 impl std::ops::Deref for PaymentTermLineId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct PaymentTermLine {
     pub id: Uuid,
     pub term_id: Uuid,
-    pub company_id: Option<Uuid>,
     pub value: PaymentTermLineValue,
     pub value_amount: Decimal,
     pub nb_days: i32,
@@ -88,19 +73,10 @@ impl PaymentTermLine {
     }
 
     /// Create a new PaymentTermLine with required fields
-    pub fn new(
-        term_id: Uuid,
-        value: PaymentTermLineValue,
-        value_amount: Decimal,
-        nb_days: i32,
-        delay_type: PaymentTermDelayType,
-        anchor: PaymentTermAnchor,
-        sequence: i32,
-    ) -> Self {
+    pub fn new(term_id: Uuid, value: PaymentTermLineValue, value_amount: Decimal, nb_days: i32, delay_type: PaymentTermDelayType, anchor: PaymentTermAnchor, sequence: i32) -> Self {
         Self {
             id: Uuid::new_v4(),
             term_id,
-            company_id: None,
             value,
             value_amount,
             nb_days,
@@ -162,15 +138,10 @@ impl PaymentTermLine {
         self.metadata.deleted_by.as_ref()
     }
 
+
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
-
-    /// Set the company_id field (chainable)
-    pub fn with_company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
 
     /// Set the day_of_month field (chainable)
     pub fn with_day_of_month(mut self, value: i32) -> Self {
@@ -187,49 +158,28 @@ impl PaymentTermLine {
         for (key, value) in fields {
             match key.as_str() {
                 "term_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.term_id = v;
-                    }
-                }
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.company_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.term_id = v; }
                 }
                 "value" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.value = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.value = v; }
                 }
                 "value_amount" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.value_amount = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.value_amount = v; }
                 }
                 "nb_days" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.nb_days = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.nb_days = v; }
                 }
                 "day_of_month" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.day_of_month = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.day_of_month = v; }
                 }
                 "delay_type" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.delay_type = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.delay_type = v; }
                 }
                 "anchor" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.anchor = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.anchor = v; }
                 }
                 "sequence" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.sequence = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.sequence = v; }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -286,20 +236,13 @@ impl backbone_orm::EntityRepoMeta for PaymentTermLine {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
         m.insert("term_id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("value".to_string(), "payment_term_line_value".to_string());
-        m.insert(
-            "delay_type".to_string(),
-            "payment_term_delay_type".to_string(),
-        );
+        m.insert("delay_type".to_string(), "payment_term_delay_type".to_string());
         m.insert("anchor".to_string(), "payment_term_anchor".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
         &[]
-    }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
     }
     fn relations() -> &'static [(&'static str, &'static str, &'static str)] {
         &[("term", "payment_terms", "termId")]
@@ -313,7 +256,6 @@ impl backbone_orm::EntityRepoMeta for PaymentTermLine {
 #[derive(Debug, Clone, Default)]
 pub struct PaymentTermLineBuilder {
     term_id: Option<Uuid>,
-    company_id: Option<Uuid>,
     value: Option<PaymentTermLineValue>,
     value_amount: Option<Decimal>,
     nb_days: Option<i32>,
@@ -327,12 +269,6 @@ impl PaymentTermLineBuilder {
     /// Set the term_id field (required)
     pub fn term_id(mut self, value: Uuid) -> Self {
         self.term_id = Some(value);
-        self
-    }
-
-    /// Set the company_id field (optional)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
         self
     }
 
@@ -382,17 +318,12 @@ impl PaymentTermLineBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<PaymentTermLine, String> {
-        let term_id = self
-            .term_id
-            .ok_or_else(|| "term_id is required".to_string())?;
-        let nb_days = self
-            .nb_days
-            .ok_or_else(|| "nb_days is required".to_string())?;
+        let term_id = self.term_id.ok_or_else(|| "term_id is required".to_string())?;
+        let nb_days = self.nb_days.ok_or_else(|| "nb_days is required".to_string())?;
 
         Ok(PaymentTermLine {
             id: Uuid::new_v4(),
             term_id,
-            company_id: self.company_id,
             value: self.value.unwrap_or_default(),
             value_amount: self.value_amount.unwrap_or(Decimal::from(0)),
             nb_days,

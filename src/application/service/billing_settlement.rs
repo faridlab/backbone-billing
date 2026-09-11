@@ -14,8 +14,16 @@
 //! same transaction creates (or unlinks) the edge between the invoice's receivable/payable line and
 //! the payment's line on the same control account, through the shared [`ReconcileSink`] port —
 //! billing's `outstanding_amount` stays a cache, probed equal to `grand_total − Σ edge amounts`.
+//!
+//! **Tenancy (ADR-0029).** The module is tenant-agnostic and keys no statement on a tenant. The
+//! settlement entrypoints still take the paying tenant's company id — payment's settlement events
+//! are still company-fenced wire shapes — and map it onto an [`OrgScope::for_company_unit`], which
+//! binds both the org fence variables AND the legacy `app.company_id`, so the seam behaves
+//! correctly under either fence shape (a company-only bind would read `app.scope_unit_ids` as
+//! NULL and silently see no rows). Isolation for everything else is the composing service's
+//! tenancy decorator.
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope::OrgScope;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
@@ -25,7 +33,23 @@ use crate::infrastructure::persistence::{parse_invoice_kind, NewPaymentScheduleR
 use super::billing_gl::{
     ReconcileLine, ReconcileOrigin, ReconcilePairRequest, ReconcileSink, UnreconcilePairRequest,
 };
-use super::billing_write_service::{money, BillingError, BillingWriteService};
+use super::billing_write_service::{money, relay_ambient_scope, BillingError, BillingWriteService};
+
+/// Bind the settlement seam's legacy company twin onto a transaction: a single-company org scope
+/// whose acting node IS that company — `scope_unit_ids` and `app.company_id` both carry it, so
+/// rows land on (and are readable from) the paying tenant's company node under the composed
+/// decorator's fence, and the legacy variable still satisfies any not-yet-stripped table the
+/// transaction touches (the durable outbox/inbox).
+async fn bind_legacy_company(
+    tx: &mut sqlx::PgConnection,
+    company_id: Uuid,
+) -> Result<(), BillingError> {
+    let scope = OrgScope::for_company_unit(company_id);
+    backbone_orm::org_scope::bind_org_scope_on(tx, &scope)
+        .await
+        .map_err(BillingError::Db)?;
+    Ok(())
+}
 
 /// The result of applying a settlement to an invoice (council 2026-07-26, rec #3).
 ///
@@ -90,10 +114,12 @@ impl BillingWriteService {
 
     /// Resolve an invoice's early-pay-discount decision for a settlement happening on `on_date`.
     ///
-    /// Applicable iff the invoice was posted with a materialized discount block whose deadline
-    /// covers `on_date` and whose outstanding is still positive. Returns the percent + the expense
-    /// account; the CALLER computes the amount on what it allocates (see [`EarlyPayDiscount`]).
-    /// Serves either invoice kind; unknown kind keeps its original domain error.
+    /// `company_id` is the legacy twin from the paying tenant's payment event (ADR-0029) — it
+    /// scopes the read, nothing else. Applicable iff the invoice was posted with a materialized
+    /// discount block whose deadline covers `on_date` and whose outstanding is still positive.
+    /// Returns the percent + the expense account; the CALLER computes the amount on what it
+    /// allocates (see [`EarlyPayDiscount`]). Serves either invoice kind; unknown kind keeps its
+    /// original domain error.
     pub async fn resolve_early_pay_discount(
         &self,
         company_id: Uuid,
@@ -106,12 +132,11 @@ impl BillingWriteService {
             InvoiceKind::Sales => "sales_invoices",
             InvoiceKind::Purchase => "purchase_invoices",
         };
-        // Fence-correct read: bind the company on a dedicated transaction (a raw pool query
-        // carries no `app.company_id`, and the strict invoice fence would hide the row entirely).
+        // Scope-correct read: bind the org scope on a dedicated transaction (a raw pool query
+        // carries no fence variables, and the composed decorator's policy would hide the row
+        // entirely).
         let mut tx = self.db_pool.begin().await.map_err(BillingError::Db)?;
-        company_scope::bind_company_on(&mut tx, company_id)
-            .await
-            .map_err(BillingError::Db)?;
+        bind_legacy_company(&mut tx, company_id).await?;
         let fetched = self
             .terms
             .fetch_invoice_epd(&mut *tx, table, invoice_ref)
@@ -150,8 +175,10 @@ impl BillingWriteService {
     // ---- Payment schedule ---------------------------------------------------
 
     /// Attach installment due dates to an invoice (AR or A/P). Lean — settlement is payments' job.
-    /// Refused when the invoice carries a payment term: the term's derived installments and a
-    /// manual schedule cannot coexist (the post hook enforces the same rule from the other side).
+    /// `company_id` is the legacy twin anchoring the rows on the invoice tenant's company node
+    /// (ADR-0029). Refused when the invoice carries a payment term: the term's derived
+    /// installments and a manual schedule cannot coexist (the post hook enforces the same rule
+    /// from the other side).
     pub async fn add_payment_schedule(
         &self,
         invoice_ref: Uuid,
@@ -161,8 +188,7 @@ impl BillingWriteService {
     ) -> Result<(), BillingError> {
         let ikind = invoice_kind(kind)?;
         let mut tx = self.db_pool.begin().await?;
-        // RLS scope (ADR-0008): company is an explicit argument.
-        company_scope::bind_company_on(&mut tx, company_id).await?;
+        bind_legacy_company(&mut tx, company_id).await?;
         let table = match ikind {
             InvoiceKind::Sales => "sales_invoices",
             InvoiceKind::Purchase => "purchase_invoices",
@@ -187,7 +213,6 @@ impl BillingWriteService {
                         id: Uuid::new_v4(),
                         invoice_ref,
                         kind,
-                        company_id,
                         installment_no: (i + 1) as i32,
                         due_date: *due,
                         amount: money(*amt),
@@ -224,11 +249,11 @@ impl BillingWriteService {
         reconcile: &dyn ReconcileSink,
     ) -> Result<SettlementOutcome, BillingError> {
         let mut tx = self.db_pool.begin().await?;
-        // RLS scope (ADR-0008): the tenant is now an EXPLICIT argument (council 2026-07-26, rec #2) —
-        // previously this seam relied on an ambient `with_company_scope` the caller was trusted to set,
-        // which left a "forget the wrapper and you get InvoiceNotFound" trap. `bind_company_on` sets the
-        // same tx-local `app.company_id` the repo's RLS policy reads.
-        company_scope::bind_company_on(&mut tx, company_id).await?;
+        // The tenant is an EXPLICIT argument (council 2026-07-26, rec #2) — this seam is
+        // event-driven and carries no ambient request scope, so the ACL/relay's company id maps
+        // onto the single-company org scope that fences the whole unit of work (see the module
+        // docs: the org fence variables AND the legacy `app.company_id` both get set).
+        bind_legacy_company(&mut tx, company_id).await?;
         let applied = self
             .apply_settlement_in_tx(
                 &mut tx,
@@ -263,9 +288,9 @@ impl BillingWriteService {
         reconcile: &dyn ReconcileSink,
     ) -> Result<SettlementOutcome, BillingError> {
         let mut tx = self.db_pool.begin().await?;
-        // RLS scope (ADR-0008): explicit `company_id` (council 2026-07-26, rec #2) — the relay/ACL
-        // passes the event's company; previously this relied on an ambient scope.
-        company_scope::bind_company_on(&mut tx, company_id).await?;
+        // The relay/ACL passes the payment event's company (its legacy twin input); it maps onto
+        // the single-company org scope that fences the whole unit of work.
+        bind_legacy_company(&mut tx, company_id).await?;
         let first = backbone_outbox::inbox::once(&mut *tx, "billing", consumer, event_id)
             .await
             .map_err(|e| BillingError::Db(sqlx::Error::Protocol(e.to_string())))?;
@@ -434,7 +459,7 @@ impl BillingWriteService {
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
         let mut tx = self.db_pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, company_id).await?;
+        bind_legacy_company(&mut tx, company_id).await?;
         let restored = self
             .reverse_settlement_in_tx(
                 &mut tx,
@@ -465,7 +490,7 @@ impl BillingWriteService {
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
         let mut tx = self.db_pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, company_id).await?;
+        bind_legacy_company(&mut tx, company_id).await?;
         let first = backbone_outbox::inbox::once(&mut *tx, "billing", consumer, event_id)
             .await
             .map_err(|e| BillingError::Db(sqlx::Error::Protocol(e.to_string())))?;
@@ -590,19 +615,18 @@ impl BillingWriteService {
     }
 
     /// The derived overdue read: open, GL-posted invoices whose due date has passed (`today`
-    /// injected by the caller — deterministic tests). Both kinds, earliest due first.
+    /// injected by the caller — deterministic tests). Both kinds, earliest due first. Under a
+    /// composed tenancy decorator the relayed ambient org scope fences the read; an undecorated
+    /// deployment lists all overdue invoices (unfenced by design, ADR-0029).
     pub async fn list_overdue_invoices(
         &self,
-        company_id: Uuid,
         today: chrono::NaiveDate,
     ) -> Result<Vec<crate::infrastructure::persistence::OverdueInvoiceRow>, BillingError> {
         let mut tx = self.db_pool.begin().await.map_err(BillingError::Db)?;
-        company_scope::bind_company_on(&mut tx, company_id)
-            .await
-            .map_err(BillingError::Db)?;
+        relay_ambient_scope(&mut tx).await?;
         let rows = self
             .settlement
-            .list_overdue_invoices(&mut *tx, company_id, today)
+            .list_overdue_invoices(&mut *tx, today)
             .await
             .map_err(BillingError::Db)?;
         tx.commit().await.map_err(BillingError::Db)?;

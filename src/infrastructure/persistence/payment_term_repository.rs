@@ -1,10 +1,12 @@
 //! Repository for PaymentTerm + PaymentTermLine entities.
 //!
 //! Hand-authored, user-owned (declared in `metaphor.codegen.yaml`). Holds the payment-terms SQL
-//! per the module's 4-layer rule: services orchestrate, repositories hold SQL. Reads must ride a
-//! company-scoped connection — `payment_terms` carries a SPLIT fence (read admits the company's own
-//! rows AND global NULL-company templates; write stays own-only), so a scoped session sees both
-//! while an unscoped one sees nothing (fail-closed, ADR-0008/0014).
+//! per the module's 4-layer rule: services orchestrate, repositories hold SQL. The module carries
+//! no tenancy of its own (ADR-0029): statements are tenant-agnostic and ride the composing
+//! service's ambient org scope (request-dedicated connection when bound, plain pool otherwise).
+//! A composing service that wants the former global-template catalog declares these tables
+//! ROOT-ANCHORED SHARED (allow_root) in its tenancy.yaml — template rows live at the org root
+//! and every tenant's read union includes root rows.
 //!
 //! Thin newtype over `backbone_orm::GenericCrudRepository<PaymentTerm, backbone_orm::SoftDelete>`;
 //! standard CRUD via `Deref`.
@@ -57,8 +59,6 @@ pub struct TermLineRow {
 /// A term header's decision inputs: what the invoice-post hook materializes.
 pub struct TermHeaderRow {
     pub id: Uuid,
-    /// NULL = global template
-    pub company_id: Option<Uuid>,
     pub name: String,
     pub status: String,
     pub early_discount: bool,
@@ -80,7 +80,6 @@ pub struct InvoiceEpdRow {
 /// The exact rows a term insert writes.
 pub struct NewPaymentTermRow<'a> {
     pub id: Uuid,
-    pub company_id: Option<Uuid>,
     pub name: &'a str,
     pub note: Option<&'a str>,
     pub sequence: i32,
@@ -94,7 +93,6 @@ pub struct NewPaymentTermRow<'a> {
 pub struct NewPaymentTermLineRow<'a> {
     pub id: Uuid,
     pub term_id: Uuid,
-    pub company_id: Option<Uuid>,
     pub value: &'a str,
     pub value_amount: Decimal,
     pub nb_days: i32,
@@ -105,9 +103,8 @@ pub struct NewPaymentTermLineRow<'a> {
 }
 
 impl PaymentTermRepository {
-    /// Insert one term header on the caller's transaction (the caller has bound the company scope;
-    /// a global row is born only on an owner/bypass connection, never through this path with a
-    /// tenant scope — the split fence's WITH CHECK enforces it).
+    /// Insert one term header on the caller's transaction (the caller has relayed the ambient org
+    /// scope onto it, `org_scope::bind_org_scope_on`).
     pub async fn insert_term(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -115,11 +112,11 @@ impl PaymentTermRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO billing.payment_terms
-                (id, company_id, name, note, sequence, status, early_discount,
+                (id, name, note, sequence, status, early_discount,
                  discount_percent, discount_days, discount_account_id, discount_tax_basis)
-               VALUES ($1,$2,$3,$4,$5,'active'::payment_term_status,$6,$7,$8,$9,$10::discount_tax_basis)"#,
+               VALUES ($1,$2,$3,$4,'active'::payment_term_status,$5,$6,$7,$8,$9::discount_tax_basis)"#,
         )
-        .bind(t.id).bind(t.company_id).bind(t.name).bind(t.note).bind(t.sequence)
+        .bind(t.id).bind(t.name).bind(t.note).bind(t.sequence)
         .bind(t.early_discount).bind(t.discount_percent).bind(t.discount_days)
         .bind(t.discount_account_id).bind(t.discount_tax_basis)
         .execute(conn)
@@ -127,8 +124,7 @@ impl PaymentTermRepository {
         Ok(())
     }
 
-    /// Insert one term line on the caller's transaction. The line's company_id is denormalized from
-    /// the header so it passes the (same-shape) child fence on its own.
+    /// Insert one term line on the caller's transaction.
     pub async fn insert_term_line(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -136,14 +132,13 @@ impl PaymentTermRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO billing.payment_term_lines
-                (id, term_id, company_id, value, value_amount, nb_days, day_of_month,
+                (id, term_id, value, value_amount, nb_days, day_of_month,
                  delay_type, anchor, sequence)
-               VALUES ($1,$2,$3,$4::payment_term_line_value,$5,$6,$7,
-                       $8::payment_term_delay_type,$9::payment_term_anchor,$10)"#,
+               VALUES ($1,$2,$3::payment_term_line_value,$4,$5,$6,
+                       $7::payment_term_delay_type,$8::payment_term_anchor,$9)"#,
         )
         .bind(l.id)
         .bind(l.term_id)
-        .bind(l.company_id)
         .bind(l.value)
         .bind(l.value_amount)
         .bind(l.nb_days)
@@ -156,15 +151,16 @@ impl PaymentTermRepository {
         Ok(())
     }
 
-    /// Read one term header + its lines on a caller-supplied, company-bound connection. The split
-    /// fence admits a global term here (and hides another company's).
+    /// Read one term header + its lines on a caller-supplied connection (under a composer's request
+    /// scope the read is fenced by the decorator's policy; root-shared template rows read on every
+    /// tenant's union).
     pub async fn fetch_term(
         &self,
         conn: &mut sqlx::PgConnection,
         term_id: Uuid,
     ) -> Result<Option<(TermHeaderRow, Vec<TermLineRow>)>, sqlx::Error> {
         let head = sqlx::query(
-            r#"SELECT id, company_id, name, status::text AS status, early_discount,
+            r#"SELECT id, name, status::text AS status, early_discount,
                       discount_percent, discount_days, discount_account_id
                FROM billing.payment_terms
                WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
@@ -175,7 +171,6 @@ impl PaymentTermRepository {
         let Some(h) = head else { return Ok(None) };
         let header = TermHeaderRow {
             id: h.get("id"),
-            company_id: h.get("company_id"),
             name: h.get("name"),
             status: h.get("status"),
             early_discount: h.get("early_discount"),
@@ -215,31 +210,27 @@ impl PaymentTermRepository {
         .bind(term_id)
     }
 
-    /// List the term headers visible to a scoped connection (own + global templates), newest last.
+    /// List the active term headers, schedule order first. Under a composer's request scope the
+    /// decorator's policy fences the read; a root-anchored SHARED (allow_root) composition unions
+    /// the root template rows into every tenant's result.
     pub async fn list_terms(
         &self,
         conn: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
-        company_id: Uuid,
     ) -> Result<Vec<TermHeaderRow>, sqlx::Error> {
-        // Explicit company predicate (not just the fence): the fence admits NULL-company rows on
-        // read; this states the intent — "the terms this company may use".
         let rows = sqlx::query(
-            r#"SELECT id, company_id, name, status::text AS status, early_discount,
+            r#"SELECT id, name, status::text AS status, early_discount,
                       discount_percent, discount_days, discount_account_id
                FROM billing.payment_terms
-               WHERE (company_id IS NULL OR company_id=$1)
-                 AND status='active'::payment_term_status
+               WHERE status='active'::payment_term_status
                  AND (metadata->>'deleted_at') IS NULL
-               ORDER BY company_id NULLS FIRST, sequence, name"#,
+               ORDER BY sequence, name"#,
         )
-        .bind(company_id)
         .fetch_all(conn)
         .await?;
         Ok(rows
             .iter()
             .map(|h| TermHeaderRow {
                 id: h.get("id"),
-                company_id: h.get("company_id"),
                 name: h.get("name"),
                 status: h.get("status"),
                 early_discount: h.get("early_discount"),
@@ -252,8 +243,9 @@ impl PaymentTermRepository {
 
     /// Flip a term's status (`active` | `inactive`). Soft-retire: historical invoices keep their
     /// materialized schedule; the term just disappears from new-invoice selection. Rides the
-    /// caller's company-bound transaction: the fence's WITH CHECK keeps the UPDATE own-only, so a
-    /// global template or another company's term matches zero rows (caller reads `TermNotFound`).
+    /// caller's transaction — under a composer's request scope the decorator's WITH CHECK keeps
+    /// the UPDATE inside the acting tenant's rows (a root-shared template row matches zero rows
+    /// for a plain tenant write; the caller reads `TermNotFound`).
     pub async fn set_status(
         &self,
         conn: &mut sqlx::PgConnection,

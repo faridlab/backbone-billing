@@ -7,8 +7,8 @@
 //! account with the real account recorded on the overlay, and an unwired engine fails
 //! closed. Requires DATABASE_URL (defaults to :5433/backbone_billing) with BOTH the
 //! `billing` and `tax` schemas migrated (the seam-test convention — migrate externally).
-//! Scope: every service call self-scopes from its DTO's company_id; the raw verification
-//! selects run as the test role.
+//! Scope: the module is tenant-agnostic (ADR-0029) — no tenant crosses any service
+//! call; the raw verification selects run as the test role.
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -47,6 +47,11 @@ fn wired(pool: &PgPool) -> BillingWriteService {
     BillingWriteService::new(pool.clone()).with_tax_engine(Arc::new(TaxEngine::new(pool.clone())))
 }
 
+/// The rounding-method settings are module-global rows (ADR-0029: no tenant axis), so the
+/// two goldens that pin OPPOSITE rounding policies serialize their setup + reads — they
+/// would otherwise race the shared settings row.
+static ROUNDING_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn line(account: Uuid, qty: &str, price: &str, template: Option<Uuid>) -> NewInvoiceLine {
     NewInvoiceLine {
         item_id: Uuid::new_v4(),
@@ -74,14 +79,12 @@ fn supplied_tax(account: Uuid, amount: &str) -> NewTaxLine {
 }
 
 fn new_sales(
-    company: Uuid,
     lines: Vec<NewInvoiceLine>,
     tax_lines: Vec<NewTaxLine>,
     receivable: Uuid,
 ) -> NewSalesInvoice {
     NewSalesInvoice {
         invoice_number: uq("SI"),
-        company_id: company,
         branch_id: None,
         customer_id: Uuid::new_v4(),
         source_so_id: None,
@@ -153,14 +156,12 @@ async fn header_totals(pool: &PgPool, invoice: Uuid) -> (Decimal, Decimal, Decim
 #[tokio::test]
 async fn bdt1_template_driven_ignores_caller_tax_lines() {
     let pool = pool().await;
-    let company = Uuid::new_v4();
     let w = TaxWriteService::new(pool.clone());
     let real = Uuid::new_v4();
     let tid = w
         .create_template(NewTemplate {
-            company_id: company,
             code: uq("PPN"),
-            name: "PPN 11%".into(),
+            name: format!("PPN 11% {}", &Uuid::new_v4().to_string()[..6]),
             template_type: Some("sales".into()),
             tax_category_id: None,
             is_inclusive: false,
@@ -170,7 +171,6 @@ async fn bdt1_template_driven_ignores_caller_tax_lines() {
         .await
         .unwrap();
     w.add_row(NewTemplateRow {
-        company_id: company,
         template_id: tid,
         charge_type: None,
         rate: d("11"),
@@ -187,7 +187,6 @@ async fn bdt1_template_driven_ignores_caller_tax_lines() {
     let bogus = Uuid::new_v4();
     let inv = wired(&pool)
         .create_sales_invoice(new_sales(
-            company,
             vec![line(Uuid::new_v4(), "1000", "1", Some(tid))],
             vec![supplied_tax(bogus, "999")], // caller-supplied — must be ignored
             Uuid::new_v4(),
@@ -214,15 +213,23 @@ async fn bdt1_template_driven_ignores_caller_tax_lines() {
 // built AR post balances exactly (A/R 43.06).
 #[tokio::test]
 async fn bdt2_round_globally_drives_totals() {
+    let _rounding = ROUNDING_LOCK.lock().await;
     let pool = pool().await;
-    let company = Uuid::new_v4();
     let w = TaxWriteService::new(pool.clone());
+    // Pin THIS golden's policy (the setting row is module-global — a prior test may have left
+    // the opposite policy in place; the lock makes the upsert + read a private pair).
+    w.upsert_company_settings(NewCompanySettings {
+        rounding_method: "round_globally".into(),
+        default_exigibility: "on_invoice".into(),
+        cash_basis_transition_account_id: None,
+    })
+    .await
+    .unwrap();
     let real = Uuid::new_v4();
     let tid = w
         .create_template(NewTemplate {
-            company_id: company,
             code: uq("PPN-INCL"),
-            name: "PPN 21% incl".into(),
+            name: format!("PPN 21% incl {}", &Uuid::new_v4().to_string()[..6]),
             template_type: Some("sales".into()),
             tax_category_id: None,
             is_inclusive: true,
@@ -232,7 +239,6 @@ async fn bdt2_round_globally_drives_totals() {
         .await
         .unwrap();
     w.add_row(NewTemplateRow {
-        company_id: company,
         template_id: tid,
         charge_type: None,
         rate: d("21"),
@@ -251,7 +257,6 @@ async fn bdt2_round_globally_drives_totals() {
     let svc = wired(&pool);
     let inv = svc
         .create_sales_invoice(new_sales(
-            company,
             vec![
                 line(rev, "1", "21.53", Some(tid)),
                 line(rev, "1", "21.53", Some(tid)),
@@ -292,14 +297,15 @@ async fn bdt2_round_globally_drives_totals() {
     assert_eq!(ar_leg.debit, d("43.06"));
 }
 
-// BDT-3: the same inputs under round_per_line — per-company policy divergence (7.48 vs 7.47).
+// BDT-3: the same inputs under round_per_line — policy divergence (7.48 vs 7.47). The
+// rounding-method setting is a module-global row now (ADR-0029); a composing service that
+// wants per-tenant divergence maps it per tenant above this layer.
 #[tokio::test]
 async fn bdt3_round_per_line_drives_totals() {
+    let _rounding = ROUNDING_LOCK.lock().await;
     let pool = pool().await;
-    let company = Uuid::new_v4();
     let w = TaxWriteService::new(pool.clone());
     w.upsert_company_settings(NewCompanySettings {
-        company_id: company,
         rounding_method: "round_per_line".into(),
         default_exigibility: "on_invoice".into(),
         cash_basis_transition_account_id: None,
@@ -309,9 +315,8 @@ async fn bdt3_round_per_line_drives_totals() {
     let real = Uuid::new_v4();
     let tid = w
         .create_template(NewTemplate {
-            company_id: company,
             code: uq("PPN-INCL"),
-            name: "PPN 21% incl".into(),
+            name: format!("PPN 21% incl {}", &Uuid::new_v4().to_string()[..6]),
             template_type: Some("sales".into()),
             tax_category_id: None,
             is_inclusive: true,
@@ -321,7 +326,6 @@ async fn bdt3_round_per_line_drives_totals() {
         .await
         .unwrap();
     w.add_row(NewTemplateRow {
-        company_id: company,
         template_id: tid,
         charge_type: None,
         rate: d("21"),
@@ -337,7 +341,6 @@ async fn bdt3_round_per_line_drives_totals() {
 
     let inv = wired(&pool)
         .create_sales_invoice(new_sales(
-            company,
             vec![
                 line(Uuid::new_v4(), "1", "21.53", Some(tid)),
                 line(Uuid::new_v4(), "1", "21.53", Some(tid)),
@@ -363,11 +366,9 @@ async fn bdt3_round_per_line_drives_totals() {
 #[tokio::test]
 async fn bdt4_explicit_lines_backward_compat() {
     let pool = pool().await;
-    let company = Uuid::new_v4();
     let tax_acct = Uuid::new_v4();
     let inv = BillingWriteService::new(pool.clone())
         .create_sales_invoice(new_sales(
-            company,
             vec![line(Uuid::new_v4(), "100", "1", None)],
             vec![supplied_tax(tax_acct, "11")],
             Uuid::new_v4(),
@@ -389,13 +390,11 @@ async fn bdt4_explicit_lines_backward_compat() {
 #[tokio::test]
 async fn bdt5_engine_unwired_fails_closed() {
     let pool = pool().await;
-    let company = Uuid::new_v4();
     let w = TaxWriteService::new(pool.clone());
     let tid = w
         .create_template(NewTemplate {
-            company_id: company,
             code: uq("PPN"),
-            name: "PPN 11%".into(),
+            name: format!("PPN 11% {}", &Uuid::new_v4().to_string()[..6]),
             template_type: Some("sales".into()),
             tax_category_id: None,
             is_inclusive: false,
@@ -405,9 +404,13 @@ async fn bdt5_engine_unwired_fails_closed() {
         .await
         .unwrap();
 
+    let before: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM billing.sales_invoices")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let err = BillingWriteService::new(pool.clone())
         .create_sales_invoice(new_sales(
-            company,
             vec![line(Uuid::new_v4(), "1000", "1", Some(tid))],
             vec![],
             Uuid::new_v4(),
@@ -417,14 +420,13 @@ async fn bdt5_engine_unwired_fails_closed() {
     assert_eq!(err.code(), "tax_engine_unwired");
     assert_eq!(err.http_status(), 422);
 
-    let n: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM billing.sales_invoices WHERE company_id = $1")
-            .bind(company)
+    let after: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM billing.sales_invoices")
             .fetch_one(&pool)
             .await
             .unwrap();
     assert_eq!(
-        n, 0,
+        before, after,
         "nothing persisted — fail closed, not partially created"
     );
 }
@@ -436,31 +438,28 @@ async fn bdt5_engine_unwired_fails_closed() {
 #[tokio::test]
 async fn bdt6_caba_post_lands_on_transition() {
     let pool = pool().await;
-    let company = Uuid::new_v4();
     let tid = Uuid::new_v4();
     let transition = Uuid::new_v4();
     let real = Uuid::new_v4();
     sqlx::query(
         r#"INSERT INTO accounting.accounts
-               (id, company_id, account_number, account_code, name, account_type, account_subtype,
+               (id, account_number, account_code, name, account_type, account_subtype,
                 normal_balance, is_header, is_detail, status, is_reconcilable)
-           VALUES ($1,$2,'2300','2300','PPN transition','liability','tax','credit',
+           VALUES ($1,'2300','2300','PPN transition','liability','tax','credit',
                    FALSE,TRUE,'active'::account_status,TRUE)"#,
     )
     .bind(transition)
-    .bind(company)
     .execute(&pool)
     .await
     .unwrap();
     sqlx::query(
         r#"INSERT INTO tax.tax_templates
-               (id, company_id, code, name, template_type, is_inclusive,
+               (id, code, name, template_type, is_inclusive,
                 tax_exigibility, cash_basis_transition_account_id)
-           VALUES ($1, $2, $3, 'CABA PPN', 'sales', FALSE,
-                   'on_payment'::tax_exigibility, $4)"#,
+           VALUES ($1, $2, 'CABA PPN', 'sales', FALSE,
+                   'on_payment'::tax_exigibility, $3)"#,
     )
     .bind(tid)
-    .bind(company)
     .bind(uq("CABA"))
     .bind(transition)
     .execute(&pool)
@@ -468,7 +467,6 @@ async fn bdt6_caba_post_lands_on_transition() {
     .unwrap();
     let w = TaxWriteService::new(pool.clone());
     w.add_row(NewTemplateRow {
-        company_id: company,
         template_id: tid,
         charge_type: None,
         rate: d("11"),
@@ -485,7 +483,6 @@ async fn bdt6_caba_post_lands_on_transition() {
     let svc = wired(&pool);
     let inv = svc
         .create_sales_invoice(new_sales(
-            company,
             vec![line(Uuid::new_v4(), "1000", "1", Some(tid))],
             vec![],
             Uuid::new_v4(),
@@ -525,15 +522,13 @@ async fn bdt6_caba_post_lands_on_transition() {
 #[tokio::test]
 async fn bdt7_overlay_records_routing() {
     let pool = pool().await;
-    let company = Uuid::new_v4();
     let w = TaxWriteService::new(pool.clone());
     let a1 = Uuid::new_v4();
     let a2 = Uuid::new_v4();
     let tid = w
         .create_template(NewTemplate {
-            company_id: company,
             code: uq("SPLIT"),
-            name: "PPN split 60/40".into(),
+            name: format!("PPN split 60/40 {}", &Uuid::new_v4().to_string()[..6]),
             template_type: Some("sales".into()),
             tax_category_id: None,
             is_inclusive: false,
@@ -543,7 +538,6 @@ async fn bdt7_overlay_records_routing() {
         .await
         .unwrap();
     w.add_row(NewTemplateRow {
-        company_id: company,
         template_id: tid,
         charge_type: None,
         rate: d("10"),
@@ -558,14 +552,12 @@ async fn bdt7_overlay_records_routing() {
     .unwrap();
     let tag = w
         .create_tag(NewTag {
-            company_id: company,
             code: uq("BTAG").into(),
-            name: "base tag".into(),
+            name: format!("base tag {}", &Uuid::new_v4().to_string()[..6]),
         })
         .await
         .unwrap();
     w.replace_repartition_family(ReplaceRepartitionFamily {
-        company_id: company,
         template_id: tid,
         document_type: "invoice".into(),
         base_tag_ids: vec![tag],
@@ -592,7 +584,6 @@ async fn bdt7_overlay_records_routing() {
 
     let inv = wired(&pool)
         .create_sales_invoice(new_sales(
-            company,
             vec![line(Uuid::new_v4(), "100", "1", Some(tid))],
             vec![],
             Uuid::new_v4(),

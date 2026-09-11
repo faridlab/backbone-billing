@@ -24,7 +24,6 @@ impl TestDataGenerator for PaymentTermTestData {
         let now = Utc::now().to_rfc3339();
         json!({
             "id": Uuid::new_v4().to_string(),
-            "company_id": null,
             "name": format!("Test {}", Uuid::new_v4().to_string().split('-').next().unwrap()),
             "note": null,
             "sequence": 1,
@@ -42,7 +41,6 @@ impl TestDataGenerator for PaymentTermTestData {
         let now = Utc::now().to_rfc3339();
         json!({
             "id": id,
-            "company_id": null,
             "name": format!("Test {}", Uuid::new_v4().to_string().split('-').next().unwrap()),
             "note": null,
             "sequence": 1,

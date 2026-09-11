@@ -7,9 +7,9 @@
 
 use backbone_core::GenericCrudService;
 
+use crate::presentation::dto::{CreatePaymentTermDto, UpdatePaymentTermDto};
 use crate::domain::entity::PaymentTerm;
 use crate::infrastructure::persistence::PaymentTermRepository;
-use crate::presentation::dto::{CreatePaymentTermDto, UpdatePaymentTermDto};
 
 /// Application service for PaymentTerm entities.
 ///

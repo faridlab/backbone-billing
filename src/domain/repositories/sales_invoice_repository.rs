@@ -5,11 +5,11 @@
 //! This trait defines the repository contract for the SalesInvoice aggregate.
 //! Implementation is in the infrastructure layer.
 
-use anyhow::Result;
 use async_trait::async_trait;
+use anyhow::Result;
 use uuid::Uuid;
 
-use crate::domain::entity::{GlPostingState, InvoiceStatus, SalesInvoice};
+use crate::domain::entity::{SalesInvoice, GlPostingState, InvoiceStatus};
 
 /// Pagination parameters for list queries
 #[derive(Debug, Clone, Default)]
@@ -45,7 +45,6 @@ pub struct SalesInvoicePaginatedResult {
 #[derive(Debug, Clone, Default)]
 pub struct SalesInvoiceFilter {
     pub invoice_number: Option<String>,
-    pub company_id: Option<Uuid>,
     pub branch_id: Option<Uuid>,
     pub customer_id: Option<Uuid>,
     pub source_so_id: Option<Uuid>,
@@ -63,20 +62,7 @@ pub struct SalesInvoiceFilter {
 impl SalesInvoiceFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.invoice_number.is_some()
-            || self.company_id.is_some()
-            || self.branch_id.is_some()
-            || self.customer_id.is_some()
-            || self.source_so_id.is_some()
-            || self.status.is_some()
-            || self.payment_term_id.is_some()
-            || self.early_pay_discount_account_id.is_some()
-            || self.currency.is_some()
-            || self.receivable_account_id.is_some()
-            || self.posting_state.is_some()
-            || self.journal_id.is_some()
-            || self.accounting_post_id.is_some()
-            || self.notes.is_some()
+        self.invoice_number.is_some() || self.branch_id.is_some() || self.customer_id.is_some() || self.source_so_id.is_some() || self.status.is_some() || self.payment_term_id.is_some() || self.early_pay_discount_account_id.is_some() || self.currency.is_some() || self.receivable_account_id.is_some() || self.posting_state.is_some() || self.journal_id.is_some() || self.accounting_post_id.is_some() || self.notes.is_some()
     }
 }
 
@@ -86,6 +72,7 @@ impl SalesInvoiceFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait SalesInvoiceRepository: Send + Sync {
+
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -110,17 +97,10 @@ pub trait SalesInvoiceRepository: Send + Sync {
     // =========================================================================
 
     /// List sales_invoice with pagination
-    async fn list(
-        &self,
-        params: SalesInvoicePaginationParams,
-    ) -> Result<SalesInvoicePaginatedResult>;
+    async fn list(&self, params: SalesInvoicePaginationParams) -> Result<SalesInvoicePaginatedResult>;
 
     /// List sales_invoice with pagination and filters
-    async fn list_with_filters(
-        &self,
-        params: SalesInvoicePaginationParams,
-        filters: SalesInvoiceFilter,
-    ) -> Result<SalesInvoicePaginatedResult>;
+    async fn list_with_filters(&self, params: SalesInvoicePaginationParams, filters: SalesInvoiceFilter) -> Result<SalesInvoicePaginatedResult>;
 
     /// Count all sales_invoice entities
     async fn count(&self) -> Result<u64>;
@@ -142,10 +122,7 @@ pub trait SalesInvoiceRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<SalesInvoice>>;
 
     /// List soft-deleted sales_invoice entities
-    async fn list_deleted(
-        &self,
-        params: SalesInvoicePaginationParams,
-    ) -> Result<SalesInvoicePaginatedResult>;
+    async fn list_deleted(&self, params: SalesInvoicePaginationParams) -> Result<SalesInvoicePaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;

@@ -191,12 +191,10 @@ impl GlPostSink for OkGl {
 async fn post_materializes_term_schedule_and_epd() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let company = Uuid::new_v4();
     let epd_account = Uuid::new_v4();
 
     let term = w
         .create_payment_term(
-            company,
             &uq("TERM"),
             None,
             10,
@@ -234,7 +232,6 @@ async fn post_materializes_term_schedule_and_epd() {
     let inv = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,
@@ -311,10 +308,8 @@ async fn post_materializes_term_schedule_and_epd() {
 async fn single_slice_term_writes_due_date_only() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let company = Uuid::new_v4();
     let term = w
         .create_payment_term(
-            company,
             &uq("TERM"),
             None,
             10,
@@ -340,7 +335,6 @@ async fn single_slice_term_writes_due_date_only() {
     let inv = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,
@@ -396,7 +390,6 @@ async fn manual_due_date_and_schedule_conflicts_refuse() {
     let company = Uuid::new_v4();
     let term = w
         .create_payment_term(
-            company,
             &uq("TERM"),
             None,
             10,
@@ -430,7 +423,6 @@ async fn manual_due_date_and_schedule_conflicts_refuse() {
     let refuse = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,
@@ -450,7 +442,6 @@ async fn manual_due_date_and_schedule_conflicts_refuse() {
     let inv = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,

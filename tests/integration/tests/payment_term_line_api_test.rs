@@ -25,7 +25,6 @@ impl TestDataGenerator for PaymentTermLineTestData {
         json!({
             "id": Uuid::new_v4().to_string(),
             "term_id": Uuid::new_v4().to_string(),
-            "company_id": null,
             "value": "balance",
             "value_amount": 0,
             "nb_days": 1,
@@ -42,7 +41,6 @@ impl TestDataGenerator for PaymentTermLineTestData {
         json!({
             "id": id,
             "term_id": Uuid::new_v4().to_string(),
-            "company_id": null,
             "value": "balance",
             "value_amount": 0,
             "nb_days": 1,
@@ -62,13 +60,7 @@ impl TestDataGenerator for PaymentTermLineTestData {
 
     async fn seed_dependencies(&self, api: &ApiTest) -> Vec<(String, String)> {
         let mut deps: Vec<(String, String)> = Vec::new();
-        if let Some(id) = super::crud_test_base::create_and_get_id(
-            api,
-            "/api/v1/payment_terms",
-            &super::payment_term_api_test::PaymentTermTestData,
-        )
-        .await
-        {
+        if let Some(id) = super::crud_test_base::create_and_get_id(api, "/api/v1/payment_terms", &super::payment_term_api_test::PaymentTermTestData).await {
             deps.push(("term_id".to_string(), id));
         }
         deps

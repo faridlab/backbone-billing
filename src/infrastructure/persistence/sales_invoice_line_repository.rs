@@ -13,7 +13,12 @@ use rust_decimal::Decimal;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope;
+// The multi-row read twin lives only in the legacy `company_scope` module. Its connection
+// discipline is what this repository needs — request-dedicated connection when the composing
+// service bound one, plain pool otherwise. The helper's legacy task-local branch is never
+// taken: this module sets no legacy scope of its own (ADR-0029).
+use backbone_orm::company_scope::fetch_all_rows_scoped;
 
 use crate::domain::entity::SalesInvoiceLine;
 
@@ -50,9 +55,6 @@ impl SalesInvoiceLineRepository {
 pub struct NewSalesInvoiceLineRow<'a> {
     pub id: Uuid,
     pub invoice_id: Uuid,
-    /// Bound to the `company_id` column (denormalized from the header so the row passes the
-    /// ADR-0008 RLS fence on its own). Required since migration 20260426220010.
-    pub company_id: Uuid,
     pub item_id: Uuid,
     /// Bound to the `revenue_account_id` column.
     pub account_id: Uuid,
@@ -80,8 +82,8 @@ pub struct BilledLineRow {
 impl SalesInvoiceLineRepository {
     /// Insert one priced line.
     ///
-    /// Takes the CALLER'S connection so the line commits with its header in one unit. The caller has
-    /// already bound the company on it (`bind_company_on`) — don't re-bind here.
+    /// Takes the CALLER'S connection so the line commits with its header in one unit. The caller
+    /// relays the AMBIENT org scope onto it (`org_scope::bind_org_scope_on`) — don't re-bind here.
     pub async fn insert_line(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -89,25 +91,25 @@ impl SalesInvoiceLineRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO billing.sales_invoice_lines
-                (id, invoice_id, company_id, item_id, revenue_account_id, description, quantity, unit_price, net_amount)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)"#,
+                (id, invoice_id, item_id, revenue_account_id, description, quantity, unit_price, net_amount)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"#,
         )
-        .bind(l.id).bind(l.invoice_id).bind(l.company_id).bind(l.item_id).bind(l.account_id).bind(l.description)
+        .bind(l.id).bind(l.invoice_id).bind(l.item_id).bind(l.account_id).bind(l.description)
         .bind(l.quantity).bind(l.unit_price).bind(l.net_amount)
         .execute(conn)
         .await?;
         Ok(())
     }
 
-    /// Read the live lines' revenue accounts + nets for the A/R post. The caller wraps this in
-    /// `with_company_scope(Some(company))` (the company comes off the invoice header) so the read
-    /// passes the RLS fence (ADR-0008).
+    /// Read the live lines' revenue accounts + nets for the A/R post. Rides the request-dedicated
+    /// connection when the composing service bound one (carrying the decorator's fence variables),
+    /// plainly on the pool otherwise (ADR-0029).
     pub async fn fetch_revenue_amounts(
         &self,
         pool: &PgPool,
         invoice_id: Uuid,
     ) -> Result<Vec<RevenueAmountRow>, sqlx::Error> {
-        let rows = company_scope::fetch_all_rows_scoped(
+        let rows = fetch_all_rows_scoped(
             pool,
             sqlx::query("SELECT revenue_account_id, net_amount FROM billing.sales_invoice_lines WHERE invoice_id=$1 AND (metadata->>'deleted_at') IS NULL")
                 .bind(invoice_id),

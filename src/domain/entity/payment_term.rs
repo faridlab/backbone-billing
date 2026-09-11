@@ -1,12 +1,12 @@
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
+use rust_decimal::Decimal;
 
-use super::AuditMetadata;
-use super::DiscountTaxBasis;
 use super::PaymentTermStatus;
+use super::DiscountTaxBasis;
+use super::AuditMetadata;
 
 /// Strongly-typed ID for PaymentTerm
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -14,15 +14,9 @@ use super::PaymentTermStatus;
 pub struct PaymentTermId(pub Uuid);
 
 impl PaymentTermId {
-    pub fn new(id: Uuid) -> Self {
-        Self(id)
-    }
-    pub fn generate() -> Self {
-        Self(Uuid::new_v4())
-    }
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
+    pub fn new(id: Uuid) -> Self { Self(id) }
+    pub fn generate() -> Self { Self(Uuid::new_v4()) }
+    pub fn into_inner(self) -> Uuid { self.0 }
 }
 
 impl std::fmt::Display for PaymentTermId {
@@ -39,34 +33,25 @@ impl std::str::FromStr for PaymentTermId {
 }
 
 impl From<Uuid> for PaymentTermId {
-    fn from(id: Uuid) -> Self {
-        Self(id)
-    }
+    fn from(id: Uuid) -> Self { Self(id) }
 }
 
 impl From<PaymentTermId> for Uuid {
-    fn from(id: PaymentTermId) -> Self {
-        id.0
-    }
+    fn from(id: PaymentTermId) -> Self { id.0 }
 }
 
 impl AsRef<Uuid> for PaymentTermId {
-    fn as_ref(&self) -> &Uuid {
-        &self.0
-    }
+    fn as_ref(&self) -> &Uuid { &self.0 }
 }
 
 impl std::ops::Deref for PaymentTermId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct PaymentTerm {
     pub id: Uuid,
-    pub company_id: Option<Uuid>,
     pub name: String,
     pub note: Option<String>,
     pub sequence: i32,
@@ -88,18 +73,9 @@ impl PaymentTerm {
     }
 
     /// Create a new PaymentTerm with required fields
-    pub fn new(
-        name: String,
-        sequence: i32,
-        status: PaymentTermStatus,
-        early_discount: bool,
-        discount_percent: Decimal,
-        discount_days: i32,
-        discount_tax_basis: DiscountTaxBasis,
-    ) -> Self {
+    pub fn new(name: String, sequence: i32, status: PaymentTermStatus, early_discount: bool, discount_percent: Decimal, discount_days: i32, discount_tax_basis: DiscountTaxBasis) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: None,
             name,
             note: None,
             sequence,
@@ -168,15 +144,10 @@ impl PaymentTerm {
         &self.status
     }
 
+
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
-
-    /// Set the company_id field (chainable)
-    pub fn with_company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
 
     /// Set the note field (chainable)
     pub fn with_note(mut self, value: String) -> Self {
@@ -198,55 +169,32 @@ impl PaymentTerm {
     pub fn apply_patch(&mut self, fields: std::collections::HashMap<String, serde_json::Value>) {
         for (key, value) in fields {
             match key.as_str() {
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.company_id = v;
-                    }
-                }
                 "name" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.name = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.name = v; }
                 }
                 "note" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.note = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.note = v; }
                 }
                 "sequence" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.sequence = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.sequence = v; }
                 }
                 "status" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.status = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.status = v; }
                 }
                 "early_discount" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.early_discount = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.early_discount = v; }
                 }
                 "discount_percent" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.discount_percent = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.discount_percent = v; }
                 }
                 "discount_days" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.discount_days = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.discount_days = v; }
                 }
                 "discount_account_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.discount_account_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.discount_account_id = v; }
                 }
                 "discount_tax_basis" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.discount_tax_basis = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.discount_tax_basis = v; }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -302,20 +250,13 @@ impl backbone_orm::EntityRepoMeta for PaymentTerm {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("discount_account_id".to_string(), "uuid".to_string());
         m.insert("status".to_string(), "payment_term_status".to_string());
-        m.insert(
-            "discount_tax_basis".to_string(),
-            "discount_tax_basis".to_string(),
-        );
+        m.insert("discount_tax_basis".to_string(), "discount_tax_basis".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
         &["name"]
-    }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
     }
 }
 
@@ -325,7 +266,6 @@ impl backbone_orm::EntityRepoMeta for PaymentTerm {
 /// System fields (id, metadata, timestamps) are auto-initialized.
 #[derive(Debug, Clone, Default)]
 pub struct PaymentTermBuilder {
-    company_id: Option<Uuid>,
     name: Option<String>,
     note: Option<String>,
     sequence: Option<i32>,
@@ -338,12 +278,6 @@ pub struct PaymentTermBuilder {
 }
 
 impl PaymentTermBuilder {
-    /// Set the company_id field (optional)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
-
     /// Set the name field (required)
     pub fn name(mut self, value: String) -> Self {
         self.name = Some(value);
@@ -406,7 +340,6 @@ impl PaymentTermBuilder {
 
         Ok(PaymentTerm {
             id: Uuid::new_v4(),
-            company_id: self.company_id,
             name,
             note: self.note,
             sequence: self.sequence.unwrap_or(10),

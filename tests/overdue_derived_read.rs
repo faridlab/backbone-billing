@@ -55,7 +55,6 @@ fn gl() -> OkGl {
 
 async fn posted_sales(
     w: &BillingWriteService,
-    company: Uuid,
     posting: chrono::NaiveDate,
     due: chrono::NaiveDate,
 ) -> Uuid {
@@ -63,7 +62,6 @@ async fn posted_sales(
     let inv = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,
@@ -90,7 +88,6 @@ async fn posted_sales(
 
 async fn posted_purchase(
     w: &BillingWriteService,
-    company: Uuid,
     posting: chrono::NaiveDate,
     due: chrono::NaiveDate,
 ) -> Uuid {
@@ -98,7 +95,6 @@ async fn posted_purchase(
     let inv = w
         .create_purchase_invoice(NewPurchaseInvoice {
             invoice_number: uq("PI"),
-            company_id: company,
             branch_id: None,
             supplier_id: Uuid::new_v4(),
             source_po_id: None,
@@ -123,23 +119,38 @@ async fn posted_purchase(
     inv
 }
 
+/// The two tests in this binary both write into the shared invoice seam and the overdue read is
+/// a whole-table derivation, so they serialize on this lock (the FK-ordered cleanup would
+/// otherwise race a concurrent test's inserts).
+static SEAM: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 // OD-1: both kinds appear, earliest due first; settled and future-due and draft invoices do not.
 #[tokio::test]
 async fn overdue_lists_open_posted_both_kinds() {
+    let _seam = SEAM.lock().unwrap_or_else(|e| e.into_inner());
     let pool = pool().await;
+    // The overdue read is derived from EVERY row in the two invoice tables (post-strip there is
+    // no tenant key at module level — the composing decorator fences it), so start from a clean
+    // seam: this scratch DB is shared by the whole suite's binaries. Lines before invoices (FK).
+    for table in [
+        "DELETE FROM billing.sales_invoice_lines",
+        "DELETE FROM billing.purchase_invoice_lines",
+        "DELETE FROM billing.sales_invoices",
+        "DELETE FROM billing.purchase_invoices",
+    ] {
+        sqlx::query(table).execute(&pool).await.unwrap();
+    }
     let w = BillingWriteService::new(pool.clone());
-    let company = Uuid::new_v4();
     let today = day(2026, 8, 15);
 
-    let od_sales = posted_sales(&w, company, day(2026, 6, 1), day(2026, 6, 30)).await;
-    let od_purchase = posted_purchase(&w, company, day(2026, 6, 1), day(2026, 7, 15)).await;
-    let future = posted_sales(&w, company, day(2026, 8, 1), day(2026, 9, 30)).await;
+    let od_sales = posted_sales(&w, day(2026, 6, 1), day(2026, 6, 30)).await;
+    let od_purchase = posted_purchase(&w, day(2026, 6, 1), day(2026, 7, 15)).await;
+    let future = posted_sales(&w, day(2026, 8, 1), day(2026, 9, 30)).await;
     let _draft = {
         // never posted → stays draft, GL-invisible even though past due
         let (item, rev, ar) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
         w.create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: Uuid::new_v4(),
             source_so_id: None,
@@ -161,7 +172,7 @@ async fn overdue_lists_open_posted_both_kinds() {
         .await
         .unwrap()
     };
-    let settled = posted_sales(&w, company, day(2026, 6, 1), day(2026, 6, 30)).await;
+    let settled = posted_sales(&w, day(2026, 6, 1), day(2026, 6, 30)).await;
     // Pay one off entirely (direct state write: this is a derived-read test, not a settlement test).
     sqlx::query(
         "UPDATE billing.sales_invoices SET outstanding_amount=0, status='paid' WHERE id=$1",
@@ -171,7 +182,7 @@ async fn overdue_lists_open_posted_both_kinds() {
     .await
     .unwrap();
 
-    let rows = w.list_overdue_invoices(company, today).await.unwrap();
+    let rows = w.list_overdue_invoices(today).await.unwrap();
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     assert_eq!(
         ids,
@@ -195,18 +206,20 @@ async fn overdue_lists_open_posted_both_kinds() {
     assert_eq!(by_kind[1], (&od_purchase, "purchase", 31, d("2000.00")));
 }
 
-// OD-2: the tenant fence — another company's overdue invoice is invisible.
+// OD-2: no module-level tenant filter — on an undecorated database the read spans every
+// invoice (ADR-0029: an undecorated deployment gets an unfenced module; isolation is the
+// composing service's tenancy decorator, proven by its own suite).
 #[tokio::test]
-async fn overdue_is_company_scoped() {
+async fn overdue_read_is_unfenced_without_a_decorator() {
+    let _seam = SEAM.lock().unwrap_or_else(|e| e.into_inner());
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let a = Uuid::new_v4();
-    let b = Uuid::new_v4();
-    posted_sales(&w, b, day(2026, 6, 1), day(2026, 6, 30)).await;
+    let inv = posted_sales(&w, day(2026, 6, 1), day(2026, 6, 30)).await;
 
-    let rows = w.list_overdue_invoices(a, day(2026, 8, 15)).await.unwrap();
+    let rows = w.list_overdue_invoices(day(2026, 8, 15)).await.unwrap();
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     assert!(
-        rows.is_empty(),
-        "company A must not see B's overdue invoices"
+        ids.contains(&inv),
+        "without a bound scope the overdue read is not filtered by any tenant"
     );
 }

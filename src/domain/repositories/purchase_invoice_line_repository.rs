@@ -5,8 +5,8 @@
 //! This trait defines the repository contract for the PurchaseInvoiceLine aggregate.
 //! Implementation is in the infrastructure layer.
 
-use anyhow::Result;
 use async_trait::async_trait;
+use anyhow::Result;
 use uuid::Uuid;
 
 use crate::domain::entity::PurchaseInvoiceLine;
@@ -45,7 +45,6 @@ pub struct PurchaseInvoiceLinePaginatedResult {
 #[derive(Debug, Clone, Default)]
 pub struct PurchaseInvoiceLineFilter {
     pub invoice_id: Option<Uuid>,
-    pub company_id: Option<Uuid>,
     pub item_id: Option<Uuid>,
     pub expense_account_id: Option<Uuid>,
     pub description: Option<String>,
@@ -54,11 +53,7 @@ pub struct PurchaseInvoiceLineFilter {
 impl PurchaseInvoiceLineFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.invoice_id.is_some()
-            || self.company_id.is_some()
-            || self.item_id.is_some()
-            || self.expense_account_id.is_some()
-            || self.description.is_some()
+        self.invoice_id.is_some() || self.item_id.is_some() || self.expense_account_id.is_some() || self.description.is_some()
     }
 }
 
@@ -68,6 +63,7 @@ impl PurchaseInvoiceLineFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait PurchaseInvoiceLineRepository: Send + Sync {
+
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -82,11 +78,7 @@ pub trait PurchaseInvoiceLineRepository: Send + Sync {
     async fn find_all(&self) -> Result<Vec<PurchaseInvoiceLine>>;
 
     /// Update purchase_invoice_line by ID
-    async fn update(
-        &self,
-        id: &str,
-        entity: &PurchaseInvoiceLine,
-    ) -> Result<Option<PurchaseInvoiceLine>>;
+    async fn update(&self, id: &str, entity: &PurchaseInvoiceLine) -> Result<Option<PurchaseInvoiceLine>>;
 
     /// Delete purchase_invoice_line by ID
     async fn delete(&self, id: &str) -> Result<bool>;
@@ -96,17 +88,10 @@ pub trait PurchaseInvoiceLineRepository: Send + Sync {
     // =========================================================================
 
     /// List purchase_invoice_line with pagination
-    async fn list(
-        &self,
-        params: PurchaseInvoiceLinePaginationParams,
-    ) -> Result<PurchaseInvoiceLinePaginatedResult>;
+    async fn list(&self, params: PurchaseInvoiceLinePaginationParams) -> Result<PurchaseInvoiceLinePaginatedResult>;
 
     /// List purchase_invoice_line with pagination and filters
-    async fn list_with_filters(
-        &self,
-        params: PurchaseInvoiceLinePaginationParams,
-        filters: PurchaseInvoiceLineFilter,
-    ) -> Result<PurchaseInvoiceLinePaginatedResult>;
+    async fn list_with_filters(&self, params: PurchaseInvoiceLinePaginationParams, filters: PurchaseInvoiceLineFilter) -> Result<PurchaseInvoiceLinePaginatedResult>;
 
     /// Count all purchase_invoice_line entities
     async fn count(&self) -> Result<u64>;
@@ -128,10 +113,7 @@ pub trait PurchaseInvoiceLineRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<PurchaseInvoiceLine>>;
 
     /// List soft-deleted purchase_invoice_line entities
-    async fn list_deleted(
-        &self,
-        params: PurchaseInvoiceLinePaginationParams,
-    ) -> Result<PurchaseInvoiceLinePaginatedResult>;
+    async fn list_deleted(&self, params: PurchaseInvoiceLinePaginationParams) -> Result<PurchaseInvoiceLinePaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;
@@ -141,8 +123,7 @@ pub trait PurchaseInvoiceLineRepository: Send + Sync {
     // =========================================================================
 
     /// Bulk save purchase_invoice_line entities
-    async fn bulk_save(&self, entities: &[PurchaseInvoiceLine])
-        -> Result<Vec<PurchaseInvoiceLine>>;
+    async fn bulk_save(&self, entities: &[PurchaseInvoiceLine]) -> Result<Vec<PurchaseInvoiceLine>>;
 
     /// Bulk delete by IDs
     async fn bulk_delete(&self, ids: &[&str]) -> Result<u64>;

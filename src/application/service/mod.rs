@@ -9,12 +9,12 @@ pub use error::{ServiceError, ServiceResult};
 
 pub mod invoice_tax_line_service;
 pub mod payment_schedule_service;
-pub mod payment_term_line_service;
 pub mod payment_term_service;
-pub mod purchase_invoice_line_service;
+pub mod payment_term_line_service;
 pub mod purchase_invoice_service;
-pub mod sales_invoice_line_service;
+pub mod purchase_invoice_line_service;
 pub mod sales_invoice_service;
+pub mod sales_invoice_line_service;
 
 // <<< CUSTOM
 pub mod billing_events;
@@ -32,12 +32,12 @@ pub mod term_schedule;
 
 pub use invoice_tax_line_service::InvoiceTaxLineService;
 pub use payment_schedule_service::PaymentScheduleService;
-pub use payment_term_line_service::PaymentTermLineService;
 pub use payment_term_service::PaymentTermService;
-pub use purchase_invoice_line_service::PurchaseInvoiceLineService;
+pub use payment_term_line_service::PaymentTermLineService;
 pub use purchase_invoice_service::PurchaseInvoiceService;
-pub use sales_invoice_line_service::SalesInvoiceLineService;
+pub use purchase_invoice_line_service::PurchaseInvoiceLineService;
 pub use sales_invoice_service::SalesInvoiceService;
+pub use sales_invoice_line_service::SalesInvoiceLineService;
 // <<< CUSTOM
 pub use billing_events::{
     BilledLine, BillingEvent, BillingEventSink, InvoiceCancelled, LoggingSink,

@@ -14,26 +14,25 @@ use std::env;
 // Import seeders
 use backbone_billing::seeders::SeedInvoiceTaxLineSeeder;
 use backbone_billing::seeders::SeedPaymentScheduleSeeder;
-use backbone_billing::seeders::SeedPaymentTermLineSeeder;
 use backbone_billing::seeders::SeedPaymentTermSeeder;
-use backbone_billing::seeders::SeedPurchaseInvoiceLineSeeder;
+use backbone_billing::seeders::SeedPaymentTermLineSeeder;
 use backbone_billing::seeders::SeedPurchaseInvoiceSeeder;
-use backbone_billing::seeders::SeedSalesInvoiceLineSeeder;
+use backbone_billing::seeders::SeedPurchaseInvoiceLineSeeder;
 use backbone_billing::seeders::SeedSalesInvoiceSeeder;
+use backbone_billing::seeders::SeedSalesInvoiceLineSeeder;
 use backbone_billing::seeders::Seeder;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let force = args.iter().any(|a| a == "--force");
-    let filter: Option<&str> = args
-        .iter()
+    let filter: Option<&str> = args.iter()
         .skip(1)
         .find(|a| !a.starts_with("-"))
         .map(|s| s.as_str());
 
-    let database_url =
-        env::var("DATABASE_URL").map_err(|e| anyhow::anyhow!("DATABASE_URL must be set: {e}"))?;
+    let database_url = env::var("DATABASE_URL")
+        .map_err(|e| anyhow::anyhow!("DATABASE_URL must be set: {e}"))?;
 
     println!("Connecting to database...");
 

@@ -1,9 +1,9 @@
-use super::AuditMetadata;
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
+use rust_decimal::Decimal;
+use super::AuditMetadata;
 
 /// Strongly-typed ID for SalesInvoiceLine
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -11,15 +11,9 @@ use uuid::Uuid;
 pub struct SalesInvoiceLineId(pub Uuid);
 
 impl SalesInvoiceLineId {
-    pub fn new(id: Uuid) -> Self {
-        Self(id)
-    }
-    pub fn generate() -> Self {
-        Self(Uuid::new_v4())
-    }
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
+    pub fn new(id: Uuid) -> Self { Self(id) }
+    pub fn generate() -> Self { Self(Uuid::new_v4()) }
+    pub fn into_inner(self) -> Uuid { self.0 }
 }
 
 impl std::fmt::Display for SalesInvoiceLineId {
@@ -36,35 +30,26 @@ impl std::str::FromStr for SalesInvoiceLineId {
 }
 
 impl From<Uuid> for SalesInvoiceLineId {
-    fn from(id: Uuid) -> Self {
-        Self(id)
-    }
+    fn from(id: Uuid) -> Self { Self(id) }
 }
 
 impl From<SalesInvoiceLineId> for Uuid {
-    fn from(id: SalesInvoiceLineId) -> Self {
-        id.0
-    }
+    fn from(id: SalesInvoiceLineId) -> Self { id.0 }
 }
 
 impl AsRef<Uuid> for SalesInvoiceLineId {
-    fn as_ref(&self) -> &Uuid {
-        &self.0
-    }
+    fn as_ref(&self) -> &Uuid { &self.0 }
 }
 
 impl std::ops::Deref for SalesInvoiceLineId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SalesInvoiceLine {
     pub id: Uuid,
     pub invoice_id: Uuid,
-    pub company_id: Uuid,
     pub item_id: Uuid,
     pub revenue_account_id: Uuid,
     pub description: Option<String>,
@@ -83,19 +68,10 @@ impl SalesInvoiceLine {
     }
 
     /// Create a new SalesInvoiceLine with required fields
-    pub fn new(
-        invoice_id: Uuid,
-        company_id: Uuid,
-        item_id: Uuid,
-        revenue_account_id: Uuid,
-        quantity: Decimal,
-        unit_price: Decimal,
-        net_amount: Decimal,
-    ) -> Self {
+    pub fn new(invoice_id: Uuid, item_id: Uuid, revenue_account_id: Uuid, quantity: Decimal, unit_price: Decimal, net_amount: Decimal) -> Self {
         Self {
             id: Uuid::new_v4(),
             invoice_id,
-            company_id,
             item_id,
             revenue_account_id,
             description: None,
@@ -156,6 +132,7 @@ impl SalesInvoiceLine {
         self.metadata.deleted_by.as_ref()
     }
 
+
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
@@ -175,44 +152,25 @@ impl SalesInvoiceLine {
         for (key, value) in fields {
             match key.as_str() {
                 "invoice_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.invoice_id = v;
-                    }
-                }
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.company_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.invoice_id = v; }
                 }
                 "item_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.item_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.item_id = v; }
                 }
                 "revenue_account_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.revenue_account_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.revenue_account_id = v; }
                 }
                 "description" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.description = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.description = v; }
                 }
                 "quantity" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.quantity = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.quantity = v; }
                 }
                 "unit_price" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.unit_price = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.unit_price = v; }
                 }
                 "net_amount" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.net_amount = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.net_amount = v; }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -269,16 +227,12 @@ impl backbone_orm::EntityRepoMeta for SalesInvoiceLine {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
         m.insert("invoice_id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("item_id".to_string(), "uuid".to_string());
         m.insert("revenue_account_id".to_string(), "uuid".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
         &[]
-    }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
     }
     fn relations() -> &'static [(&'static str, &'static str, &'static str)] {
         &[("invoice", "sales_invoices", "invoiceId")]
@@ -292,7 +246,6 @@ impl backbone_orm::EntityRepoMeta for SalesInvoiceLine {
 #[derive(Debug, Clone, Default)]
 pub struct SalesInvoiceLineBuilder {
     invoice_id: Option<Uuid>,
-    company_id: Option<Uuid>,
     item_id: Option<Uuid>,
     revenue_account_id: Option<Uuid>,
     description: Option<String>,
@@ -305,12 +258,6 @@ impl SalesInvoiceLineBuilder {
     /// Set the invoice_id field (required)
     pub fn invoice_id(mut self, value: Uuid) -> Self {
         self.invoice_id = Some(value);
-        self
-    }
-
-    /// Set the company_id field (required)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
         self
     }
 
@@ -354,29 +301,15 @@ impl SalesInvoiceLineBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<SalesInvoiceLine, String> {
-        let invoice_id = self
-            .invoice_id
-            .ok_or_else(|| "invoice_id is required".to_string())?;
-        let company_id = self
-            .company_id
-            .ok_or_else(|| "company_id is required".to_string())?;
-        let item_id = self
-            .item_id
-            .ok_or_else(|| "item_id is required".to_string())?;
-        let revenue_account_id = self
-            .revenue_account_id
-            .ok_or_else(|| "revenue_account_id is required".to_string())?;
-        let quantity = self
-            .quantity
-            .ok_or_else(|| "quantity is required".to_string())?;
-        let unit_price = self
-            .unit_price
-            .ok_or_else(|| "unit_price is required".to_string())?;
+        let invoice_id = self.invoice_id.ok_or_else(|| "invoice_id is required".to_string())?;
+        let item_id = self.item_id.ok_or_else(|| "item_id is required".to_string())?;
+        let revenue_account_id = self.revenue_account_id.ok_or_else(|| "revenue_account_id is required".to_string())?;
+        let quantity = self.quantity.ok_or_else(|| "quantity is required".to_string())?;
+        let unit_price = self.unit_price.ok_or_else(|| "unit_price is required".to_string())?;
 
         Ok(SalesInvoiceLine {
             id: Uuid::new_v4(),
             invoice_id,
-            company_id,
             item_id,
             revenue_account_id,
             description: self.description,

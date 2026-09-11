@@ -2965,7 +2965,6 @@ components:
         - id
         - invoice_ref
         - invoice_kind
-        - company_id
         - account_id
         - basis
         - taxable_base
@@ -2982,9 +2981,6 @@ components:
           format: uuid
         invoice_kind:
           type: string
-        company_id:
-          type: string
-          format: uuid
         account_id:
           type: string
           format: uuid
@@ -3035,7 +3031,6 @@ components:
       required:
         - invoice_ref
         - invoice_kind
-        - company_id
         - account_id
         - basis
         - taxable_base
@@ -3049,9 +3044,6 @@ components:
           format: uuid
         invoice_kind:
           type: string
-        company_id:
-          type: string
-          format: uuid
         account_id:
           type: string
           format: uuid
@@ -3089,7 +3081,6 @@ components:
       required:
         - invoice_ref
         - invoice_kind
-        - company_id
         - account_id
         - basis
         - taxable_base
@@ -3103,9 +3094,6 @@ components:
           format: uuid
         invoice_kind:
           type: string
-        company_id:
-          type: string
-          format: uuid
         account_id:
           type: string
           format: uuid
@@ -3146,9 +3134,6 @@ components:
           format: uuid
         invoice_kind:
           type: string
-        company_id:
-          type: string
-          format: uuid
         account_id:
           type: string
           format: uuid
@@ -3197,7 +3182,6 @@ components:
         - id
         - invoice_ref
         - invoice_kind
-        - company_id
         - installment_no
         - due_date
         - amount
@@ -3213,9 +3197,6 @@ components:
           format: uuid
         invoice_kind:
           type: string
-        company_id:
-          type: string
-          format: uuid
         installment_no:
           type: integer
           format: int32
@@ -3249,7 +3230,6 @@ components:
       required:
         - invoice_ref
         - invoice_kind
-        - company_id
         - installment_no
         - due_date
         - amount
@@ -3262,9 +3242,6 @@ components:
           format: uuid
         invoice_kind:
           type: string
-        company_id:
-          type: string
-          format: uuid
         installment_no:
           type: integer
           format: int32
@@ -3285,7 +3262,6 @@ components:
       required:
         - invoice_ref
         - invoice_kind
-        - company_id
         - installment_no
         - due_date
         - amount
@@ -3298,9 +3274,6 @@ components:
           format: uuid
         invoice_kind:
           type: string
-        company_id:
-          type: string
-          format: uuid
         installment_no:
           type: integer
           format: int32
@@ -3324,9 +3297,6 @@ components:
           format: uuid
         invoice_kind:
           type: string
-        company_id:
-          type: string
-          format: uuid
         installment_no:
           type: integer
           format: int32
@@ -3366,10 +3336,6 @@ components:
         - metadata
       properties:
         id:
-          type: string
-          format: uuid
-        company_id:
-          nullable: true
           type: string
           format: uuid
         name:
@@ -3425,10 +3391,6 @@ components:
         - discount_tax_basis
         - metadata
       properties:
-        company_id:
-          nullable: true
-          type: string
-          format: uuid
         name:
           type: string
           maxLength: 100
@@ -3469,10 +3431,6 @@ components:
         - discount_tax_basis
         - metadata
       properties:
-        company_id:
-          nullable: true
-          type: string
-          format: uuid
         name:
           type: string
           maxLength: 100
@@ -3504,10 +3462,6 @@ components:
     PatchPaymentTermRequest:
       type: object
       properties:
-        company_id:
-          nullable: true
-          type: string
-          format: uuid
         name:
           type: string
           maxLength: 100
@@ -3565,10 +3519,6 @@ components:
         term_id:
           type: string
           format: uuid
-        company_id:
-          nullable: true
-          type: string
-          format: uuid
         value:
           type: string
         value_amount:
@@ -3618,10 +3568,6 @@ components:
         term_id:
           type: string
           format: uuid
-        company_id:
-          nullable: true
-          type: string
-          format: uuid
         value:
           type: string
         value_amount:
@@ -3658,10 +3604,6 @@ components:
         term_id:
           type: string
           format: uuid
-        company_id:
-          nullable: true
-          type: string
-          format: uuid
         value:
           type: string
         value_amount:
@@ -3687,10 +3629,6 @@ components:
       type: object
       properties:
         term_id:
-          type: string
-          format: uuid
-        company_id:
-          nullable: true
           type: string
           format: uuid
         value:
@@ -3729,7 +3667,6 @@ components:
       required:
         - id
         - invoice_number
-        - company_id
         - supplier_id
         - status
         - posting_date
@@ -3750,9 +3687,6 @@ components:
         invoice_number:
           type: string
           maxLength: 40
-        company_id:
-          type: string
-          format: uuid
         branch_id:
           nullable: true
           type: string
@@ -3841,7 +3775,6 @@ components:
       type: object
       required:
         - invoice_number
-        - company_id
         - supplier_id
         - status
         - posting_date
@@ -3859,9 +3792,6 @@ components:
         invoice_number:
           type: string
           maxLength: 40
-        company_id:
-          type: string
-          format: uuid
         branch_id:
           nullable: true
           type: string
@@ -3937,7 +3867,6 @@ components:
       type: object
       required:
         - invoice_number
-        - company_id
         - supplier_id
         - status
         - posting_date
@@ -3955,9 +3884,6 @@ components:
         invoice_number:
           type: string
           maxLength: 40
-        company_id:
-          type: string
-          format: uuid
         branch_id:
           nullable: true
           type: string
@@ -4035,9 +3961,6 @@ components:
         invoice_number:
           type: string
           maxLength: 40
-        company_id:
-          type: string
-          format: uuid
         branch_id:
           nullable: true
           type: string
@@ -4124,7 +4047,6 @@ components:
       required:
         - id
         - invoice_id
-        - company_id
         - item_id
         - expense_account_id
         - quantity
@@ -4136,9 +4058,6 @@ components:
           type: string
           format: uuid
         invoice_id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         item_id:
@@ -4177,7 +4096,6 @@ components:
       type: object
       required:
         - invoice_id
-        - company_id
         - item_id
         - expense_account_id
         - quantity
@@ -4186,9 +4104,6 @@ components:
         - metadata
       properties:
         invoice_id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         item_id:
@@ -4214,7 +4129,6 @@ components:
       type: object
       required:
         - invoice_id
-        - company_id
         - item_id
         - expense_account_id
         - quantity
@@ -4223,9 +4137,6 @@ components:
         - metadata
       properties:
         invoice_id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         item_id:
@@ -4251,9 +4162,6 @@ components:
       type: object
       properties:
         invoice_id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         item_id:
@@ -4290,7 +4198,6 @@ components:
       required:
         - id
         - invoice_number
-        - company_id
         - customer_id
         - status
         - posting_date
@@ -4310,9 +4217,6 @@ components:
         invoice_number:
           type: string
           maxLength: 40
-        company_id:
-          type: string
-          format: uuid
         branch_id:
           nullable: true
           type: string
@@ -4399,7 +4303,6 @@ components:
       type: object
       required:
         - invoice_number
-        - company_id
         - customer_id
         - status
         - posting_date
@@ -4416,9 +4319,6 @@ components:
         invoice_number:
           type: string
           maxLength: 40
-        company_id:
-          type: string
-          format: uuid
         branch_id:
           nullable: true
           type: string
@@ -4492,7 +4392,6 @@ components:
       type: object
       required:
         - invoice_number
-        - company_id
         - customer_id
         - status
         - posting_date
@@ -4509,9 +4408,6 @@ components:
         invoice_number:
           type: string
           maxLength: 40
-        company_id:
-          type: string
-          format: uuid
         branch_id:
           nullable: true
           type: string
@@ -4587,9 +4483,6 @@ components:
         invoice_number:
           type: string
           maxLength: 40
-        company_id:
-          type: string
-          format: uuid
         branch_id:
           nullable: true
           type: string
@@ -4674,7 +4567,6 @@ components:
       required:
         - id
         - invoice_id
-        - company_id
         - item_id
         - revenue_account_id
         - quantity
@@ -4686,9 +4578,6 @@ components:
           type: string
           format: uuid
         invoice_id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         item_id:
@@ -4727,7 +4616,6 @@ components:
       type: object
       required:
         - invoice_id
-        - company_id
         - item_id
         - revenue_account_id
         - quantity
@@ -4736,9 +4624,6 @@ components:
         - metadata
       properties:
         invoice_id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         item_id:
@@ -4764,7 +4649,6 @@ components:
       type: object
       required:
         - invoice_id
-        - company_id
         - item_id
         - revenue_account_id
         - quantity
@@ -4773,9 +4657,6 @@ components:
         - metadata
       properties:
         invoice_id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         item_id:
@@ -4801,9 +4682,6 @@ components:
       type: object
       properties:
         invoice_id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         item_id:

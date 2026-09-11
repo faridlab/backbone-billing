@@ -11,6 +11,10 @@
 //! committed no-op. The host supplies the `ReconcileSink` (implemented over accounting's
 //! reconciliation write service) — every applied settlement lands its graph edge in the same
 //! transaction as the subledger drawdown.
+//!
+//! **Tenancy (ADR-0029).** Billing keys no statement on a tenant; the `company_id` on these
+//! mirror DTOs is payment's wire field — still company-fenced — and maps onto the paying
+//! tenant's single-company org scope inside the settlement seam.
 
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -35,6 +39,8 @@ pub struct SettledInvoiceDto {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PaymentSettledDto {
     pub payment_id: Uuid,
+    /// Payment's wire field (it is still company-fenced); the seam maps it onto the paying
+    /// tenant's org scope.
     pub company_id: Uuid,
     pub payment_type: String,
     pub allocations: Vec<SettledInvoiceDto>,
@@ -45,6 +51,8 @@ pub struct PaymentSettledDto {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PaymentCancelledDto {
     pub payment_id: Uuid,
+    /// Payment's wire field (it is still company-fenced); the seam maps it onto the paying
+    /// tenant's org scope.
     pub company_id: Uuid,
     pub payment_type: String,
     pub allocations: Vec<SettledInvoiceDto>,

@@ -16,36 +16,68 @@ pub mod sales_invoice_line_dto;
 
 // Re-exports
 pub use invoice_tax_line_dto::{
-    CreateInvoiceTaxLineDto, InvoiceTaxLineListResponseDto, InvoiceTaxLineResponseDto,
-    InvoiceTaxLineSummaryDto, PatchInvoiceTaxLineDto, UpdateInvoiceTaxLineDto,
+    CreateInvoiceTaxLineDto,
+    UpdateInvoiceTaxLineDto,
+    PatchInvoiceTaxLineDto,
+    InvoiceTaxLineResponseDto,
+    InvoiceTaxLineListResponseDto,
+    InvoiceTaxLineSummaryDto,
 };
 pub use payment_schedule_dto::{
-    CreatePaymentScheduleDto, PatchPaymentScheduleDto, PaymentScheduleListResponseDto,
-    PaymentScheduleResponseDto, PaymentScheduleSummaryDto, UpdatePaymentScheduleDto,
+    CreatePaymentScheduleDto,
+    UpdatePaymentScheduleDto,
+    PatchPaymentScheduleDto,
+    PaymentScheduleResponseDto,
+    PaymentScheduleListResponseDto,
+    PaymentScheduleSummaryDto,
 };
 pub use payment_term_dto::{
-    CreatePaymentTermDto, PatchPaymentTermDto, PaymentTermListResponseDto, PaymentTermResponseDto,
-    PaymentTermSummaryDto, UpdatePaymentTermDto,
+    CreatePaymentTermDto,
+    UpdatePaymentTermDto,
+    PatchPaymentTermDto,
+    PaymentTermResponseDto,
+    PaymentTermListResponseDto,
+    PaymentTermSummaryDto,
 };
 pub use payment_term_line_dto::{
-    CreatePaymentTermLineDto, PatchPaymentTermLineDto, PaymentTermLineListResponseDto,
-    PaymentTermLineResponseDto, PaymentTermLineSummaryDto, UpdatePaymentTermLineDto,
+    CreatePaymentTermLineDto,
+    UpdatePaymentTermLineDto,
+    PatchPaymentTermLineDto,
+    PaymentTermLineResponseDto,
+    PaymentTermLineListResponseDto,
+    PaymentTermLineSummaryDto,
 };
 pub use purchase_invoice_dto::{
-    CreatePurchaseInvoiceDto, PatchPurchaseInvoiceDto, PurchaseInvoiceListResponseDto,
-    PurchaseInvoiceResponseDto, PurchaseInvoiceSummaryDto, UpdatePurchaseInvoiceDto,
+    CreatePurchaseInvoiceDto,
+    UpdatePurchaseInvoiceDto,
+    PatchPurchaseInvoiceDto,
+    PurchaseInvoiceResponseDto,
+    PurchaseInvoiceListResponseDto,
+    PurchaseInvoiceSummaryDto,
 };
 pub use purchase_invoice_line_dto::{
-    CreatePurchaseInvoiceLineDto, PatchPurchaseInvoiceLineDto, PurchaseInvoiceLineListResponseDto,
-    PurchaseInvoiceLineResponseDto, PurchaseInvoiceLineSummaryDto, UpdatePurchaseInvoiceLineDto,
+    CreatePurchaseInvoiceLineDto,
+    UpdatePurchaseInvoiceLineDto,
+    PatchPurchaseInvoiceLineDto,
+    PurchaseInvoiceLineResponseDto,
+    PurchaseInvoiceLineListResponseDto,
+    PurchaseInvoiceLineSummaryDto,
 };
 pub use sales_invoice_dto::{
-    CreateSalesInvoiceDto, PatchSalesInvoiceDto, SalesInvoiceListResponseDto,
-    SalesInvoiceResponseDto, SalesInvoiceSummaryDto, UpdateSalesInvoiceDto,
+    CreateSalesInvoiceDto,
+    UpdateSalesInvoiceDto,
+    PatchSalesInvoiceDto,
+    SalesInvoiceResponseDto,
+    SalesInvoiceListResponseDto,
+    SalesInvoiceSummaryDto,
 };
 pub use sales_invoice_line_dto::{
-    CreateSalesInvoiceLineDto, PatchSalesInvoiceLineDto, SalesInvoiceLineListResponseDto,
-    SalesInvoiceLineResponseDto, SalesInvoiceLineSummaryDto, UpdateSalesInvoiceLineDto,
+    CreateSalesInvoiceLineDto,
+    UpdateSalesInvoiceLineDto,
+    PatchSalesInvoiceLineDto,
+    SalesInvoiceLineResponseDto,
+    SalesInvoiceLineListResponseDto,
+    SalesInvoiceLineSummaryDto,
 };
 
 // Common pagination types
@@ -71,12 +103,8 @@ pub struct PaginationParams {
     pub sort_order: Option<String>,
 }
 
-fn default_page() -> u32 {
-    1
-}
-fn default_per_page() -> u32 {
-    20
-}
+fn default_page() -> u32 { 1 }
+fn default_per_page() -> u32 { 20 }
 
 /// API response wrapper
 #[derive(Debug, Clone, Serialize)]
@@ -101,11 +129,7 @@ pub struct ApiError {
 
 impl<T> ApiResponse<T> {
     pub fn ok(data: T) -> Self {
-        Self {
-            success: true,
-            data: Some(data),
-            error: None,
-        }
+        Self { success: true, data: Some(data), error: None }
     }
 
     pub fn err(code: impl Into<String>, message: impl Into<String>) -> Self {

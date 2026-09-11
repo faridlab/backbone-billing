@@ -5,9 +5,9 @@
 //! Returns an `EntityValidator<PaymentTerm>` pre-loaded with schema-derived
 //! field rules. Extend in the `// <<< CUSTOM` zone.
 
-use crate::domain::entity::PaymentTerm;
-use backbone_core::{EntityValidator, ValidationError, ValidationErrors};
+use backbone_core::{EntityValidator, ValidationErrors, ValidationError};
 use backbone_core::{NonNegative, OptionalNotBlank, RequiredString};
+use crate::domain::entity::PaymentTerm;
 
 /// Validator type alias for PaymentTerm entities.
 pub type PaymentTermValidator = EntityValidator<PaymentTerm>;
@@ -16,9 +16,7 @@ pub type PaymentTermValidator = EntityValidator<PaymentTerm>;
 pub fn payment_term_validator() -> PaymentTermValidator {
     EntityValidator::new()
         .rule(RequiredString::new("name", |e: &PaymentTerm| &e.name))
-        .rule(OptionalNotBlank::new("note", |e: &PaymentTerm| {
-            e.note.as_deref()
-        }))
+        .rule(OptionalNotBlank::new("note", |e: &PaymentTerm| e.note.as_deref()))
     // <<< CUSTOM RULES
     // END CUSTOM RULES
 }

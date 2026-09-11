@@ -4,16 +4,16 @@
 //!
 //! Combinators (AND/OR/NOT) come from `backbone_core::Specification`.
 
-pub use backbone_core::{AndSpecification, NotSpecification, OrSpecification, Specification};
+pub use backbone_core::{Specification, AndSpecification, OrSpecification, NotSpecification};
 
 pub mod invoice_tax_line_specification;
 pub mod payment_schedule_specification;
-pub mod payment_term_line_specification;
 pub mod payment_term_specification;
-pub mod purchase_invoice_line_specification;
+pub mod payment_term_line_specification;
 pub mod purchase_invoice_specification;
-pub mod sales_invoice_line_specification;
+pub mod purchase_invoice_line_specification;
 pub mod sales_invoice_specification;
+pub mod sales_invoice_line_specification;
 
 // <<< CUSTOM
 // END CUSTOM

@@ -27,11 +27,6 @@ models:
         attributes: ["@required"]
         description: "Which invoice table `invoice_ref` points at"
 
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "Books owner # logical FK to organization.Company.id"
-
       installment_no:
         type: int
         attributes: ["@required"]
@@ -65,8 +60,9 @@ models:
     indexes:
       - type: index
         fields: [invoice_ref, invoice_kind]
-      - type: index
-        fields: [company_id, due_date, status]
+      # No tenancy indexes (ADR-0029): the module is tenant-agnostic. The per-unit
+      # due-date/status listing index is installed by the composing service's tenancy
+      # decorator (org_unit_id-leading), not declared here.
 
 enums:
   - name: PaymentScheduleStatus

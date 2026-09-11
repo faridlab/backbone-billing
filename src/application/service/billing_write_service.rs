@@ -14,12 +14,19 @@
 //! Posting is idempotent (source_id = invoice id) + reconciled from the ack, like every seam.
 //!
 //! **Layering (the module's 4-layer rule).** This service ORCHESTRATES: it prices, validates, owns
-//! the unit of work (`begin`/`commit`), decides the company scope, and publishes seam events. It
-//! holds no SQL — every statement lives in `infrastructure::persistence`, and the repository methods
-//! that participate in a transaction take THIS service's connection so cross-entity writes commit
-//! together.
+//! the unit of work (`begin`/`commit`), relays the ambient org scope onto its own transactions, and
+//! publishes seam events. It holds no SQL — every statement lives in `infrastructure::persistence`,
+//! and the repository methods that participate in a transaction take THIS service's connection so
+//! cross-entity writes commit together.
+//!
+//! **Tenancy (ADR-0029).** The module is tenant-agnostic: its tables carry no scoping column and
+//! the module keys no statement on a tenant. A composing service's tenancy decorator installs the
+//! org-unit axis; this service only re-binds the caller's ambient org scope onto the transactions
+//! it opens itself (the scope is task-local and does not survive a fresh pool transaction). Wire
+//! shapes consumed by still-company-fenced callers (the GL-post envelope, the outbox record) carry
+//! a legacy company id echoed from that ambient scope — nil when none is bound.
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope;
 use rust_decimal::{Decimal, RoundingStrategy};
 use sqlx::PgPool;
 use std::collections::BTreeMap;
@@ -37,6 +44,31 @@ use super::billing_events::{BillingEventSink, LoggingSink};
 
 pub(super) fn money(v: Decimal) -> Decimal {
     v.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+}
+
+/// The legacy tenancy twin echo (ADR-0029): outbound wire shapes that still carry a `company_id`
+/// (the GL-post envelope, the durable-outbox record) get the ambient org scope's legacy company
+/// id when the composing service bound one; nil otherwise. Nothing in this module keys a
+/// statement on it, and an undecorated deployment is unfenced by design.
+pub(super) fn legacy_company_echo() -> Uuid {
+    org_scope::current_org_scope()
+        .and_then(|s| s.legacy_company_id())
+        .unwrap_or(Uuid::nil())
+}
+
+/// Re-bind the caller's ambient org scope onto a transaction this service opened itself — the
+/// scope is task-local and a fresh pool transaction carries none of it. With no ambient scope
+/// (standalone deployment, jobs) the transaction stays plain: the module is tenant-agnostic and
+/// the composed decorator owns isolation.
+pub(super) async fn relay_ambient_scope(
+    tx: &mut sqlx::PgConnection,
+) -> Result<(), BillingError> {
+    if let Some(scope) = org_scope::current_org_scope() {
+        org_scope::bind_org_scope_on(tx, &scope)
+            .await
+            .map_err(BillingError::Db)?;
+    }
+    Ok(())
 }
 
 // --- input structs -----------------------------------------------------------
@@ -80,7 +112,6 @@ pub struct NewTaxLine {
 #[derive(Debug, Clone)]
 pub struct NewSalesInvoice {
     pub invoice_number: String,
-    pub company_id: Uuid,
     pub branch_id: Option<Uuid>,
     pub customer_id: Uuid,
     pub source_so_id: Option<Uuid>,
@@ -98,7 +129,6 @@ pub struct NewSalesInvoice {
 #[derive(Debug, Clone)]
 pub struct NewPurchaseInvoice {
     pub invoice_number: String,
-    pub company_id: Uuid,
     pub branch_id: Option<Uuid>,
     pub supplier_id: Uuid,
     pub source_po_id: Option<Uuid>,
@@ -147,13 +177,13 @@ pub enum BillingError {
     /// Fail closed: never silently fall back to un-taxed totals on a template-driven document.
     TaxEngineUnwired,
     /// The tax engine refused or failed the document computation (bad template, no effective
-    /// rate, invalid repartition, missing company scope…).
+    /// rate, invalid repartition…).
     TaxCompute {
         code: String,
         message: String,
     },
-    /// A payment term was not found (unknown id, retired, or another company's — the split-fence
-    /// read makes cross-tenant terms indistinguishable from missing ones).
+    /// A payment term was not found (unknown id or retired — under a composed tenancy decorator
+    /// another tenant's terms are indistinguishable from missing ones, which is the point).
     TermNotFound(Uuid),
     /// A payment term or its invoice application is shape-invalid (validation codes:
     /// `term_name_required`, `term_lines_required`, `discount_tax_basis_unsupported`,
@@ -332,7 +362,7 @@ pub struct BillingWriteService {
     pub(super) tax_lines: Arc<InvoiceTaxLineRepository>,
     pub(super) schedules: Arc<PaymentScheduleRepository>,
     pub(super) settlement: Arc<InvoiceSettlementRepository>,
-    /// Payment-terms master (header + lines). Owns the split-fence reads the post hook and the
+    /// Payment-terms master (header + lines). Owns the term reads the post hook and the
     /// discount resolver need.
     pub(super) terms: Arc<PaymentTermRepository>,
     /// When set, `post_*_invoice` / `reverse_sales_invoice` stage the seam event into
@@ -389,7 +419,6 @@ impl BillingWriteService {
         &self,
         tx: &mut sqlx::PgConnection,
         invoice_id: Uuid,
-        company_id: Uuid,
         kind: &str,
         tax: &[NewTaxLine],
     ) -> Result<(), BillingError> {
@@ -401,7 +430,6 @@ impl BillingWriteService {
                         id: Uuid::new_v4(),
                         invoice_ref: invoice_id,
                         kind,
-                        company_id,
                         account_id: t.account_id,
                         basis: &t.basis,
                         description: t.description.as_deref(),
@@ -437,7 +465,6 @@ impl BillingWriteService {
         &self,
         lines: &[NewInvoiceLine],
         supplied: &[NewTaxLine],
-        company_id: Uuid,
         on_date: chrono::NaiveDate,
         kind: &str,
     ) -> Result<PricedDocument, BillingError> {
@@ -473,20 +500,23 @@ impl BillingWriteService {
             })
             .collect();
         let req = backbone_tax::DocumentTaxRequest {
-            company_id,
+            // The engine's legacy twin input (ADR-0029): the ambient org scope wins when the
+            // composing service bound one; without one the engine builds the single-company
+            // scope from this value (nil reads unfenced on an undecorated database).
+            company_id: legacy_company_echo(),
             // Both sales and purchase invoices route through the invoice repartition family;
             // refunds are credit notes (wholesale sign flip at reversal), not this path.
             document_type: backbone_tax::DocumentType::Invoice,
             on_date,
             lines: req_lines,
         };
-        let result =
-            company_scope::with_company_scope(Some(company_id), engine.calculate_document(&req))
-                .await
-                .map_err(|e: backbone_tax::TaxError| BillingError::TaxCompute {
-                    code: e.code().to_string(),
-                    message: e.to_string(),
-                })?;
+        let result = engine
+            .calculate_document(&req)
+            .await
+            .map_err(|e: backbone_tax::TaxError| BillingError::TaxCompute {
+                code: e.code().to_string(),
+                message: e.to_string(),
+            })?;
 
         // Overwrite the templated lines' nets with the engine's post-policy nets
         // (`net_amounts` is indexed over the templated subset, in input order).
@@ -538,7 +568,8 @@ impl BillingWriteService {
     /// the crash-safe fence (mirrors `backbone-payment::stage_settled`). The event is serialized into
     /// the outbox payload so a relay can deliver it to any consumer (buying, tax, selling); billing's
     /// own in-proc sink still fires after commit for same-process consumers/tests. The caller has
-    /// already bound the company scope onto `conn` (RLS), so this just executes on it.
+    /// already relayed the ambient org scope onto `conn` (the decorator's RLS), so this just executes
+    /// on it.
     pub(super) async fn stage_outbox_event<E: serde::Serialize>(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -546,19 +577,19 @@ impl BillingWriteService {
         event_type: &str,
         aggregate_type: &str,
         aggregate_id: Uuid,
-        company_id: Uuid,
         event: &E,
     ) -> Result<(), BillingError> {
         let payload = serde_json::to_value(event).map_err(|e| {
             BillingError::Db(sqlx::Error::Protocol(format!("outbox serialize: {e}")))
         })?;
         // OutboxRecord::new requires the owning tenant (ADR-0011 — the outbox_events table is fenced
-        // by company_id). The caller passes the event's company explicitly.
+        // by company_id). The module is tenant-agnostic, so the record carries the ambient scope's
+        // legacy company echo; under a composed tenancy decorator the relay's fence reads it.
         let rec = backbone_outbox::OutboxRecord::new(
             event_type,
             aggregate_type,
             aggregate_id.to_string(),
-            company_id,
+            legacy_company_echo(),
             payload,
             chrono::Utc::now(),
         );

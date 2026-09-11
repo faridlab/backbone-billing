@@ -77,9 +77,9 @@ impl InvoiceSettlementRepository {
     }
 
     /// Lock the live invoice `FOR UPDATE` and read what it still owes. `Ok(None)` = no such live
-    /// invoice IN THE CALLER'S SCOPE — which is also how this fails closed when no company scope was
-    /// established (the settlement entrypoints bind the caller's ambient scope deliberately: they are
-    /// event-driven and carry no company argument, so the ACL must wrap them).
+    /// invoice IN THE CALLER'S SCOPE — which is also how this fails closed when the caller's
+    /// transaction carries no scope at all (the settlement entrypoints bind the paying tenant's
+    /// single-company org scope deliberately: they are event-driven and carry no ambient one).
     ///
     /// **This lock is the serialization point for the whole seam and must be taken FIRST** — before
     /// the schedules — so two payments racing the same invoice queue here rather than both reading a
@@ -110,7 +110,7 @@ impl InvoiceSettlementRepository {
     /// ("paid" | "partially_paid" | "submitted", cast at the DB).
     ///
     /// Must ride the same transaction that holds the row's `FOR UPDATE` from
-    /// [`Self::lock_outstanding`] — don't re-bind the company here, the caller's bind covers it.
+    /// [`Self::lock_outstanding`] — don't re-bind the scope here, the caller's bind covers it.
     pub async fn update_settlement(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -135,11 +135,11 @@ impl InvoiceSettlementRepository {
     /// The derived overdue read: open, GL-posted invoices whose due date has passed — both kinds,
     /// one ordered list. **Derived on purpose**: there is no stored `overdue` flag that a later
     /// settlement could leave stale; the filter recomputes from live state on every call.
-    /// Served on the caller's company-scoped connection.
+    /// Served on the caller's scoped connection (under a composed tenancy decorator the
+    /// decorator's policy scopes the rows).
     pub async fn list_overdue_invoices(
         &self,
         conn: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
-        company_id: Uuid,
         today: chrono::NaiveDate,
     ) -> Result<Vec<OverdueInvoiceRow>, sqlx::Error> {
         // Both tables carry the same overdue predicate; `kind` labels which side each row came
@@ -150,24 +150,21 @@ impl InvoiceSettlementRepository {
                    SELECT id, 'sales'::text AS kind, invoice_number, due_date,
                           outstanding_amount, grand_total
                    FROM billing.sales_invoices
-                   WHERE company_id = $1
-                     AND posting_state = 'posted'
+                   WHERE posting_state = 'posted'
                      AND status::text NOT IN ('paid', 'cancelled')
-                     AND due_date IS NOT NULL AND due_date < $2
+                     AND due_date IS NOT NULL AND due_date < $1
                      AND (metadata->>'deleted_at') IS NULL
                    UNION ALL
                    SELECT id, 'purchase'::text, invoice_number, due_date,
                           outstanding_amount, grand_total
                    FROM billing.purchase_invoices
-                   WHERE company_id = $1
-                     AND posting_state = 'posted'
+                   WHERE posting_state = 'posted'
                      AND status::text NOT IN ('paid', 'cancelled')
-                     AND due_date IS NOT NULL AND due_date < $2
+                     AND due_date IS NOT NULL AND due_date < $1
                      AND (metadata->>'deleted_at') IS NULL
                ) overdue
                ORDER BY due_date, kind, invoice_number"#,
         )
-        .bind(company_id)
         .bind(today)
         .fetch_all(conn)
         .await?;

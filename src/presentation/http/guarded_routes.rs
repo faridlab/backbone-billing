@@ -3,8 +3,10 @@
 //! Hand-authored (user-owned). Read documents + **validated create** (sales-invoice /
 //! purchase-invoice); generic create/update/delete CRUD is NOT mounted, so a caller cannot
 //! write an invoice with inconsistent totals or bypass the AR/AP posting path.
-//! Every write derives its tenant from a **signed** Bearer token (`CompanyContext`) rather than the
-//! request body, so a caller cannot stamp an invoice with a company it does not belong to.
+//! Every route still demands a **signed** Bearer token (`company_auth` + `CompanyContext`), so
+//! only an authenticated caller gets in; the module itself is tenant-agnostic (ADR-0029) — the
+//! composing service's tenancy decorator scopes whatever the request touches, and the handlers
+//! pass no tenant at all.
 //! `BillingWriteService` is passed in by the composing service so routes, verbs, and event
 //! consumers all share one configured instance (regen-safe). Posting (`post_sales_invoice` /
 //! `post_purchase_invoice`) needs a `GlPostSink` composition layer, so it is service/job-driven,
@@ -113,9 +115,8 @@ impl From<TaxLineBody> for NewTaxLine {
 #[serde(rename_all = "camelCase")]
 struct CreateSalesInvoiceBody {
     invoice_number: String,
-    // No `company_id` / `branch_id`: the tenant is derived from the signed token via
-    // `CompanyContext`, never from the request body — a client must not be able to name the tenant
-    // it writes into.
+    // No tenant anywhere in the body: the module is tenant-agnostic (ADR-0029) — a composing
+    // service's tenancy decorator scopes the write from the authenticated session.
     customer_id: Uuid,
     #[serde(default)]
     source_so_id: Option<Uuid>,
@@ -138,7 +139,7 @@ async fn create_sales_invoice(
 ) -> axum::response::Response {
     let inv = NewSalesInvoice {
         invoice_number: b.invoice_number,
-        company_id: tenant.company_id,
+        // branch_id is a business column, not the tenancy axis — it still comes off the token.
         branch_id: tenant.branch_id,
         customer_id: b.customer_id,
         source_so_id: b.source_so_id,
@@ -160,7 +161,7 @@ async fn create_sales_invoice(
 #[serde(rename_all = "camelCase")]
 struct CreatePurchaseInvoiceBody {
     invoice_number: String,
-    // Tenant comes from the signed token (`CompanyContext`), not the body.
+    // No tenant anywhere in the body (ADR-0029); branch_id still comes off the token.
     supplier_id: Uuid,
     #[serde(default)]
     source_po_id: Option<Uuid>,
@@ -183,7 +184,6 @@ async fn create_purchase_invoice(
 ) -> axum::response::Response {
     let inv = NewPurchaseInvoice {
         invoice_number: b.invoice_number,
-        company_id: tenant.company_id,
         branch_id: tenant.branch_id,
         supplier_id: b.supplier_id,
         source_po_id: b.source_po_id,
@@ -213,9 +213,9 @@ fn write_routes(svc: Arc<BillingWriteService>, verifier: CompanyVerifier) -> Rou
         .route("/payment-terms/:id/status", put(set_payment_term_status))
         // Derived read (no stored overdue flag to drift): open, GL-posted invoices past due.
         .route("/overdue-invoices", get(list_overdue_invoices))
-        // Every route above is tenant-scoped: `company_auth` rejects a request whose token is
-        // absent, invalid, or carries no `company_id`, so a handler only ever runs with a proven
-        // tenant.
+        // Every route above demands a signed token: `company_auth` rejects a request whose token
+        // is absent or invalid, so a handler only ever runs for an authenticated caller. What
+        // that caller may SEE is the composing service's tenancy decorator's decision (ADR-0029).
         //
         // `route_layer`, not `layer`: `layer` would also wrap this router's fallback, so once merged
         // every *unmatched* path (e.g. the generic CRUD paths this surface deliberately does not
@@ -291,13 +291,12 @@ fn default_discount_tax_basis() -> String {
 }
 async fn create_payment_term(
     State(svc): State<Arc<BillingWriteService>>,
-    tenant: CompanyContext,
+    _tenant: CompanyContext,
     Json(b): Json<CreatePaymentTermBody>,
 ) -> axum::response::Response {
     let lines: Vec<_> = b.lines.into_iter().map(Into::into).collect();
     match svc
         .create_payment_term(
-            tenant.company_id,
             &b.name,
             b.note.as_deref(),
             b.sequence,
@@ -320,16 +319,15 @@ async fn create_payment_term(
 struct TermSummary {
     id: Uuid,
     name: String,
-    is_global: bool,
     early_discount: bool,
     discount_percent: Decimal,
     discount_days: i32,
 }
 async fn list_payment_terms(
     State(svc): State<Arc<BillingWriteService>>,
-    tenant: CompanyContext,
+    _tenant: CompanyContext,
 ) -> axum::response::Response {
-    match svc.list_payment_terms(tenant.company_id).await {
+    match svc.list_payment_terms().await {
         Ok(terms) => (
             StatusCode::OK,
             Json(
@@ -338,7 +336,6 @@ async fn list_payment_terms(
                     .map(|t| TermSummary {
                         id: t.id,
                         name: t.name,
-                        is_global: t.company_id.is_none(),
                         early_discount: t.early_discount,
                         discount_percent: t.discount_percent,
                         discount_days: t.discount_days,
@@ -365,12 +362,12 @@ struct ScheduleSlice {
 }
 async fn preview_payment_term(
     State(svc): State<Arc<BillingWriteService>>,
-    tenant: CompanyContext,
+    _tenant: CompanyContext,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
     axum::extract::Query(q): axum::extract::Query<PreviewTermQuery>,
 ) -> axum::response::Response {
     match svc
-        .preview_payment_term(tenant.company_id, id, q.posting_date, q.grand_total)
+        .preview_payment_term(id, q.posting_date, q.grand_total)
         .await
     {
         Ok(slices) => (
@@ -394,7 +391,7 @@ struct SetTermStatusBody {
 }
 async fn set_payment_term_status(
     State(svc): State<Arc<BillingWriteService>>,
-    tenant: CompanyContext,
+    _tenant: CompanyContext,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
     Json(b): Json<SetTermStatusBody>,
 ) -> axum::response::Response {
@@ -404,10 +401,7 @@ async fn set_payment_term_status(
             message: "status must be 'active' or 'inactive'".into(),
         });
     }
-    match svc
-        .set_payment_term_status(tenant.company_id, id, &b.status)
-        .await
-    {
+    match svc.set_payment_term_status(id, &b.status).await {
         Ok(affected) if affected > 0 => StatusCode::NO_CONTENT.into_response(),
         Ok(_) => err(BillingError::TermNotFound(id)),
         Err(e) => err(e),
@@ -428,10 +422,10 @@ struct OverdueInvoice {
 }
 async fn list_overdue_invoices(
     State(svc): State<Arc<BillingWriteService>>,
-    tenant: CompanyContext,
+    _tenant: CompanyContext,
 ) -> axum::response::Response {
     let today = chrono::Utc::now().date_naive();
-    match svc.list_overdue_invoices(tenant.company_id, today).await {
+    match svc.list_overdue_invoices(today).await {
         Ok(rows) => (
             StatusCode::OK,
             Json(
@@ -453,11 +447,12 @@ async fn list_overdue_invoices(
     }
 }
 
-/// Mount the billing module: read documents + validated, tenant-scoped creates. Generic mutation is
+/// Mount the billing module: read documents + validated creates. Generic mutation is
 /// not mounted. **Prefer this over `BillingModule::all_crud_routes()` for any real deployment.**
 ///
-/// The composing service builds one [`CompanyVerifier`] from its JWT secret and passes it here; the
-/// write surface derives `company_id` from the token, so no tenant crosses the wire in a body.
+/// The composing service builds one [`CompanyVerifier`] from its JWT secret and passes it here;
+/// every route demands a signed token, and the composing service's tenancy decorator scopes what
+/// each request touches (ADR-0029) — no tenant crosses the wire in a body.
 ///
 /// The write service is passed in — the SAME configured instance the host wires its settlement
 /// consumers and finance verbs to. Constructing one here would silently fork the configuration:

@@ -50,7 +50,6 @@ pub struct NewPaymentScheduleRow<'a> {
     pub invoice_ref: Uuid,
     /// Bound to the `invoice_kind` column — "sales" | "purchase".
     pub kind: &'a str,
-    pub company_id: Uuid,
     pub installment_no: i32,
     pub due_date: chrono::NaiveDate,
     pub amount: Decimal,
@@ -69,7 +68,7 @@ impl PaymentScheduleRepository {
     /// Insert one installment.
     ///
     /// Takes the CALLER'S connection so a whole schedule commits as one unit. The caller has already
-    /// bound the company on it (`bind_company_on`) — don't re-bind here.
+    /// relayed the AMBIENT org scope onto it (`org_scope::bind_org_scope_on`) — don't re-bind here.
     pub async fn insert_schedule(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -77,10 +76,10 @@ impl PaymentScheduleRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO billing.payment_schedules
-                (id, invoice_ref, invoice_kind, company_id, installment_no, due_date, amount, status)
-               VALUES ($1,$2,$3::invoice_kind,$4,$5,$6,$7,'unpaid'::payment_schedule_status)"#,
+                (id, invoice_ref, invoice_kind, installment_no, due_date, amount, status)
+               VALUES ($1,$2,$3::invoice_kind,$4,$5,$6,'unpaid'::payment_schedule_status)"#,
         )
-        .bind(s.id).bind(s.invoice_ref).bind(s.kind).bind(s.company_id).bind(s.installment_no)
+        .bind(s.id).bind(s.invoice_ref).bind(s.kind).bind(s.installment_no)
         .bind(s.due_date).bind(s.amount)
         .execute(conn)
         .await?;
@@ -91,8 +90,8 @@ impl PaymentScheduleRepository {
     /// order the settlement drawdown consumes them in.
     ///
     /// Takes the CALLER'S connection: the lock must be held for the whole drawdown, and the invoice
-    /// row is already locked `FOR UPDATE` on that same transaction. The caller established the company
-    /// scope on it — don't re-bind here.
+    /// row is already locked `FOR UPDATE` on that same transaction. The caller relayed the ambient
+    /// org scope onto it — don't re-bind here.
     pub async fn lock_schedules_fill_order(
         &self,
         conn: &mut sqlx::PgConnection,

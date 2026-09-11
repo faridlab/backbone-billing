@@ -5,10 +5,10 @@
 //! DTOs provide a clean separation between domain entities and API
 //! representations, with validation and OpenAPI documentation support.
 
-use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 
 #[cfg(feature = "openapi")]
 #[cfg(feature = "openapi")]
@@ -17,9 +17,9 @@ use utoipa::ToSchema;
 #[cfg(feature = "validation")]
 use validator::Validate;
 
+use crate::domain::entity::PaymentTerm;
 use crate::domain::entity::AuditMetadata;
 use crate::domain::entity::DiscountTaxBasis;
-use crate::domain::entity::PaymentTerm;
 use crate::domain::entity::PaymentTermStatus;
 
 // =============================================================================
@@ -35,8 +35,6 @@ use crate::domain::entity::PaymentTermStatus;
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct CreatePaymentTermDto {
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 100)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub name: String,
@@ -54,11 +52,7 @@ pub struct CreatePaymentTermDto {
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     #[serde(alias = "discount_days")]
     pub discount_days: i32,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "discount_account_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "discount_account_id")]
     pub discount_account_id: Option<Uuid>,
     #[serde(alias = "discount_tax_basis")]
     pub discount_tax_basis: DiscountTaxBasis,
@@ -77,8 +71,6 @@ pub struct CreatePaymentTermDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePaymentTermDto {
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 100)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub name: String,
@@ -96,11 +88,7 @@ pub struct UpdatePaymentTermDto {
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     #[serde(alias = "discount_days")]
     pub discount_days: i32,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "discount_account_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "discount_account_id")]
     pub discount_account_id: Option<Uuid>,
     #[serde(alias = "discount_tax_basis")]
     pub discount_tax_basis: DiscountTaxBasis,
@@ -119,8 +107,6 @@ pub struct UpdatePaymentTermDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct PatchPaymentTermDto {
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 100)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -150,16 +136,7 @@ pub struct PatchPaymentTermDto {
 impl PatchPaymentTermDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some()
-            || self.name.is_some()
-            || self.note.is_some()
-            || self.sequence.is_some()
-            || self.status.is_some()
-            || self.early_discount.is_some()
-            || self.discount_percent.is_some()
-            || self.discount_days.is_some()
-            || self.discount_account_id.is_some()
-            || self.discount_tax_basis.is_some()
+        self.name.is_some() || self.note.is_some() || self.sequence.is_some() || self.status.is_some() || self.early_discount.is_some() || self.discount_percent.is_some() || self.discount_days.is_some() || self.discount_account_id.is_some() || self.discount_tax_basis.is_some()
     }
 }
 
@@ -175,12 +152,8 @@ impl PatchPaymentTermDto {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentTermResponseDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    pub company_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub name: String,
     pub note: Option<String>,
@@ -251,9 +224,9 @@ impl PaymentTermListResponseDto {
 #[serde(rename_all = "camelCase")]
 pub struct PaymentTermSummaryDto {
     pub id: Uuid,
-    pub company_id: Option<Uuid>,
     pub name: String,
     pub note: Option<String>,
+    pub sequence: i32,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -265,7 +238,6 @@ impl From<PaymentTerm> for PaymentTermResponseDto {
     fn from(entity: PaymentTerm) -> Self {
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             name: entity.name,
             note: entity.note,
             sequence: entity.sequence,
@@ -285,9 +257,9 @@ impl From<PaymentTerm> for PaymentTermSummaryDto {
         let created_at = backbone_core::PersistentEntity::created_at(&entity);
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             name: entity.name,
             note: entity.note,
+            sequence: entity.sequence,
             created_at,
         }
     }
@@ -297,7 +269,6 @@ impl From<CreatePaymentTermDto> for PaymentTerm {
     fn from(dto: CreatePaymentTermDto) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: dto.company_id,
             name: dto.name,
             note: dto.note,
             sequence: dto.sequence,
@@ -316,7 +287,6 @@ impl From<&PaymentTerm> for PaymentTermResponseDto {
     fn from(entity: &PaymentTerm) -> Self {
         Self {
             id: entity.id.clone(),
-            company_id: entity.company_id.clone(),
             name: entity.name.clone(),
             note: entity.note.clone(),
             sequence: entity.sequence.clone(),
@@ -339,7 +309,6 @@ impl backbone_core::FromCreateDto<CreatePaymentTermDto> for PaymentTerm {
 
 impl backbone_core::ApplyUpdateDto<UpdatePaymentTermDto> for PaymentTerm {
     fn apply_update(mut self, dto: UpdatePaymentTermDto) -> backbone_core::ServiceResult<Self> {
-        self.company_id = dto.company_id;
         self.name = dto.name;
         self.note = dto.note;
         self.sequence = dto.sequence;

@@ -5,10 +5,10 @@
 //! DTOs provide a clean separation between domain entities and API
 //! representations, with validation and OpenAPI documentation support.
 
-use chrono::{DateTime, NaiveDate, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use chrono::{DateTime, Utc, NaiveDate};
+use rust_decimal::Decimal;
 
 #[cfg(feature = "openapi")]
 #[cfg(feature = "openapi")]
@@ -17,10 +17,10 @@ use utoipa::ToSchema;
 #[cfg(feature = "validation")]
 use validator::Validate;
 
+use crate::domain::entity::SalesInvoice;
 use crate::domain::entity::AuditMetadata;
 use crate::domain::entity::GlPostingState;
 use crate::domain::entity::InvoiceStatus;
-use crate::domain::entity::SalesInvoice;
 
 // =============================================================================
 // Create DTO
@@ -39,25 +39,12 @@ pub struct CreateSalesInvoiceDto {
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(alias = "invoice_number")]
     pub invoice_number: String,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "branch_id")]
     pub branch_id: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "customer_id")]
     pub customer_id: Uuid,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "source_so_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "source_so_id")]
     pub source_so_id: Option<Uuid>,
     pub status: InvoiceStatus,
     #[cfg_attr(feature = "openapi", schema(example = "2024-01-01"))]
@@ -65,25 +52,13 @@ pub struct CreateSalesInvoiceDto {
     pub posting_date: NaiveDate,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "due_date")]
     pub due_date: Option<NaiveDate>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "payment_term_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "payment_term_id")]
     pub payment_term_id: Option<Uuid>,
     #[serde(alias = "early_pay_discount_percent")]
     pub early_pay_discount_percent: Decimal,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "early_pay_discount_deadline"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "early_pay_discount_deadline")]
     pub early_pay_discount_deadline: Option<NaiveDate>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "early_pay_discount_account_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "early_pay_discount_account_id")]
     pub early_pay_discount_account_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 3)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
@@ -96,21 +71,14 @@ pub struct CreateSalesInvoiceDto {
     pub grand_total: Decimal,
     #[serde(alias = "outstanding_amount")]
     pub outstanding_amount: Decimal,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "receivable_account_id")]
     pub receivable_account_id: Uuid,
     #[serde(alias = "posting_state")]
     pub posting_state: GlPostingState,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "journal_id")]
     pub journal_id: Option<Uuid>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "accounting_post_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "accounting_post_id")]
     pub accounting_post_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "posted_at")]
     pub posted_at: Option<DateTime<Utc>>,
@@ -136,25 +104,12 @@ pub struct UpdateSalesInvoiceDto {
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(alias = "invoice_number")]
     pub invoice_number: String,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "branch_id")]
     pub branch_id: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "customer_id")]
     pub customer_id: Uuid,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "source_so_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "source_so_id")]
     pub source_so_id: Option<Uuid>,
     pub status: InvoiceStatus,
     #[cfg_attr(feature = "openapi", schema(example = "2024-01-01"))]
@@ -162,25 +117,13 @@ pub struct UpdateSalesInvoiceDto {
     pub posting_date: NaiveDate,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "due_date")]
     pub due_date: Option<NaiveDate>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "payment_term_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "payment_term_id")]
     pub payment_term_id: Option<Uuid>,
     #[serde(alias = "early_pay_discount_percent")]
     pub early_pay_discount_percent: Decimal,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "early_pay_discount_deadline"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "early_pay_discount_deadline")]
     pub early_pay_discount_deadline: Option<NaiveDate>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "early_pay_discount_account_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "early_pay_discount_account_id")]
     pub early_pay_discount_account_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 3)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
@@ -193,21 +136,14 @@ pub struct UpdateSalesInvoiceDto {
     pub grand_total: Decimal,
     #[serde(alias = "outstanding_amount")]
     pub outstanding_amount: Decimal,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "receivable_account_id")]
     pub receivable_account_id: Uuid,
     #[serde(alias = "posting_state")]
     pub posting_state: GlPostingState,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "journal_id")]
     pub journal_id: Option<Uuid>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "accounting_post_id"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "accounting_post_id")]
     pub accounting_post_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "posted_at")]
     pub posted_at: Option<DateTime<Utc>>,
@@ -233,18 +169,9 @@ pub struct PatchSalesInvoiceDto {
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "invoice_number")]
     pub invoice_number: Option<String>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "branch_id")]
     pub branch_id: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "customer_id")]
     pub customer_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "source_so_id")]
@@ -258,20 +185,11 @@ pub struct PatchSalesInvoiceDto {
     pub due_date: Option<NaiveDate>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "payment_term_id")]
     pub payment_term_id: Option<Uuid>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        alias = "early_pay_discount_percent"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "early_pay_discount_percent")]
     pub early_pay_discount_percent: Option<Decimal>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        alias = "early_pay_discount_deadline"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "early_pay_discount_deadline")]
     pub early_pay_discount_deadline: Option<NaiveDate>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        alias = "early_pay_discount_account_id"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "early_pay_discount_account_id")]
     pub early_pay_discount_account_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 3)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
@@ -285,14 +203,8 @@ pub struct PatchSalesInvoiceDto {
     pub grand_total: Option<Decimal>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "outstanding_amount")]
     pub outstanding_amount: Option<Decimal>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        alias = "receivable_account_id"
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "receivable_account_id")]
     pub receivable_account_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "posting_state")]
     pub posting_state: Option<GlPostingState>,
@@ -310,29 +222,7 @@ pub struct PatchSalesInvoiceDto {
 impl PatchSalesInvoiceDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.invoice_number.is_some()
-            || self.company_id.is_some()
-            || self.branch_id.is_some()
-            || self.customer_id.is_some()
-            || self.source_so_id.is_some()
-            || self.status.is_some()
-            || self.posting_date.is_some()
-            || self.due_date.is_some()
-            || self.payment_term_id.is_some()
-            || self.early_pay_discount_percent.is_some()
-            || self.early_pay_discount_deadline.is_some()
-            || self.early_pay_discount_account_id.is_some()
-            || self.currency.is_some()
-            || self.net_total.is_some()
-            || self.tax_total.is_some()
-            || self.grand_total.is_some()
-            || self.outstanding_amount.is_some()
-            || self.receivable_account_id.is_some()
-            || self.posting_state.is_some()
-            || self.journal_id.is_some()
-            || self.accounting_post_id.is_some()
-            || self.posted_at.is_some()
-            || self.notes.is_some()
+        self.invoice_number.is_some() || self.branch_id.is_some() || self.customer_id.is_some() || self.source_so_id.is_some() || self.status.is_some() || self.posting_date.is_some() || self.due_date.is_some() || self.payment_term_id.is_some() || self.early_pay_discount_percent.is_some() || self.early_pay_discount_deadline.is_some() || self.early_pay_discount_account_id.is_some() || self.currency.is_some() || self.net_total.is_some() || self.tax_total.is_some() || self.grand_total.is_some() || self.outstanding_amount.is_some() || self.receivable_account_id.is_some() || self.posting_state.is_some() || self.journal_id.is_some() || self.accounting_post_id.is_some() || self.posted_at.is_some() || self.notes.is_some()
     }
 }
 
@@ -348,23 +238,12 @@ impl PatchSalesInvoiceDto {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct SalesInvoiceResponseDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub invoice_number: String,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
-    pub company_id: Uuid,
     pub branch_id: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub customer_id: Uuid,
     pub source_so_id: Option<Uuid>,
     pub status: InvoiceStatus,
@@ -381,10 +260,7 @@ pub struct SalesInvoiceResponseDto {
     pub tax_total: Decimal,
     pub grand_total: Decimal,
     pub outstanding_amount: Decimal,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub receivable_account_id: Uuid,
     pub posting_state: GlPostingState,
     pub journal_id: Option<Uuid>,
@@ -449,8 +325,8 @@ impl SalesInvoiceListResponseDto {
 pub struct SalesInvoiceSummaryDto {
     pub id: Uuid,
     pub invoice_number: String,
-    pub company_id: Uuid,
     pub branch_id: Option<Uuid>,
+    pub customer_id: Uuid,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -463,7 +339,6 @@ impl From<SalesInvoice> for SalesInvoiceResponseDto {
         Self {
             id: entity.id,
             invoice_number: entity.invoice_number,
-            company_id: entity.company_id,
             branch_id: entity.branch_id,
             customer_id: entity.customer_id,
             source_so_id: entity.source_so_id,
@@ -496,8 +371,8 @@ impl From<SalesInvoice> for SalesInvoiceSummaryDto {
         Self {
             id: entity.id,
             invoice_number: entity.invoice_number,
-            company_id: entity.company_id,
             branch_id: entity.branch_id,
+            customer_id: entity.customer_id,
             created_at,
         }
     }
@@ -508,7 +383,6 @@ impl From<CreateSalesInvoiceDto> for SalesInvoice {
         Self {
             id: Uuid::new_v4(),
             invoice_number: dto.invoice_number,
-            company_id: dto.company_id,
             branch_id: dto.branch_id,
             customer_id: dto.customer_id,
             source_so_id: dto.source_so_id,
@@ -540,7 +414,6 @@ impl From<&SalesInvoice> for SalesInvoiceResponseDto {
         Self {
             id: entity.id.clone(),
             invoice_number: entity.invoice_number.clone(),
-            company_id: entity.company_id.clone(),
             branch_id: entity.branch_id.clone(),
             customer_id: entity.customer_id.clone(),
             source_so_id: entity.source_so_id.clone(),
@@ -576,7 +449,6 @@ impl backbone_core::FromCreateDto<CreateSalesInvoiceDto> for SalesInvoice {
 impl backbone_core::ApplyUpdateDto<UpdateSalesInvoiceDto> for SalesInvoice {
     fn apply_update(mut self, dto: UpdateSalesInvoiceDto) -> backbone_core::ServiceResult<Self> {
         self.invoice_number = dto.invoice_number;
-        self.company_id = dto.company_id;
         self.branch_id = dto.branch_id;
         self.customer_id = dto.customer_id;
         self.source_so_id = dto.source_so_id;

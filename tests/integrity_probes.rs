@@ -89,14 +89,12 @@ fn line(item: Uuid, acct: Uuid, qty: &str, price: &str) -> NewInvoiceLine {
 
 async fn draft_sales(
     w: &BillingWriteService,
-    company: Uuid,
     currency: Option<String>,
     tax: Vec<NewTaxLine>,
 ) -> Uuid {
     let (item, rev, ar) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
     w.create_sales_invoice(NewSalesInvoice {
         invoice_number: uq("SI"),
-        company_id: company,
         branch_id: None,
         customer_id: Uuid::new_v4(),
         source_so_id: None,
@@ -118,7 +116,7 @@ async fn draft_sales(
 async fn rejected_post_is_recoverable() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let id = draft_sales(&w, Uuid::new_v4(), None, vec![]).await;
+    let id = draft_sales(&w, None, vec![]).await;
 
     let e = w.post_sales_invoice(id, &RejectingGl).await.unwrap_err();
     assert!(matches!(e, BillingError::GlRejected { .. }));
@@ -154,7 +152,7 @@ async fn rejected_post_is_recoverable() {
 async fn non_idr_currency_refused_at_post() {
     let pool = pool().await;
     let w = BillingWriteService::new(pool.clone());
-    let id = draft_sales(&w, Uuid::new_v4(), Some("USD".into()), vec![]).await;
+    let id = draft_sales(&w, Some("USD".into()), vec![]).await;
     let ok = OkGl {
         hits: Arc::new(Mutex::new(0)),
         journal: Uuid::new_v4(),
@@ -179,7 +177,6 @@ async fn ar_post_is_balanced_with_tax() {
     let ppn = Uuid::new_v4();
     let id = draft_sales(
         &w,
-        Uuid::new_v4(),
         None,
         vec![NewTaxLine {
             account_id: ppn,
@@ -256,8 +253,7 @@ async fn concurrent_post_emits_the_seam_event_once() {
         pool.clone(),
         Arc::new(rec.clone()),
     ));
-    let (company, item, exp, ap) = (
-        Uuid::new_v4(),
+    let (item, exp, ap) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -266,7 +262,6 @@ async fn concurrent_post_emits_the_seam_event_once() {
     let inv = w
         .create_purchase_invoice(NewPurchaseInvoice {
             invoice_number: uq("PI"),
-            company_id: company,
             branch_id: None,
             supplier_id: Uuid::new_v4(),
             source_po_id: Some(po),
@@ -458,21 +453,17 @@ async fn body_company_id_cannot_override_the_token_tenant() {
     .await;
     assert_eq!(status, StatusCode::CREATED, "got: {resp}");
 
+    // Post-strip (ADR-0029) billing.sales_invoices carries no tenant column at all — the module
+    // cannot name a tenant, so the persisted-tenant-is-the-token's proof now lives in the
+    // composing service's decorator probes. What this leg still proves at module level: the
+    // smuggled body field is TOLERATED (the write succeeds) and cannot break the invoice shape.
     let persisted: Uuid = sqlx::query_scalar(
-        "SELECT company_id FROM billing.sales_invoices WHERE invoice_number = $1",
+        "SELECT id FROM billing.sales_invoices WHERE invoice_number = $1",
     )
     .bind(&number)
     .fetch_one(&pool)
     .await
-    .expect("invoice row");
-    assert_eq!(
-        persisted, token_company,
-        "tenant must come from the token, not the body"
-    );
-    assert_ne!(
-        persisted, attacker_company,
-        "the body's companyId must be ignored"
-    );
+    .expect("invoice row created despite the smuggled body field");
 }
 
 // IP-5 (outbox fence — mirrors backbone-payment::post_payment): when `with_outbox_schema` is set,
@@ -482,9 +473,19 @@ async fn body_company_id_cannot_override_the_token_tenant() {
 #[tokio::test]
 async fn posted_invoice_stages_seam_event_in_outbox() {
     let pool = pool().await;
+    // Serialize the outbox bootstrap across this binary's tests: the type/table creation is
+    // guarded but not race-safe, and #[tokio::test] runs the callers concurrently.
+    sqlx::query("SELECT pg_advisory_lock(hashtext('billing_outbox_migrate'))")
+        .execute(&pool)
+        .await
+        .expect("lock the outbox bootstrap");
     backbone_outbox::outbox::migrate(&pool, "billing")
         .await
         .expect("migrate billing outbox");
+    sqlx::query("SELECT pg_advisory_unlock(hashtext('billing_outbox_migrate'))")
+        .execute(&pool)
+        .await
+        .expect("unlock the outbox bootstrap");
 
     let rec = Recorder::default();
     let gl = OkGl {
@@ -495,8 +496,7 @@ async fn posted_invoice_stages_seam_event_in_outbox() {
     let w = BillingWriteService::with_sink(pool.clone(), Arc::new(rec.clone()))
         .with_outbox_schema("billing");
 
-    let (company, customer, item, ar) = (
-        Uuid::new_v4(),
+    let (customer, item, ar) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -504,7 +504,6 @@ async fn posted_invoice_stages_seam_event_in_outbox() {
     let inv = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: customer,
             source_so_id: None,
@@ -560,9 +559,19 @@ async fn posted_invoice_stages_seam_event_in_outbox() {
 #[tokio::test]
 async fn posted_purchase_invoice_stages_seam_event_in_outbox() {
     let pool = pool().await;
+    // Serialize the outbox bootstrap across this binary's tests: the type/table creation is
+    // guarded but not race-safe, and #[tokio::test] runs the callers concurrently.
+    sqlx::query("SELECT pg_advisory_lock(hashtext('billing_outbox_migrate'))")
+        .execute(&pool)
+        .await
+        .expect("lock the outbox bootstrap");
     backbone_outbox::outbox::migrate(&pool, "billing")
         .await
         .expect("migrate billing outbox");
+    sqlx::query("SELECT pg_advisory_unlock(hashtext('billing_outbox_migrate'))")
+        .execute(&pool)
+        .await
+        .expect("unlock the outbox bootstrap");
 
     let rec = Recorder::default();
     let gl = OkGl {
@@ -573,8 +582,7 @@ async fn posted_purchase_invoice_stages_seam_event_in_outbox() {
     let w = BillingWriteService::with_sink(pool.clone(), Arc::new(rec.clone()))
         .with_outbox_schema("billing");
 
-    let (company, supplier, item, ap) = (
-        Uuid::new_v4(),
+    let (supplier, item, ap) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -582,7 +590,6 @@ async fn posted_purchase_invoice_stages_seam_event_in_outbox() {
     let inv = w
         .create_purchase_invoice(NewPurchaseInvoice {
             invoice_number: uq("PI"),
-            company_id: company,
             branch_id: None,
             supplier_id: supplier,
             source_po_id: None,
@@ -621,9 +628,19 @@ async fn posted_purchase_invoice_stages_seam_event_in_outbox() {
 #[tokio::test]
 async fn reversed_invoice_stages_cancel_in_outbox() {
     let pool = pool().await;
+    // Serialize the outbox bootstrap across this binary's tests: the type/table creation is
+    // guarded but not race-safe, and #[tokio::test] runs the callers concurrently.
+    sqlx::query("SELECT pg_advisory_lock(hashtext('billing_outbox_migrate'))")
+        .execute(&pool)
+        .await
+        .expect("lock the outbox bootstrap");
     backbone_outbox::outbox::migrate(&pool, "billing")
         .await
         .expect("migrate billing outbox");
+    sqlx::query("SELECT pg_advisory_unlock(hashtext('billing_outbox_migrate'))")
+        .execute(&pool)
+        .await
+        .expect("unlock the outbox bootstrap");
 
     let rec = Recorder::default();
     let gl = OkGl {
@@ -634,8 +651,7 @@ async fn reversed_invoice_stages_cancel_in_outbox() {
     let w = BillingWriteService::with_sink(pool.clone(), Arc::new(rec.clone()))
         .with_outbox_schema("billing");
 
-    let (company, customer, item, ar) = (
-        Uuid::new_v4(),
+    let (customer, item, ar) = (
         Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -643,7 +659,6 @@ async fn reversed_invoice_stages_cancel_in_outbox() {
     let inv = w
         .create_sales_invoice(NewSalesInvoice {
             invoice_number: uq("SI"),
-            company_id: company,
             branch_id: None,
             customer_id: customer,
             source_so_id: None,

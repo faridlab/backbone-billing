@@ -13,7 +13,12 @@ use rust_decimal::Decimal;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope;
+// The multi-row read twin lives only in the legacy `company_scope` module. Its connection
+// discipline is what this repository needs — request-dedicated connection when the composing
+// service bound one, plain pool otherwise. The helper's legacy task-local branch is never
+// taken: this module sets no legacy scope of its own (ADR-0029).
+use backbone_orm::company_scope::fetch_all_rows_scoped;
 
 use crate::domain::entity::InvoiceTaxLine;
 
@@ -57,10 +62,6 @@ pub struct NewInvoiceTaxLineRow<'a> {
     pub invoice_ref: Uuid,
     /// Bound to the `invoice_kind` column — "sales" | "purchase".
     pub kind: &'a str,
-    /// Bound to the `company_id` column (denormalized from the parent invoice — resolved by
-    /// kind+invoice_ref — so the overlay row passes the ADR-0008 RLS fence on its own).
-    /// Required since migration 20260426220010.
-    pub company_id: Uuid,
     pub account_id: Uuid,
     /// "output" | "input" | "withholding".
     pub basis: &'a str,
@@ -92,7 +93,8 @@ impl InvoiceTaxLineRepository {
     /// Insert one overlay tax line.
     ///
     /// Takes the CALLER'S connection so the tax overlay commits with its header + lines in one unit.
-    /// The caller has already bound the company on it (`bind_company_on`) — don't re-bind here.
+    /// The caller relays the AMBIENT org scope onto it (`org_scope::bind_org_scope_on`) — don't
+    /// re-bind here.
     pub async fn insert_tax_line(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -100,16 +102,15 @@ impl InvoiceTaxLineRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO billing.invoice_tax_lines
-                (id, invoice_ref, invoice_kind, company_id, account_id, basis, description,
+                (id, invoice_ref, invoice_kind, account_id, basis, description,
                  taxable_base, rate, tax_amount, tax_template_id, repartition_line_id,
                  real_account_id, exigibility)
-               VALUES ($1,$2,$3::invoice_kind,$4,$5,$6::tax_basis,$7,$8,$9,$10,$11,$12,$13,
-                 COALESCE($14::billing.tax_exigibility, 'on_invoice'))"#,
+               VALUES ($1,$2,$3::invoice_kind,$4,$5::tax_basis,$6,$7,$8,$9,$10,$11,$12,
+                 COALESCE($13::billing.tax_exigibility, 'on_invoice'))"#,
         )
         .bind(t.id)
         .bind(t.invoice_ref)
         .bind(t.kind)
-        .bind(t.company_id)
         .bind(t.account_id)
         .bind(t.basis)
         .bind(t.description)
@@ -128,8 +129,8 @@ impl InvoiceTaxLineRepository {
     /// Read the live overlay lines for one invoice + basis, in the order the GL legs are emitted.
     ///
     /// `kind` ("sales"|"purchase") and `basis` ("output"|"input"|"withholding") are BOUND and cast at
-    /// the DB — never interpolated. The caller wraps this in `with_company_scope(Some(company))` (the
-    /// company comes off the invoice header) so the read passes the RLS fence (ADR-0008).
+    /// the DB — never interpolated. Rides the request-dedicated connection when the composing service
+    /// bound one (carrying the decorator's fence variables), plainly on the pool otherwise (ADR-0029).
     pub async fn fetch_amounts_by_basis(
         &self,
         pool: &PgPool,
@@ -137,7 +138,7 @@ impl InvoiceTaxLineRepository {
         kind: &str,
         basis: &str,
     ) -> Result<Vec<TaxAmountRow>, sqlx::Error> {
-        let rows = company_scope::fetch_all_rows_scoped(
+        let rows = fetch_all_rows_scoped(
             pool,
             sqlx::query(
                 r#"SELECT account_id, tax_amount FROM billing.invoice_tax_lines
