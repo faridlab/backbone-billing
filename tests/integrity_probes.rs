@@ -2,17 +2,16 @@
 //! golden math. Requires DATABASE_URL (:5433/backbone_billing).
 //!
 //! IP-1..IP-4    the posting/recovery/balance/seam invariants (service level).
-//! IGT-1..IGT-3  the tenancy invariants on the guarded HTTP surface — every write derives its tenant
-//!               from a signed token, never from the request body (mirrors selling's IGT-* cases).
+//! IGT           the tenancy posture on the guarded HTTP surface — the module mounts no guard of
+//!               its own (the composing service authenticates), so the leg proves a smuggled
+//!               tenant field in the body is tolerated and cannot name a tenant.
 
 use std::sync::{Arc, Mutex};
 
 use axum::body::Body;
-use axum::http::{header, Request, StatusCode};
-use backbone_auth::company::CompanyVerifier;
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use axum::http::{Request, StatusCode};
+use backbone_auth::org::OrgContext;
 use rust_decimal::Decimal;
-use serde::Serialize;
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -305,32 +304,6 @@ async fn concurrent_post_emits_the_seam_event_once() {
 
 // ── guarded HTTP surface: tenancy ────────────────────────────────────────────
 
-const SECRET: &[u8] = b"billing-integrity-probe-secret";
-
-#[derive(Serialize)]
-struct TestClaims {
-    sub: String,
-    exp: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    company_id: Option<Uuid>,
-}
-
-/// Mint an HS256 access token. `company_id = None` models a token that authenticates a user but
-/// carries no tenant — it must not be allowed to write.
-fn token(company_id: Option<Uuid>) -> String {
-    let claims = TestClaims {
-        sub: "probe-user".into(),
-        exp: 9_999_999_999,
-        company_id,
-    };
-    encode(
-        &Header::new(Algorithm::HS256),
-        &claims,
-        &EncodingKey::from_secret(SECRET),
-    )
-    .unwrap()
-}
-
 async fn module(pool: &PgPool) -> BillingModule {
     BillingModule::builder()
         .with_database(pool.clone())
@@ -343,25 +316,33 @@ fn app(pool: &PgPool, m: &BillingModule) -> axum::Router {
             pool.clone(),
         ),
     );
-    create_guarded_billing_routes(m, write, CompanyVerifier::hs256(SECRET))
+    // The module ships no guard, so the test stands in for the composing service's outer org
+    // guard: it inserts the OrgContext the write handlers extract.
+    create_guarded_billing_routes(m, write).layer(axum::middleware::from_fn(
+        |mut req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| async move {
+            req.extensions_mut().insert(OrgContext {
+                acting_unit_id: Uuid::nil(),
+                entitled_units: vec![],
+                legacy_company_id: None,
+                user_id: "probe".to_string(),
+            });
+            next.run(req).await
+        },
+    ))
 }
 
-/// Send a request with an optional bearer token.
+/// Send a request.
 async fn req_with(
     app: axum::Router,
     method: &str,
     uri: &str,
     body: Option<String>,
-    bearer: Option<String>,
 ) -> (StatusCode, String) {
     let b = body.map(Body::from).unwrap_or(Body::empty());
-    let mut builder = Request::builder()
+    let builder = Request::builder()
         .method(method)
         .uri(uri)
         .header("content-type", "application/json");
-    if let Some(t) = bearer {
-        builder = builder.header(header::AUTHORIZATION, format!("Bearer {t}"));
-    }
     let resp = app.oneshot(builder.body(b).unwrap()).await.unwrap();
     let status = resp.status();
     let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
@@ -385,55 +366,15 @@ fn sales_body(number: &str, extra: &str) -> String {
     )
 }
 
-// IGT-1: an unauthenticated write is rejected. Before the tenant guard this create succeeded and
-// stamped whatever `companyId` the caller put in the body.
+// IGT: the surface mounts no guard of its own — authentication is the composing service's duty, so
+// the unauthenticated/no-tenant refusals belong to its authn probes, not here. What stays at module
+// level: a `companyId`/`branchId` smuggled into the body is TOLERATED (unknown fields are ignored)
+// and cannot break the invoice shape — the module has no tenant column to stamp, so nothing the
+// body says can name a tenant.
 #[tokio::test]
-async fn guarded_write_rejects_unauthenticated() {
+async fn smuggled_body_tenant_fields_are_ignored() {
     let pool = pool().await;
     let m = module(&pool).await;
-    let (status, _) = req_with(
-        app(&pool, &m),
-        "POST",
-        "/sales-invoices",
-        Some(sales_body(&uq("SI"), "")),
-        None,
-    )
-    .await;
-    assert_eq!(
-        status,
-        StatusCode::UNAUTHORIZED,
-        "an unauthenticated write must not reach the service"
-    );
-}
-
-// IGT-2: a token that authenticates a user but carries no `company_id` claim is rejected — a writer
-// that cannot name its tenant must never run.
-#[tokio::test]
-async fn guarded_write_rejects_token_without_company_id() {
-    let pool = pool().await;
-    let m = module(&pool).await;
-    let (status, _) = req_with(
-        app(&pool, &m),
-        "POST",
-        "/purchase-invoices",
-        Some(sales_body(&uq("PI"), "")),
-        Some(token(None)),
-    )
-    .await;
-    assert_eq!(
-        status,
-        StatusCode::UNAUTHORIZED,
-        "a token with no tenant must not write"
-    );
-}
-
-// IGT-3: a `companyId` smuggled in the body is ignored — the persisted tenant is the token's. This is
-// the regression that motivated the change: the body must not be able to name the tenant.
-#[tokio::test]
-async fn body_company_id_cannot_override_the_token_tenant() {
-    let pool = pool().await;
-    let m = module(&pool).await;
-    let token_company = Uuid::new_v4();
     let attacker_company = Uuid::new_v4();
     let number = uq("SI");
     let body = sales_body(
@@ -443,20 +384,9 @@ async fn body_company_id_cannot_override_the_token_tenant() {
             Uuid::new_v4()
         ),
     );
-    let (status, resp) = req_with(
-        app(&pool, &m),
-        "POST",
-        "/sales-invoices",
-        Some(body),
-        Some(token(Some(token_company))),
-    )
-    .await;
+    let (status, resp) = req_with(app(&pool, &m), "POST", "/sales-invoices", Some(body)).await;
     assert_eq!(status, StatusCode::CREATED, "got: {resp}");
 
-    // Post-strip (ADR-0029) billing.sales_invoices carries no tenant column at all — the module
-    // cannot name a tenant, so the persisted-tenant-is-the-token's proof now lives in the
-    // composing service's decorator probes. What this leg still proves at module level: the
-    // smuggled body field is TOLERATED (the write succeeds) and cannot break the invoice shape.
     let persisted: Uuid = sqlx::query_scalar(
         "SELECT id FROM billing.sales_invoices WHERE invoice_number = $1",
     )

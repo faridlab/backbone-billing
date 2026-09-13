@@ -3,10 +3,12 @@
 //! Hand-authored (user-owned). Read documents + **validated create** (sales-invoice /
 //! purchase-invoice); generic create/update/delete CRUD is NOT mounted, so a caller cannot
 //! write an invoice with inconsistent totals or bypass the AR/AP posting path.
-//! Every route still demands a **signed** Bearer token (`company_auth` + `CompanyContext`), so
-//! only an authenticated caller gets in; the module itself is tenant-agnostic (ADR-0029) — the
-//! composing service's tenancy decorator scopes whatever the request touches, and the handlers
-//! pass no tenant at all.
+//! The module applies no guard of its own, because an internal one would nest a second
+//! request-dedicated connection inside the composer's and shadow its fence variables.
+//! Authentication is the composing service's duty: its outer org guard verifies the token and
+//! inserts `OrgContext`, which these handlers extract. The module itself is tenant-agnostic
+//! (ADR-0029) — the composing service's tenancy decorator scopes whatever the request touches,
+//! and the handlers pass no tenant at all.
 //! `BillingWriteService` is passed in by the composing service so routes, verbs, and event
 //! consumers all share one configured instance (regen-safe). Posting (`post_sales_invoice` /
 //! `post_purchase_invoice`) needs a `GlPostSink` composition layer, so it is service/job-driven,
@@ -15,12 +17,11 @@
 use axum::{
     extract::State,
     http::StatusCode,
-    middleware::from_fn_with_state,
     response::IntoResponse,
     routing::{get, post, put},
     Json, Router,
 };
-use backbone_auth::company::{company_auth, CompanyContext, CompanyVerifier};
+use backbone_auth::org::OrgContext;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -134,13 +135,14 @@ struct CreateSalesInvoiceBody {
 }
 async fn create_sales_invoice(
     State(svc): State<Arc<BillingWriteService>>,
-    tenant: CompanyContext,
+    _session: OrgContext,
     Json(b): Json<CreateSalesInvoiceBody>,
 ) -> axum::response::Response {
     let inv = NewSalesInvoice {
         invoice_number: b.invoice_number,
-        // branch_id is a business column, not the tenancy axis — it still comes off the token.
-        branch_id: tenant.branch_id,
+        // branch_id is a business column, not the tenancy axis; the org session carries no
+        // branch claim, so it starts NULL until an explicit branch verb sets it.
+        branch_id: None,
         customer_id: b.customer_id,
         source_so_id: b.source_so_id,
         posting_date: b.posting_date,
@@ -161,7 +163,7 @@ async fn create_sales_invoice(
 #[serde(rename_all = "camelCase")]
 struct CreatePurchaseInvoiceBody {
     invoice_number: String,
-    // No tenant anywhere in the body (ADR-0029); branch_id still comes off the token.
+    // No tenant anywhere in the body (ADR-0029).
     supplier_id: Uuid,
     #[serde(default)]
     source_po_id: Option<Uuid>,
@@ -179,12 +181,14 @@ struct CreatePurchaseInvoiceBody {
 }
 async fn create_purchase_invoice(
     State(svc): State<Arc<BillingWriteService>>,
-    tenant: CompanyContext,
+    _session: OrgContext,
     Json(b): Json<CreatePurchaseInvoiceBody>,
 ) -> axum::response::Response {
     let inv = NewPurchaseInvoice {
         invoice_number: b.invoice_number,
-        branch_id: tenant.branch_id,
+        // branch_id is a business column, not the tenancy axis; the org session carries no
+        // branch claim, so it starts NULL until an explicit branch verb sets it.
+        branch_id: None,
         supplier_id: b.supplier_id,
         source_po_id: b.source_po_id,
         posting_date: b.posting_date,
@@ -201,7 +205,7 @@ async fn create_purchase_invoice(
     }
 }
 
-fn write_routes(svc: Arc<BillingWriteService>, verifier: CompanyVerifier) -> Router {
+fn write_routes(svc: Arc<BillingWriteService>) -> Router {
     Router::new()
         .route("/sales-invoices", post(create_sales_invoice))
         .route("/purchase-invoices", post(create_purchase_invoice))
@@ -213,15 +217,10 @@ fn write_routes(svc: Arc<BillingWriteService>, verifier: CompanyVerifier) -> Rou
         .route("/payment-terms/:id/status", put(set_payment_term_status))
         // Derived read (no stored overdue flag to drift): open, GL-posted invoices past due.
         .route("/overdue-invoices", get(list_overdue_invoices))
-        // Every route above demands a signed token: `company_auth` rejects a request whose token
-        // is absent or invalid, so a handler only ever runs for an authenticated caller. What
-        // that caller may SEE is the composing service's tenancy decorator's decision (ADR-0029).
-        //
-        // `route_layer`, not `layer`: `layer` would also wrap this router's fallback, so once merged
-        // every *unmatched* path (e.g. the generic CRUD paths this surface deliberately does not
-        // mount) would answer 401 instead of 404 — leaking "auth required" for routes that do not
-        // exist, and masking the CRUD-bypass probes.
-        .route_layer(from_fn_with_state(verifier, company_auth))
+        // No guard here: the module ships none of its own, because an internal one would open a
+        // second request-dedicated connection nested inside the composing service's and shadow
+        // its fence variables. The outer org guard verifies the token and inserts OrgContext;
+        // what an authenticated caller may SEE stays the composer's tenancy decision (ADR-0029).
         .with_state(svc)
 }
 
@@ -291,7 +290,7 @@ fn default_discount_tax_basis() -> String {
 }
 async fn create_payment_term(
     State(svc): State<Arc<BillingWriteService>>,
-    _tenant: CompanyContext,
+    _session: OrgContext,
     Json(b): Json<CreatePaymentTermBody>,
 ) -> axum::response::Response {
     let lines: Vec<_> = b.lines.into_iter().map(Into::into).collect();
@@ -325,7 +324,7 @@ struct TermSummary {
 }
 async fn list_payment_terms(
     State(svc): State<Arc<BillingWriteService>>,
-    _tenant: CompanyContext,
+    _session: OrgContext,
 ) -> axum::response::Response {
     match svc.list_payment_terms().await {
         Ok(terms) => (
@@ -362,7 +361,7 @@ struct ScheduleSlice {
 }
 async fn preview_payment_term(
     State(svc): State<Arc<BillingWriteService>>,
-    _tenant: CompanyContext,
+    _session: OrgContext,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
     axum::extract::Query(q): axum::extract::Query<PreviewTermQuery>,
 ) -> axum::response::Response {
@@ -391,7 +390,7 @@ struct SetTermStatusBody {
 }
 async fn set_payment_term_status(
     State(svc): State<Arc<BillingWriteService>>,
-    _tenant: CompanyContext,
+    _session: OrgContext,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
     Json(b): Json<SetTermStatusBody>,
 ) -> axum::response::Response {
@@ -422,7 +421,7 @@ struct OverdueInvoice {
 }
 async fn list_overdue_invoices(
     State(svc): State<Arc<BillingWriteService>>,
-    _tenant: CompanyContext,
+    _session: OrgContext,
 ) -> axum::response::Response {
     let today = chrono::Utc::now().date_naive();
     match svc.list_overdue_invoices(today).await {
@@ -450,20 +449,16 @@ async fn list_overdue_invoices(
 /// Mount the billing module: read documents + validated creates. Generic mutation is
 /// not mounted. **Prefer this over `BillingModule::all_crud_routes()` for any real deployment.**
 ///
-/// The composing service builds one [`CompanyVerifier`] from its JWT secret and passes it here;
-/// every route demands a signed token, and the composing service's tenancy decorator scopes what
-/// each request touches (ADR-0029) — no tenant crosses the wire in a body.
+/// The module ships no guard of its own: authentication is the composing service's duty (its
+/// outer org guard verifies the token and inserts OrgContext), and its tenancy decorator scopes
+/// what each request touches (ADR-0029) — no tenant crosses the wire in a body.
 ///
 /// The write service is passed in — the SAME configured instance the host wires its settlement
 /// consumers and finance verbs to. Constructing one here would silently fork the configuration:
 /// a host-set collaborator (e.g. the tax engine behind template-driven lines) would exist on the
 /// verbs' instance but not the create routes', and template lines would be refused with
 /// `tax_engine_unwired` at runtime while every suite passes.
-pub fn create_guarded_billing_routes(
-    m: &BillingModule,
-    write: Arc<BillingWriteService>,
-    verifier: CompanyVerifier,
-) -> Router {
+pub fn create_guarded_billing_routes(m: &BillingModule, write: Arc<BillingWriteService>) -> Router {
     Router::new()
         .merge(create_sales_invoice_read_routes(
             m.sales_invoice_service.clone(),
@@ -471,5 +466,5 @@ pub fn create_guarded_billing_routes(
         .merge(create_purchase_invoice_read_routes(
             m.purchase_invoice_service.clone(),
         ))
-        .merge(write_routes(write, verifier))
+        .merge(write_routes(write))
 }

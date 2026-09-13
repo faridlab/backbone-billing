@@ -98,8 +98,7 @@ async fn pool() -> PgPool {
     });
     PgPool::connect(&url).await.expect("connect DB")
 }
-async fn seed_coa(pool: &PgPool) -> (Uuid, HashMap<&'static str, Uuid>) {
-    let company = Uuid::new_v4();
+async fn seed_coa(pool: &PgPool) -> HashMap<&'static str, Uuid> {
     // A/P is subtype `payable` → the ledger requires a party on that line.
     let coa: &[(&str, &str, &str, &str, &str)] = &[
         (
@@ -134,7 +133,7 @@ async fn seed_coa(pool: &PgPool) -> (Uuid, HashMap<&'static str, Uuid>) {
             .execute(pool).await.expect("seed acct");
         m.insert(*code, id);
     }
-    (company, m)
+    m
 }
 async fn po_status(pool: &PgPool, id: Uuid) -> String {
     sqlx::query_scalar("SELECT status::text FROM buying.purchase_orders WHERE id=$1")
@@ -156,7 +155,7 @@ async fn journal_totals(pool: &PgPool, jid: Uuid) -> (Decimal, Decimal) {
 #[tokio::test]
 async fn purchase_invoice_bills_po_across_three_modules() {
     let pool = pool().await;
-    let (company, coa) = seed_coa(&pool).await;
+    let coa = seed_coa(&pool).await;
     let item = Uuid::new_v4();
     let supplier = Uuid::new_v4();
 
@@ -178,7 +177,6 @@ async fn purchase_invoice_bills_po_across_three_modules() {
             po_number: uq("PO"),
             supplier_quotation_id: None,
             order_kind: None,
-            company_id: company,
             branch_id: None,
             supplier_id: supplier,
             order_date: day(),
@@ -202,7 +200,7 @@ async fn purchase_invoice_bills_po_across_three_modules() {
         .await
         .unwrap();
     buying.confirm_purchase_order(po, false).await.unwrap();
-    buying.mark_received(po, company, &[(item, d("10"))]).await.unwrap();
+    buying.mark_received(po, &[(item, d("10"))]).await.unwrap();
     assert_eq!(
         po_status(&pool, po).await,
         "purchase",
@@ -283,7 +281,7 @@ async fn purchase_invoice_bills_po_across_three_modules() {
         .iter()
         .map(|l| (l.item_id, l.quantity))
         .collect();
-    buying.mark_billed(po, company, &billed).await.unwrap();
+    buying.mark_billed(po, &billed).await.unwrap();
 
     // 5) the PO is now fully billed against a real invoice → completed.
     // Five-state band: fully-received-and-billed no longer renames `status` — the maturity
