@@ -619,3 +619,177 @@ async fn reversed_invoice_stages_cancel_in_outbox() {
         .bind(inv.to_string()).fetch_one(&pool).await.unwrap();
     assert_eq!(staged, 1, "InvoiceCancelled must be staged exactly once");
 }
+
+// IP-8 (the tax consumer's payload contract): the staged posted-invoice and cancel payloads carry
+// every field the e-Faktur consumer reads off the wire — `invoice_id`, `company_id`,
+// `posting_date`, `taxable_base`, and the per-kind totals; `kind` on the cancel.
+//
+// Why this lives here rather than on the consuming side. The consumer is a composition seam: it
+// deserializes these payloads into its own wire DTO, and its tests hand-build that JSON. So nothing
+// over there proves billing actually STAGES the shape it assumes — a renamed or dropped field would
+// leave both sides green and break only in production, silently, as an event that drains and does
+// nothing. Billing owns the producing half of the contract, so billing pins it. The module keeps
+// zero cargo edges to siblings: this asserts the serialized JSON, never a consumer type.
+#[tokio::test]
+async fn staged_payloads_carry_the_fields_the_tax_consumer_reads() {
+    let pool = pool().await;
+    // Serialize the outbox bootstrap across this binary's tests: the type/table creation is
+    // guarded but not race-safe, and #[tokio::test] runs the callers concurrently.
+    sqlx::query("SELECT pg_advisory_lock(hashtext('billing_outbox_migrate'))")
+        .execute(&pool)
+        .await
+        .expect("lock the outbox bootstrap");
+    backbone_outbox::outbox::migrate(&pool, "billing")
+        .await
+        .expect("migrate billing outbox");
+    sqlx::query("SELECT pg_advisory_unlock(hashtext('billing_outbox_migrate'))")
+        .execute(&pool)
+        .await
+        .expect("unlock the outbox bootstrap");
+
+    let gl = OkGl {
+        hits: Arc::new(Mutex::new(0)),
+        journal: Uuid::new_v4(),
+        post: Uuid::new_v4(),
+    };
+    let w = BillingWriteService::new(pool.clone()).with_outbox_schema("billing");
+
+    /// The staged payload for one event type on one invoice.
+    async fn staged(pool: &PgPool, event_type: &str, invoice: Uuid) -> serde_json::Value {
+        sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT payload FROM billing.outbox_events \
+              WHERE event_type = $1 AND aggregate_id = $2",
+        )
+        .bind(event_type)
+        .bind(invoice.to_string())
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("no staged {event_type} for {invoice}: {e}"))
+    }
+
+    /// Every named key must be present and non-null. A field the consumer reads that arrives as
+    /// JSON null deserializes into a missing required field, which is the same outage as a rename.
+    fn carries(payload: &serde_json::Value, event: &str, keys: &[&str]) {
+        for key in keys {
+            let value = payload.get(key).unwrap_or_else(|| {
+                panic!("{event} payload has no `{key}` — the tax consumer reads it: {payload}")
+            });
+            assert!(
+                !value.is_null(),
+                "{event}.{key} staged as null — the consumer's required field cannot decode"
+            );
+        }
+    }
+
+    // ── A/R: a posted sales invoice ──
+    let (customer, item, ar, ppn) = (
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    );
+    let sales = w
+        .create_sales_invoice(NewSalesInvoice {
+            invoice_number: uq("SI"),
+            branch_id: None,
+            customer_id: customer,
+            source_so_id: None,
+            posting_date: day(),
+            due_date: None,
+            payment_term_id: None,
+            currency: None,
+            receivable_account_id: ar,
+            lines: vec![line(item, ar, "1", "1000000")],
+            tax_lines: vec![NewTaxLine {
+                account_id: ppn,
+                basis: "output".into(),
+                description: None,
+                rate: d("0.11"),
+                tax_amount: d("110000"),
+                taxable_base: Default::default(),
+                tax_template_id: None,
+                repartition_line_id: None,
+                real_account_id: None,
+                exigibility: None,
+            }],
+        })
+        .await
+        .unwrap();
+    w.post_sales_invoice(sales, &gl).await.unwrap();
+
+    let posted = staged(&pool, "SalesInvoicePosted", sales).await;
+    carries(
+        &posted,
+        "SalesInvoicePosted",
+        &[
+            "invoice_id",
+            "company_id",
+            "posting_date",
+            "taxable_base",
+            "output_total",
+        ],
+    );
+    assert_eq!(
+        posted["invoice_id"].as_str(),
+        Some(sales.to_string().as_str()),
+        "the payload names the invoice it was staged for"
+    );
+
+    // ── A/P: a posted purchase invoice carries the input-VAT side instead ──
+    let (supplier, ap) = (Uuid::new_v4(), Uuid::new_v4());
+    let purchase = w
+        .create_purchase_invoice(NewPurchaseInvoice {
+            invoice_number: uq("PI"),
+            branch_id: None,
+            supplier_id: supplier,
+            source_po_id: None,
+            posting_date: day(),
+            due_date: None,
+            payment_term_id: None,
+            currency: None,
+            payable_account_id: ap,
+            lines: vec![line(item, ap, "1", "1000000")],
+            tax_lines: vec![NewTaxLine {
+                account_id: ppn,
+                basis: "input".into(),
+                description: None,
+                rate: d("0.11"),
+                tax_amount: d("110000"),
+                taxable_base: Default::default(),
+                tax_template_id: None,
+                repartition_line_id: None,
+                real_account_id: None,
+                exigibility: None,
+            }],
+        })
+        .await
+        .unwrap();
+    w.post_purchase_invoice(purchase, &gl).await.unwrap();
+
+    carries(
+        &staged(&pool, "PurchaseInvoicePosted", purchase).await,
+        "PurchaseInvoicePosted",
+        &[
+            "invoice_id",
+            "company_id",
+            "posting_date",
+            "taxable_base",
+            "input_total",
+            "withholding_total",
+        ],
+    );
+
+    // ── The cancel leg: the consumer routes on `kind`, so a missing one voids nothing ──
+    w.reverse_sales_invoice(sales, &gl).await.unwrap();
+    let cancelled = staged(&pool, "InvoiceCancelled", sales).await;
+    carries(
+        &cancelled,
+        "InvoiceCancelled",
+        &["invoice_id", "company_id", "kind"],
+    );
+    assert_eq!(
+        cancelled["kind"].as_str(),
+        Some("sales"),
+        "a cancelled sales invoice is staged as the sales kind — the consumer voids by kind"
+    );
+}
