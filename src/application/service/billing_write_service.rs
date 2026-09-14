@@ -503,7 +503,6 @@ impl BillingWriteService {
             // The engine's legacy twin input (ADR-0029): the ambient org scope wins when the
             // composing service bound one; without one the engine builds the single-company
             // scope from this value (nil reads unfenced on an undecorated database).
-            company_id: legacy_company_echo(),
             // Both sales and purchase invoices route through the invoice repartition family;
             // refunds are credit notes (wholesale sign flip at reversal), not this path.
             document_type: backbone_tax::DocumentType::Invoice,

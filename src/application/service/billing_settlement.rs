@@ -40,14 +40,22 @@ use super::billing_write_service::{money, relay_ambient_scope, BillingError, Bil
 /// rows land on (and are readable from) the paying tenant's company node under the composed
 /// decorator's fence, and the legacy variable still satisfies any not-yet-stripped table the
 /// transaction touches (the durable outbox/inbox).
-async fn bind_legacy_company(
-    tx: &mut sqlx::PgConnection,
-    company_id: Uuid,
-) -> Result<(), BillingError> {
-    let scope = OrgScope::for_company_unit(company_id);
-    backbone_orm::org_scope::bind_org_scope_on(tx, &scope)
-        .await
-        .map_err(BillingError::Db)?;
+/// The legacy company twin, taken from the request's own scope.
+fn ambient_company() -> Uuid {
+    backbone_orm::org_scope::current_org_scope()
+        .and_then(|s| s.legacy_company_id())
+        .unwrap_or_default()
+}
+
+async fn bind_legacy_company(tx: &mut sqlx::PgConnection) -> Result<(), BillingError> {
+    // The caller no longer names a tenant: it is read from the request's own scope. With no
+    // ambient scope the connection stays unbound, which is the unfenced posture an undecorated
+    // deployment already has — a caller cannot name a scope the session did not grant.
+    if let Some(scope) = backbone_orm::org_scope::current_org_scope() {
+        backbone_orm::org_scope::bind_org_scope_on(tx, &scope)
+            .await
+            .map_err(BillingError::Db)?;
+    }
     Ok(())
 }
 
@@ -114,7 +122,7 @@ impl BillingWriteService {
 
     /// Resolve an invoice's early-pay-discount decision for a settlement happening on `on_date`.
     ///
-    /// `company_id` is the legacy twin from the paying tenant's payment event (ADR-0029) — it
+    /// `ambient_company()` is the legacy twin from the paying tenant's payment event (ADR-0029) — it
     /// scopes the read, nothing else. Applicable iff the invoice was posted with a materialized
     /// discount block whose deadline covers `on_date` and whose outstanding is still positive.
     /// Returns the percent + the expense account; the CALLER computes the amount on what it
@@ -122,7 +130,6 @@ impl BillingWriteService {
     /// original domain error.
     pub async fn resolve_early_pay_discount(
         &self,
-        company_id: Uuid,
         invoice_ref: Uuid,
         kind: &str,
         on_date: chrono::NaiveDate,
@@ -136,7 +143,7 @@ impl BillingWriteService {
         // carries no fence variables, and the composed decorator's policy would hide the row
         // entirely).
         let mut tx = self.db_pool.begin().await.map_err(BillingError::Db)?;
-        bind_legacy_company(&mut tx, company_id).await?;
+        bind_legacy_company(&mut tx).await?;
         let fetched = self
             .terms
             .fetch_invoice_epd(&mut *tx, table, invoice_ref)
@@ -175,7 +182,7 @@ impl BillingWriteService {
     // ---- Payment schedule ---------------------------------------------------
 
     /// Attach installment due dates to an invoice (AR or A/P). Lean — settlement is payments' job.
-    /// `company_id` is the legacy twin anchoring the rows on the invoice tenant's company node
+    /// `ambient_company()` is the legacy twin anchoring the rows on the invoice tenant's company node
     /// (ADR-0029). Refused when the invoice carries a payment term: the term's derived
     /// installments and a manual schedule cannot coexist (the post hook enforces the same rule
     /// from the other side).
@@ -183,12 +190,11 @@ impl BillingWriteService {
         &self,
         invoice_ref: Uuid,
         kind: &str,
-        company_id: Uuid,
         installments: &[(chrono::NaiveDate, Decimal)],
     ) -> Result<(), BillingError> {
         let ikind = invoice_kind(kind)?;
         let mut tx = self.db_pool.begin().await?;
-        bind_legacy_company(&mut tx, company_id).await?;
+        bind_legacy_company(&mut tx).await?;
         let table = match ikind {
             InvoiceKind::Sales => "sales_invoices",
             InvoiceKind::Purchase => "purchase_invoices",
@@ -241,7 +247,6 @@ impl BillingWriteService {
     /// the whole settlement rolls back rather than leaving the cache and the graph disagreeing.
     pub async fn apply_settlement(
         &self,
-        company_id: Uuid,
         invoice_ref: Uuid,
         kind: &str,
         amount: Decimal,
@@ -253,14 +258,13 @@ impl BillingWriteService {
         // event-driven and carries no ambient request scope, so the ACL/relay's company id maps
         // onto the single-company org scope that fences the whole unit of work (see the module
         // docs: the org fence variables AND the legacy `app.company_id` both get set).
-        bind_legacy_company(&mut tx, company_id).await?;
+        bind_legacy_company(&mut tx).await?;
         let applied = self
             .apply_settlement_in_tx(
                 &mut tx,
                 invoice_ref,
                 kind,
                 amount,
-                company_id,
                 payment_id,
                 reconcile,
             )
@@ -282,7 +286,6 @@ impl BillingWriteService {
         &self,
         event_id: Uuid,
         consumer: &str,
-        company_id: Uuid,
         payment_id: Uuid,
         allocations: &[(Uuid, String, Decimal)],
         reconcile: &dyn ReconcileSink,
@@ -290,7 +293,7 @@ impl BillingWriteService {
         let mut tx = self.db_pool.begin().await?;
         // The relay/ACL passes the payment event's company (its legacy twin input); it maps onto
         // the single-company org scope that fences the whole unit of work.
-        bind_legacy_company(&mut tx, company_id).await?;
+        bind_legacy_company(&mut tx).await?;
         let first = backbone_outbox::inbox::once(&mut *tx, "billing", consumer, event_id)
             .await
             .map_err(|e| BillingError::Db(sqlx::Error::Protocol(e.to_string())))?;
@@ -311,7 +314,6 @@ impl BillingWriteService {
                     *invoice_ref,
                     kind,
                     *amount,
-                    company_id,
                     payment_id,
                     reconcile,
                 )
@@ -334,7 +336,6 @@ impl BillingWriteService {
         invoice_ref: Uuid,
         kind: &str,
         amount: Decimal,
-        company_id: Uuid,
         payment_id: Uuid,
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
@@ -413,7 +414,7 @@ impl BillingWriteService {
             .reconcile_pair_on(
                 &mut **tx,
                 &ReconcilePairRequest {
-                    company_id,
+                    company_id: ambient_company(),
                     debit,
                     credit,
                     amount: applied,
@@ -451,7 +452,6 @@ impl BillingWriteService {
     /// transaction. Returns the amount actually restored.
     pub async fn reverse_settlement(
         &self,
-        company_id: Uuid,
         invoice_ref: Uuid,
         kind: &str,
         amount: Decimal,
@@ -459,14 +459,13 @@ impl BillingWriteService {
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
         let mut tx = self.db_pool.begin().await?;
-        bind_legacy_company(&mut tx, company_id).await?;
+        bind_legacy_company(&mut tx).await?;
         let restored = self
             .reverse_settlement_in_tx(
                 &mut tx,
                 invoice_ref,
                 kind,
                 amount,
-                company_id,
                 payment_id,
                 reconcile,
             )
@@ -484,13 +483,12 @@ impl BillingWriteService {
         &self,
         event_id: Uuid,
         consumer: &str,
-        company_id: Uuid,
         payment_id: Uuid,
         allocations: &[(Uuid, String, Decimal)],
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
         let mut tx = self.db_pool.begin().await?;
-        bind_legacy_company(&mut tx, company_id).await?;
+        bind_legacy_company(&mut tx).await?;
         let first = backbone_outbox::inbox::once(&mut *tx, "billing", consumer, event_id)
             .await
             .map_err(|e| BillingError::Db(sqlx::Error::Protocol(e.to_string())))?;
@@ -506,7 +504,6 @@ impl BillingWriteService {
                     *invoice_ref,
                     kind,
                     *amount,
-                    company_id,
                     payment_id,
                     reconcile,
                 )
@@ -525,7 +522,6 @@ impl BillingWriteService {
         invoice_ref: Uuid,
         kind: &str,
         amount: Decimal,
-        company_id: Uuid,
         payment_id: Uuid,
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
@@ -559,7 +555,7 @@ impl BillingWriteService {
             .unreconcile_pair_on(
                 &mut **tx,
                 &UnreconcilePairRequest {
-                    company_id,
+                    company_id: ambient_company(),
                     debit,
                     credit,
                 },

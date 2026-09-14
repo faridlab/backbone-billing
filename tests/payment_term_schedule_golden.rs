@@ -465,7 +465,7 @@ async fn manual_due_date_and_schedule_conflicts_refuse() {
     .await
     .unwrap();
     let refuse = w
-        .add_payment_schedule(inv, "sales", company, &[(day(2026, 8, 1), d("500"))])
+        .add_payment_schedule(inv, "sales", &[(day(2026, 8, 1), d("500"))])
         .await
         .unwrap_err();
     assert_eq!(refuse.code(), "schedule_conflicts_with_term");

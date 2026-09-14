@@ -96,7 +96,6 @@ impl PaymentSettledHandler {
             .apply_settlements_once(
                 event_id,
                 &self.consumer,
-                event.company_id,
                 event.payment_id,
                 &allocations,
                 self.reconcile.as_ref(),
@@ -142,7 +141,6 @@ impl PaymentCancelledHandler {
             .reverse_settlements_once(
                 event_id,
                 &self.consumer,
-                event.company_id,
                 event.payment_id,
                 &allocations,
                 self.reconcile.as_ref(),

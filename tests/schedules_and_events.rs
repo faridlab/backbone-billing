@@ -98,7 +98,6 @@ async fn payment_schedule_installments() {
     w.add_payment_schedule(
         inv,
         "sales",
-        company,
         &[
             (due(1), d("100000")),
             (due(15), d("100000")),

@@ -68,7 +68,6 @@ impl ReconcileSink for AccountingReconcileSink {
             .reconcile_pair_on(
                 conn,
                 &PairRequest {
-                    company_id: req.company_id,
                     debit: to_loc(&req.debit),
                     credit: to_loc(&req.credit),
                     amount: req.amount,
@@ -394,7 +393,7 @@ async fn settlement_writes_its_graph_edge_and_the_cache_agrees() {
     post_payment(&pool, company, &coa, customer, payment, d("100")).await;
 
     let out = billing
-        .apply_settlement(company, inv, "sales", d("60"), payment, &sink)
+        .apply_settlement(inv, "sales", d("60"), payment, &sink)
         .await
         .unwrap();
     assert_eq!(out.applied, d("60"));
@@ -439,7 +438,7 @@ async fn over_settle_leaves_the_on_account_credit_unreconciled() {
     post_payment(&pool, company, &coa, customer, payment, d("150")).await;
 
     let out = billing
-        .apply_settlement(company, inv, "sales", d("150"), payment, &sink)
+        .apply_settlement(inv, "sales", d("150"), payment, &sink)
         .await
         .unwrap();
     assert_eq!(
@@ -488,11 +487,11 @@ async fn second_payment_completes_the_full_reconcile_group() {
     post_payment(&pool, company, &coa, customer, p2, d("40")).await;
 
     billing
-        .apply_settlement(company, inv, "sales", d("60"), p1, &sink)
+        .apply_settlement(inv, "sales", d("60"), p1, &sink)
         .await
         .unwrap();
     billing
-        .apply_settlement(company, inv, "sales", d("40"), p2, &sink)
+        .apply_settlement(inv, "sales", d("40"), p2, &sink)
         .await
         .unwrap();
 
@@ -534,12 +533,12 @@ async fn reverse_settlement_unlinks_the_edge_and_restores_outstanding() {
     let payment = Uuid::new_v4();
     post_payment(&pool, company, &coa, customer, payment, d("100")).await;
     billing
-        .apply_settlement(company, inv, "sales", d("60"), payment, &sink)
+        .apply_settlement(inv, "sales", d("60"), payment, &sink)
         .await
         .unwrap();
 
     let restored = billing
-        .reverse_settlement(company, inv, "sales", d("60"), payment, &sink)
+        .reverse_settlement(inv, "sales", d("60"), payment, &sink)
         .await
         .unwrap();
     assert_eq!(restored, d("60"));
@@ -579,7 +578,6 @@ async fn racing_settlements_clamp_through_the_graph() {
         async {
             BillingWriteService::apply_settlement(
                 &*billing,
-                company,
                 inv,
                 "sales",
                 d("60"),
@@ -591,7 +589,6 @@ async fn racing_settlements_clamp_through_the_graph() {
         async {
             BillingWriteService::apply_settlement(
                 &*billing,
-                company,
                 inv,
                 "sales",
                 d("60"),
@@ -638,12 +635,12 @@ async fn apply_settlements_once_is_exactly_once() {
     let allocs = vec![(inv, "sales".to_string(), d("60"))];
 
     let first = billing
-        .apply_settlements_once(event, "probe", company, payment, &allocs, &sink)
+        .apply_settlements_once(event, "probe", payment, &allocs, &sink)
         .await
         .unwrap();
     assert_eq!(first.applied, d("60"));
     let redelivered = billing
-        .apply_settlements_once(event, "probe", company, payment, &allocs, &sink)
+        .apply_settlements_once(event, "probe", payment, &allocs, &sink)
         .await
         .unwrap();
     assert_eq!(redelivered.applied, Decimal::ZERO, "redelivery no-ops");
@@ -671,8 +668,8 @@ async fn payment_event_consumers_round_trip_the_seam() {
     let settled = PaymentSettledHandler::new(billing.clone(), sink.clone(), "probe-relay");
     let ev_id = Uuid::new_v4();
     let dto = PaymentSettledDto {
-        payment_id: payment,
         company_id: company,
+        payment_id: payment,
         payment_type: "receive".into(),
         paid_amount: d("100"),
         allocations: vec![SettledInvoiceDto {
@@ -693,8 +690,8 @@ async fn payment_event_consumers_round_trip_the_seam() {
     let cancelled = PaymentCancelledHandler::new(billing.clone(), sink.clone(), "probe-relay");
     let ev2 = Uuid::new_v4();
     let cdto = PaymentCancelledDto {
-        payment_id: payment,
         company_id: company,
+        payment_id: payment,
         payment_type: "receive".into(),
         paid_amount: d("100"),
         allocations: dto.allocations.clone(),
@@ -725,7 +722,7 @@ async fn unposted_payment_refuses_and_rolls_the_drawdown_back() {
     let payment = Uuid::new_v4(); // NO journal posted for this payment
 
     let err = billing
-        .apply_settlement(company, inv, "sales", d("60"), payment, &sink)
+        .apply_settlement(inv, "sales", d("60"), payment, &sink)
         .await
         .unwrap_err();
     match &err {

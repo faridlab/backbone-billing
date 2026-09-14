@@ -148,7 +148,7 @@ async fn window_is_deadline_inclusive() {
     let inv = posted_with_epd(&w, "sales").await;
 
     let on_deadline = w
-        .resolve_early_pay_discount(company, inv, "sales", day(2026, 7, 15))
+        .resolve_early_pay_discount(inv, "sales", day(2026, 7, 15))
         .await
         .unwrap()
         .expect("discount applies on the deadline day");
@@ -161,7 +161,7 @@ async fn window_is_deadline_inclusive() {
     );
 
     let past = w
-        .resolve_early_pay_discount(company, inv, "sales", day(2026, 7, 16))
+        .resolve_early_pay_discount(inv, "sales", day(2026, 7, 16))
         .await
         .unwrap();
     assert!(past.is_none(), "one day past the window — full amount only");
@@ -175,7 +175,7 @@ async fn purchase_kind_resolves() {
     let company = Uuid::new_v4();
     let inv = posted_with_epd(&w, "purchase").await;
     let r = w
-        .resolve_early_pay_discount(company, inv, "purchase", day(2026, 7, 10))
+        .resolve_early_pay_discount(inv, "purchase", day(2026, 7, 10))
         .await
         .unwrap()
         .expect("purchase discount applies");
@@ -195,7 +195,7 @@ async fn non_applicable_states_resolve_none() {
 
     // unknown invoice
     assert!(w
-        .resolve_early_pay_discount(company, Uuid::new_v4(), "sales", day(2026, 7, 10))
+        .resolve_early_pay_discount(Uuid::new_v4(), "sales", day(2026, 7, 10))
         .await
         .unwrap()
         .is_none());
@@ -208,7 +208,7 @@ async fn non_applicable_states_resolve_none() {
     .await
     .unwrap();
     assert!(w
-        .resolve_early_pay_discount(company, inv, "sales", day(2026, 7, 10))
+        .resolve_early_pay_discount(inv, "sales", day(2026, 7, 10))
         .await
         .unwrap()
         .is_none());

@@ -81,7 +81,6 @@ impl GlPostSink for OkGl {
 fn sales_to_posted_for_tax(p: &SalesInvoicePosted) -> PostedForTax {
     PostedForTax {
         invoice_ref: p.invoice_id,
-        company_id: p.company_id,
         invoice_kind: "sales".into(),
         posting_date: p.posting_date,
         taxable_base: p.taxable_base,
@@ -94,7 +93,6 @@ fn sales_to_posted_for_tax(p: &SalesInvoicePosted) -> PostedForTax {
 fn purchase_to_posted_for_tax(p: &PurchaseInvoicePosted) -> PostedForTax {
     PostedForTax {
         invoice_ref: p.invoice_id,
-        company_id: p.company_id,
         invoice_kind: "purchase".into(),
         posting_date: p.posting_date,
         taxable_base: p.taxable_base,
