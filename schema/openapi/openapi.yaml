@@ -7,7 +7,7 @@ info:
     This API provides 11 standard CRUD endpoints for each model.
 
 servers:
-  - url: http://localhost:3000
+  - url: /
     description: Development server
 
 tags:
@@ -29,7 +29,7 @@ tags:
     description: SalesInvoiceLine management endpoints
 
 paths:
-  /api/v1/invoice_tax_lines:
+  /api/v1/billing/invoice_tax_lines:
     get:
       tags:
         - InvoiceTaxLines
@@ -75,7 +75,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/invoice_tax_lines/{id}:
+  /api/v1/billing/invoice_tax_lines/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -147,7 +147,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/invoice_tax_lines/bulk:
+  /api/v1/billing/invoice_tax_lines/bulk:
     post:
       tags:
         - InvoiceTaxLines
@@ -239,7 +239,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/invoice_tax_lines/upsert:
+  /api/v1/billing/invoice_tax_lines/upsert:
     post:
       tags:
         - InvoiceTaxLines
@@ -269,7 +269,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/InvoiceTaxLine'
 
-  /api/v1/invoice_tax_lines/trash:
+  /api/v1/billing/invoice_tax_lines/trash:
     get:
       tags:
         - InvoiceTaxLines
@@ -286,7 +286,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/InvoiceTaxLineList'
 
-  /api/v1/invoice_tax_lines/{id}/restore:
+  /api/v1/billing/invoice_tax_lines/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -304,7 +304,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/invoice_tax_lines/empty:
+  /api/v1/billing/invoice_tax_lines/empty:
     delete:
       tags:
         - InvoiceTaxLines
@@ -321,7 +321,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/invoice_tax_lines/delete/bulk:
+  /api/v1/billing/invoice_tax_lines/delete/bulk:
     post:
       tags:
         - InvoiceTaxLines
@@ -341,7 +341,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/invoice_tax_lines/restore/bulk:
+  /api/v1/billing/invoice_tax_lines/restore/bulk:
     post:
       tags:
         - InvoiceTaxLines
@@ -359,7 +359,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/invoice_tax_lines/restore/all:
+  /api/v1/billing/invoice_tax_lines/restore/all:
     post:
       tags:
         - InvoiceTaxLines
@@ -375,7 +375,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/invoice_tax_lines/trash/bulk:
+  /api/v1/billing/invoice_tax_lines/trash/bulk:
     delete:
       tags:
         - InvoiceTaxLines
@@ -395,7 +395,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_schedules:
+  /api/v1/billing/payment_schedules:
     get:
       tags:
         - PaymentSchedules
@@ -441,7 +441,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/payment_schedules/{id}:
+  /api/v1/billing/payment_schedules/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -513,7 +513,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/payment_schedules/bulk:
+  /api/v1/billing/payment_schedules/bulk:
     post:
       tags:
         - PaymentSchedules
@@ -605,7 +605,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_schedules/upsert:
+  /api/v1/billing/payment_schedules/upsert:
     post:
       tags:
         - PaymentSchedules
@@ -635,7 +635,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentSchedule'
 
-  /api/v1/payment_schedules/trash:
+  /api/v1/billing/payment_schedules/trash:
     get:
       tags:
         - PaymentSchedules
@@ -652,7 +652,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentScheduleList'
 
-  /api/v1/payment_schedules/{id}/restore:
+  /api/v1/billing/payment_schedules/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -670,7 +670,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/payment_schedules/empty:
+  /api/v1/billing/payment_schedules/empty:
     delete:
       tags:
         - PaymentSchedules
@@ -687,7 +687,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/payment_schedules/delete/bulk:
+  /api/v1/billing/payment_schedules/delete/bulk:
     post:
       tags:
         - PaymentSchedules
@@ -707,7 +707,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_schedules/restore/bulk:
+  /api/v1/billing/payment_schedules/restore/bulk:
     post:
       tags:
         - PaymentSchedules
@@ -725,7 +725,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_schedules/restore/all:
+  /api/v1/billing/payment_schedules/restore/all:
     post:
       tags:
         - PaymentSchedules
@@ -741,7 +741,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/payment_schedules/trash/bulk:
+  /api/v1/billing/payment_schedules/trash/bulk:
     delete:
       tags:
         - PaymentSchedules
@@ -761,7 +761,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_terms:
+  /api/v1/billing/payment_terms:
     get:
       tags:
         - PaymentTerms
@@ -807,7 +807,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/payment_terms/{id}:
+  /api/v1/billing/payment_terms/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -879,7 +879,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/payment_terms/bulk:
+  /api/v1/billing/payment_terms/bulk:
     post:
       tags:
         - PaymentTerms
@@ -971,7 +971,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_terms/upsert:
+  /api/v1/billing/payment_terms/upsert:
     post:
       tags:
         - PaymentTerms
@@ -1001,7 +1001,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentTerm'
 
-  /api/v1/payment_terms/trash:
+  /api/v1/billing/payment_terms/trash:
     get:
       tags:
         - PaymentTerms
@@ -1018,7 +1018,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentTermList'
 
-  /api/v1/payment_terms/{id}/restore:
+  /api/v1/billing/payment_terms/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -1036,7 +1036,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/payment_terms/empty:
+  /api/v1/billing/payment_terms/empty:
     delete:
       tags:
         - PaymentTerms
@@ -1053,7 +1053,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/payment_terms/delete/bulk:
+  /api/v1/billing/payment_terms/delete/bulk:
     post:
       tags:
         - PaymentTerms
@@ -1073,7 +1073,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_terms/restore/bulk:
+  /api/v1/billing/payment_terms/restore/bulk:
     post:
       tags:
         - PaymentTerms
@@ -1091,7 +1091,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_terms/restore/all:
+  /api/v1/billing/payment_terms/restore/all:
     post:
       tags:
         - PaymentTerms
@@ -1107,7 +1107,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/payment_terms/trash/bulk:
+  /api/v1/billing/payment_terms/trash/bulk:
     delete:
       tags:
         - PaymentTerms
@@ -1127,7 +1127,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_term_lines:
+  /api/v1/billing/payment_term_lines:
     get:
       tags:
         - PaymentTermLines
@@ -1173,7 +1173,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/payment_term_lines/{id}:
+  /api/v1/billing/payment_term_lines/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -1245,7 +1245,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/payment_term_lines/bulk:
+  /api/v1/billing/payment_term_lines/bulk:
     post:
       tags:
         - PaymentTermLines
@@ -1337,7 +1337,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_term_lines/upsert:
+  /api/v1/billing/payment_term_lines/upsert:
     post:
       tags:
         - PaymentTermLines
@@ -1367,7 +1367,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentTermLine'
 
-  /api/v1/payment_term_lines/trash:
+  /api/v1/billing/payment_term_lines/trash:
     get:
       tags:
         - PaymentTermLines
@@ -1384,7 +1384,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentTermLineList'
 
-  /api/v1/payment_term_lines/{id}/restore:
+  /api/v1/billing/payment_term_lines/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -1402,7 +1402,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/payment_term_lines/empty:
+  /api/v1/billing/payment_term_lines/empty:
     delete:
       tags:
         - PaymentTermLines
@@ -1419,7 +1419,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/payment_term_lines/delete/bulk:
+  /api/v1/billing/payment_term_lines/delete/bulk:
     post:
       tags:
         - PaymentTermLines
@@ -1439,7 +1439,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_term_lines/restore/bulk:
+  /api/v1/billing/payment_term_lines/restore/bulk:
     post:
       tags:
         - PaymentTermLines
@@ -1457,7 +1457,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/payment_term_lines/restore/all:
+  /api/v1/billing/payment_term_lines/restore/all:
     post:
       tags:
         - PaymentTermLines
@@ -1473,7 +1473,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/payment_term_lines/trash/bulk:
+  /api/v1/billing/payment_term_lines/trash/bulk:
     delete:
       tags:
         - PaymentTermLines
@@ -1493,7 +1493,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/purchase_invoices:
+  /api/v1/billing/purchase_invoices:
     get:
       tags:
         - PurchaseInvoices
@@ -1539,7 +1539,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/purchase_invoices/{id}:
+  /api/v1/billing/purchase_invoices/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -1611,7 +1611,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/purchase_invoices/bulk:
+  /api/v1/billing/purchase_invoices/bulk:
     post:
       tags:
         - PurchaseInvoices
@@ -1703,7 +1703,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/purchase_invoices/upsert:
+  /api/v1/billing/purchase_invoices/upsert:
     post:
       tags:
         - PurchaseInvoices
@@ -1733,7 +1733,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PurchaseInvoice'
 
-  /api/v1/purchase_invoices/trash:
+  /api/v1/billing/purchase_invoices/trash:
     get:
       tags:
         - PurchaseInvoices
@@ -1750,7 +1750,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PurchaseInvoiceList'
 
-  /api/v1/purchase_invoices/{id}/restore:
+  /api/v1/billing/purchase_invoices/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -1768,7 +1768,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/purchase_invoices/empty:
+  /api/v1/billing/purchase_invoices/empty:
     delete:
       tags:
         - PurchaseInvoices
@@ -1785,7 +1785,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/purchase_invoices/delete/bulk:
+  /api/v1/billing/purchase_invoices/delete/bulk:
     post:
       tags:
         - PurchaseInvoices
@@ -1805,7 +1805,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/purchase_invoices/restore/bulk:
+  /api/v1/billing/purchase_invoices/restore/bulk:
     post:
       tags:
         - PurchaseInvoices
@@ -1823,7 +1823,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/purchase_invoices/restore/all:
+  /api/v1/billing/purchase_invoices/restore/all:
     post:
       tags:
         - PurchaseInvoices
@@ -1839,7 +1839,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/purchase_invoices/trash/bulk:
+  /api/v1/billing/purchase_invoices/trash/bulk:
     delete:
       tags:
         - PurchaseInvoices
@@ -1859,7 +1859,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/purchase_invoice_lines:
+  /api/v1/billing/purchase_invoice_lines:
     get:
       tags:
         - PurchaseInvoiceLines
@@ -1905,7 +1905,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/purchase_invoice_lines/{id}:
+  /api/v1/billing/purchase_invoice_lines/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -1977,7 +1977,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/purchase_invoice_lines/bulk:
+  /api/v1/billing/purchase_invoice_lines/bulk:
     post:
       tags:
         - PurchaseInvoiceLines
@@ -2069,7 +2069,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/purchase_invoice_lines/upsert:
+  /api/v1/billing/purchase_invoice_lines/upsert:
     post:
       tags:
         - PurchaseInvoiceLines
@@ -2099,7 +2099,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PurchaseInvoiceLine'
 
-  /api/v1/purchase_invoice_lines/trash:
+  /api/v1/billing/purchase_invoice_lines/trash:
     get:
       tags:
         - PurchaseInvoiceLines
@@ -2116,7 +2116,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PurchaseInvoiceLineList'
 
-  /api/v1/purchase_invoice_lines/{id}/restore:
+  /api/v1/billing/purchase_invoice_lines/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -2134,7 +2134,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/purchase_invoice_lines/empty:
+  /api/v1/billing/purchase_invoice_lines/empty:
     delete:
       tags:
         - PurchaseInvoiceLines
@@ -2151,7 +2151,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/purchase_invoice_lines/delete/bulk:
+  /api/v1/billing/purchase_invoice_lines/delete/bulk:
     post:
       tags:
         - PurchaseInvoiceLines
@@ -2171,7 +2171,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/purchase_invoice_lines/restore/bulk:
+  /api/v1/billing/purchase_invoice_lines/restore/bulk:
     post:
       tags:
         - PurchaseInvoiceLines
@@ -2189,7 +2189,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/purchase_invoice_lines/restore/all:
+  /api/v1/billing/purchase_invoice_lines/restore/all:
     post:
       tags:
         - PurchaseInvoiceLines
@@ -2205,7 +2205,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/purchase_invoice_lines/trash/bulk:
+  /api/v1/billing/purchase_invoice_lines/trash/bulk:
     delete:
       tags:
         - PurchaseInvoiceLines
@@ -2225,7 +2225,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/sales_invoices:
+  /api/v1/billing/sales_invoices:
     get:
       tags:
         - SalesInvoices
@@ -2271,7 +2271,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/sales_invoices/{id}:
+  /api/v1/billing/sales_invoices/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -2343,7 +2343,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/sales_invoices/bulk:
+  /api/v1/billing/sales_invoices/bulk:
     post:
       tags:
         - SalesInvoices
@@ -2435,7 +2435,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/sales_invoices/upsert:
+  /api/v1/billing/sales_invoices/upsert:
     post:
       tags:
         - SalesInvoices
@@ -2465,7 +2465,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SalesInvoice'
 
-  /api/v1/sales_invoices/trash:
+  /api/v1/billing/sales_invoices/trash:
     get:
       tags:
         - SalesInvoices
@@ -2482,7 +2482,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SalesInvoiceList'
 
-  /api/v1/sales_invoices/{id}/restore:
+  /api/v1/billing/sales_invoices/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -2500,7 +2500,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/sales_invoices/empty:
+  /api/v1/billing/sales_invoices/empty:
     delete:
       tags:
         - SalesInvoices
@@ -2517,7 +2517,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/sales_invoices/delete/bulk:
+  /api/v1/billing/sales_invoices/delete/bulk:
     post:
       tags:
         - SalesInvoices
@@ -2537,7 +2537,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/sales_invoices/restore/bulk:
+  /api/v1/billing/sales_invoices/restore/bulk:
     post:
       tags:
         - SalesInvoices
@@ -2555,7 +2555,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/sales_invoices/restore/all:
+  /api/v1/billing/sales_invoices/restore/all:
     post:
       tags:
         - SalesInvoices
@@ -2571,7 +2571,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/sales_invoices/trash/bulk:
+  /api/v1/billing/sales_invoices/trash/bulk:
     delete:
       tags:
         - SalesInvoices
@@ -2591,7 +2591,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/sales_invoice_lines:
+  /api/v1/billing/sales_invoice_lines:
     get:
       tags:
         - SalesInvoiceLines
@@ -2637,7 +2637,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/sales_invoice_lines/{id}:
+  /api/v1/billing/sales_invoice_lines/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -2709,7 +2709,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/sales_invoice_lines/bulk:
+  /api/v1/billing/sales_invoice_lines/bulk:
     post:
       tags:
         - SalesInvoiceLines
@@ -2801,7 +2801,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/sales_invoice_lines/upsert:
+  /api/v1/billing/sales_invoice_lines/upsert:
     post:
       tags:
         - SalesInvoiceLines
@@ -2831,7 +2831,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SalesInvoiceLine'
 
-  /api/v1/sales_invoice_lines/trash:
+  /api/v1/billing/sales_invoice_lines/trash:
     get:
       tags:
         - SalesInvoiceLines
@@ -2848,7 +2848,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SalesInvoiceLineList'
 
-  /api/v1/sales_invoice_lines/{id}/restore:
+  /api/v1/billing/sales_invoice_lines/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -2866,7 +2866,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/sales_invoice_lines/empty:
+  /api/v1/billing/sales_invoice_lines/empty:
     delete:
       tags:
         - SalesInvoiceLines
@@ -2883,7 +2883,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/sales_invoice_lines/delete/bulk:
+  /api/v1/billing/sales_invoice_lines/delete/bulk:
     post:
       tags:
         - SalesInvoiceLines
@@ -2903,7 +2903,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/sales_invoice_lines/restore/bulk:
+  /api/v1/billing/sales_invoice_lines/restore/bulk:
     post:
       tags:
         - SalesInvoiceLines
@@ -2921,7 +2921,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/sales_invoice_lines/restore/all:
+  /api/v1/billing/sales_invoice_lines/restore/all:
     post:
       tags:
         - SalesInvoiceLines
@@ -2937,7 +2937,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/sales_invoice_lines/trash/bulk:
+  /api/v1/billing/sales_invoice_lines/trash/bulk:
     delete:
       tags:
         - SalesInvoiceLines
