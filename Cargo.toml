@@ -1,6 +1,6 @@
 [package]
 name = "backbone-billing"
-version = "0.8.8"
+version = "0.8.9"
 edition = "2021"
 description = "Billing: region-neutral AR/AP invoicing (Sales + Purchase Invoice) -> AccountingPost; tax via removable overlay; drives buying.mark_billed via PurchaseInvoicePosted"
 
@@ -114,5 +114,5 @@ rand = "0.8"
 # Dual-mode: committed source is the git tag (prod/standalone/CI); .cargo/config.toml (gitignored)
 # patches them to ../backbone-* for local workspace dev. See .cargo/config.toml.example.
 backbone-accounting = { git = "https://github.com/faridlab/backbone-accounting", tag = "v0.9.6" }
-backbone-buying = { git = "https://github.com/faridlab/backbone-buying", tag = "v0.6.8" }
+backbone-buying = { git = "https://github.com/faridlab/backbone-buying", tag = "v0.6.9" }
 async-trait = "0.1"
