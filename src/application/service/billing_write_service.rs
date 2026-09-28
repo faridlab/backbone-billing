@@ -56,10 +56,13 @@ pub(super) fn legacy_company_echo() -> Uuid {
         .unwrap_or(Uuid::nil())
 }
 
-/// Re-bind the caller's ambient org scope onto a transaction this service opened itself — the
-/// scope is task-local and a fresh pool transaction carries none of it. With no ambient scope
-/// (standalone deployment, jobs) the transaction stays plain: the module is tenant-agnostic and
-/// the composed decorator owns isolation.
+/// Re-bind the caller's ambient org scope AND audit attribution onto a
+/// transaction this service opened itself — both are task-local and a fresh
+/// pool transaction carries neither. The audit half is what makes the
+/// module's audit triggers stamp the signed-in caller instead of 'system'
+/// on a request-driven write. With no ambient scope (standalone deployment,
+/// jobs) the transaction stays plain: the module is tenant-agnostic and the
+/// composed decorator owns isolation.
 pub(super) async fn relay_ambient_scope(
     tx: &mut sqlx::PgConnection,
 ) -> Result<(), BillingError> {
@@ -68,6 +71,9 @@ pub(super) async fn relay_ambient_scope(
             .await
             .map_err(BillingError::Db)?;
     }
+    backbone_orm::audit_context::relay_ambient_audit_on(tx)
+        .await
+        .map_err(BillingError::Db)?;
     Ok(())
 }
 

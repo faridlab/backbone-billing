@@ -56,6 +56,11 @@ async fn bind_legacy_company(tx: &mut sqlx::PgConnection) -> Result<(), BillingE
             .await
             .map_err(BillingError::Db)?;
     }
+    // The audit twin of the fence relay: without it the settlement's audit
+    // triggers stamp 'system' on a request-driven write.
+    backbone_orm::audit_context::relay_ambient_audit_on(tx)
+        .await
+        .map_err(BillingError::Db)?;
     Ok(())
 }
 
