@@ -362,7 +362,7 @@ impl BillingWriteService {
             discount_tax_basis,
         )?;
         let id = Uuid::new_v4();
-        let mut tx = self.db_pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         relay_ambient_scope(&mut tx).await?;
         self.terms
             .insert_term(
@@ -406,7 +406,8 @@ impl BillingWriteService {
     /// the request's fence scopes the read and a root-anchored SHARED (allow_root) composition
     /// unions the template rows into every tenant's result; an undecorated deployment lists all.
     pub async fn list_payment_terms(&self) -> Result<Vec<TermHeaderRow>, BillingError> {
-        let mut tx = scoped_tx(&self.db_pool).await?;
+        let pool = self.rpool();
+        let mut tx = scoped_tx(&pool).await?;
         let rows = self.terms.list_terms(&mut *tx).await?;
         tx.commit().await.map_err(BillingError::Db)?;
         Ok(rows)
@@ -421,7 +422,8 @@ impl BillingWriteService {
         term_id: Uuid,
         status: &str,
     ) -> Result<u64, BillingError> {
-        let mut tx = scoped_tx(&self.db_pool).await?;
+        let pool = self.rpool();
+        let mut tx = scoped_tx(&pool).await?;
         let affected = self.terms.set_status(&mut *tx, term_id, status).await?;
         tx.commit().await.map_err(BillingError::Db)?;
         Ok(affected)
@@ -435,7 +437,8 @@ impl BillingWriteService {
         posting_date: chrono::NaiveDate,
         grand_total: Decimal,
     ) -> Result<Vec<(chrono::NaiveDate, Decimal)>, BillingError> {
-        let mut tx = scoped_tx(&self.db_pool).await?;
+        let pool = self.rpool();
+        let mut tx = scoped_tx(&pool).await?;
         let fetched = self.terms.fetch_term(&mut *tx, term_id).await?;
         tx.commit().await.map_err(BillingError::Db)?;
         let Some((header, lines)) = fetched else {

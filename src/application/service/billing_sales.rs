@@ -45,7 +45,7 @@ impl BillingWriteService {
         let grand = doc.net_total + doc.output;
         let id = Uuid::new_v4();
         let currency = inv.currency.unwrap_or_else(|| "IDR".into());
-        let mut tx = self.db_pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // Relay the caller's ambient org scope onto this transaction (ADR-0029): the composing
         // service's decorator set it task-locally; the fresh transaction carries none of it.
         relay_ambient_scope(&mut tx).await?;
@@ -110,7 +110,7 @@ impl BillingWriteService {
         // (ADR-0029) — an undecorated deployment is unfenced by design.
         let inv = self
             .sales
-            .fetch_ar_header(&self.db_pool, invoice_id)
+            .fetch_ar_header(&self.rpool(), invoice_id)
             .await?
             .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         let currency = inv.currency;
@@ -121,7 +121,7 @@ impl BillingWriteService {
         // Cr Revenue per income account.
         let rev_rows = self
             .sales_lines
-            .fetch_revenue_amounts(&self.db_pool, invoice_id)
+            .fetch_revenue_amounts(&self.rpool(), invoice_id)
             .await?;
         let mut revenue: BTreeMap<Uuid, Decimal> = BTreeMap::new();
         for r in &rev_rows {
@@ -130,7 +130,7 @@ impl BillingWriteService {
         // Cr PPN Output per overlay output line.
         let tax_rows = self
             .tax_lines
-            .fetch_amounts_by_basis(&self.db_pool, invoice_id, "sales", "output")
+            .fetch_amounts_by_basis(&self.rpool(), invoice_id, "sales", "output")
             .await?;
 
         let mut lines = vec![
@@ -185,7 +185,7 @@ impl BillingWriteService {
                 // durable bus — mirrors backbone-payment::post_payment). Only the winner of a
                 // concurrent double-post (rows_affected == 1) stages + publishes; the loser reconciles
                 // from the persisted row without re-emitting.
-                let mut tx = self.db_pool.begin().await?;
+                let mut tx = self.rpool().begin().await?;
                 relay_ambient_scope(&mut tx).await?;
                 let affected = self
                     .sales
@@ -275,7 +275,7 @@ impl BillingWriteService {
                 })
             }
             Err(rej) => {
-                let _ = self.sales.mark_posting_failed(&self.db_pool, invoice_id).await;
+                let _ = self.sales.mark_posting_failed(&self.rpool(), invoice_id).await;
                 Err(BillingError::GlRejected {
                     code: rej.code,
                     message: rej.message,
@@ -299,7 +299,7 @@ impl BillingWriteService {
         // ID-only read: isolation is the composing service's tenancy decorator (ADR-0029).
         let orig_post: Option<Uuid> = self
             .sales
-            .fetch_accounting_post_id(&self.db_pool, invoice_id)
+            .fetch_accounting_post_id(&self.rpool(), invoice_id)
             .await?
             .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         // The forward revenue post, sign-flipped, is the credit note.
@@ -332,7 +332,7 @@ impl BillingWriteService {
                 // The cancelled transition AND the durable outbox stage commit in ONE tx (mirrors the
                 // post path + backbone-payment). Only the call that flips → cancelled (affected == 1)
                 // stages + publishes; an idempotent re-credit commits without re-emitting.
-                let mut tx = self.db_pool.begin().await?;
+                let mut tx = self.rpool().begin().await?;
                 relay_ambient_scope(&mut tx).await?;
                 let affected = self.sales.mark_cancelled_on(&mut *tx, invoice_id).await?;
                 if affected == 1 {
@@ -380,7 +380,7 @@ impl BillingWriteService {
     ) -> Result<Option<PostOutcome>, BillingError> {
         let row = self
             .sales
-            .fetch_posting_state(&self.db_pool, invoice_id)
+            .fetch_posting_state(&self.rpool(), invoice_id)
             .await?
             .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         Ok(posted_outcome(invoice_id, row))

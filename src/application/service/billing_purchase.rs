@@ -54,7 +54,7 @@ impl BillingWriteService {
         }
         let id = Uuid::new_v4();
         let currency = inv.currency.unwrap_or_else(|| "IDR".into());
-        let mut tx = self.db_pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // Relay the caller's ambient org scope onto this transaction (ADR-0029): the composing
         // service's decorator set it task-locally; the fresh transaction carries none of it.
         relay_ambient_scope(&mut tx).await?;
@@ -120,7 +120,7 @@ impl BillingWriteService {
         // (ADR-0029) — an undecorated deployment is unfenced by design.
         let inv = self
             .purchases
-            .fetch_ap_header(&self.db_pool, invoice_id)
+            .fetch_ap_header(&self.rpool(), invoice_id)
             .await?
             .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         let currency = inv.currency;
@@ -130,7 +130,7 @@ impl BillingWriteService {
 
         let exp_rows = self
             .purchase_lines
-            .fetch_expense_amounts(&self.db_pool, invoice_id)
+            .fetch_expense_amounts(&self.rpool(), invoice_id)
             .await?;
         let mut expense: BTreeMap<Uuid, Decimal> = BTreeMap::new();
         for r in &exp_rows {
@@ -138,11 +138,11 @@ impl BillingWriteService {
         }
         let input_rows = self
             .tax_lines
-            .fetch_amounts_by_basis(&self.db_pool, invoice_id, "purchase", "input")
+            .fetch_amounts_by_basis(&self.rpool(), invoice_id, "purchase", "input")
             .await?;
         let wht_rows = self
             .tax_lines
-            .fetch_amounts_by_basis(&self.db_pool, invoice_id, "purchase", "withholding")
+            .fetch_amounts_by_basis(&self.rpool(), invoice_id, "purchase", "withholding")
             .await?;
 
         let mut lines: Vec<GlPostLine> = Vec::new();
@@ -203,7 +203,7 @@ impl BillingWriteService {
                 // in depth too — buying's allocate cap rejects a duplicate at OverBilling (ADR-002 §4) —
                 // so the gate's cost-avoidance is the noisy ThreeWayMatchFailed signal, not silent
                 // billed_qty corruption.
-                let mut tx = self.db_pool.begin().await?;
+                let mut tx = self.rpool().begin().await?;
                 relay_ambient_scope(&mut tx).await?;
                 let affected = self
                     .purchases
@@ -297,7 +297,7 @@ impl BillingWriteService {
             Err(rej) => {
                 let _ = self
                     .purchases
-                    .mark_posting_failed(&self.db_pool, invoice_id)
+                    .mark_posting_failed(&self.rpool(), invoice_id)
                     .await;
                 Err(BillingError::GlRejected {
                     code: rej.code,
@@ -315,7 +315,7 @@ impl BillingWriteService {
     ) -> Result<Option<PostOutcome>, BillingError> {
         let row = self
             .purchases
-            .fetch_posting_state(&self.db_pool, invoice_id)
+            .fetch_posting_state(&self.rpool(), invoice_id)
             .await?
             .ok_or(BillingError::InvoiceNotFound(invoice_id))?;
         Ok(posted_outcome(invoice_id, row))

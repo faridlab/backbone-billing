@@ -147,7 +147,7 @@ impl BillingWriteService {
         // Scope-correct read: bind the org scope on a dedicated transaction (a raw pool query
         // carries no fence variables, and the composed decorator's policy would hide the row
         // entirely).
-        let mut tx = self.db_pool.begin().await.map_err(BillingError::Db)?;
+        let mut tx = self.rpool().begin().await.map_err(BillingError::Db)?;
         bind_legacy_company(&mut tx).await?;
         let fetched = self
             .terms
@@ -198,7 +198,7 @@ impl BillingWriteService {
         installments: &[(chrono::NaiveDate, Decimal)],
     ) -> Result<(), BillingError> {
         let ikind = invoice_kind(kind)?;
-        let mut tx = self.db_pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         bind_legacy_company(&mut tx).await?;
         let table = match ikind {
             InvoiceKind::Sales => "sales_invoices",
@@ -258,7 +258,7 @@ impl BillingWriteService {
         payment_id: Uuid,
         reconcile: &dyn ReconcileSink,
     ) -> Result<SettlementOutcome, BillingError> {
-        let mut tx = self.db_pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // The tenant is an EXPLICIT argument (council 2026-07-26, rec #2) — this seam is
         // event-driven and carries no ambient request scope, so the ACL/relay's company id maps
         // onto the single-company org scope that fences the whole unit of work (see the module
@@ -295,7 +295,7 @@ impl BillingWriteService {
         allocations: &[(Uuid, String, Decimal)],
         reconcile: &dyn ReconcileSink,
     ) -> Result<SettlementOutcome, BillingError> {
-        let mut tx = self.db_pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // The relay/ACL passes the payment event's company (its legacy twin input); it maps onto
         // the single-company org scope that fences the whole unit of work.
         bind_legacy_company(&mut tx).await?;
@@ -463,7 +463,7 @@ impl BillingWriteService {
         payment_id: Uuid,
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
-        let mut tx = self.db_pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         bind_legacy_company(&mut tx).await?;
         let restored = self
             .reverse_settlement_in_tx(
@@ -492,7 +492,7 @@ impl BillingWriteService {
         allocations: &[(Uuid, String, Decimal)],
         reconcile: &dyn ReconcileSink,
     ) -> Result<Decimal, BillingError> {
-        let mut tx = self.db_pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         bind_legacy_company(&mut tx).await?;
         let first = backbone_outbox::inbox::once(&mut *tx, "billing", consumer, event_id)
             .await
@@ -623,7 +623,7 @@ impl BillingWriteService {
         &self,
         today: chrono::NaiveDate,
     ) -> Result<Vec<crate::infrastructure::persistence::OverdueInvoiceRow>, BillingError> {
-        let mut tx = self.db_pool.begin().await.map_err(BillingError::Db)?;
+        let mut tx = self.rpool().begin().await.map_err(BillingError::Db)?;
         relay_ambient_scope(&mut tx).await?;
         let rows = self
             .settlement
