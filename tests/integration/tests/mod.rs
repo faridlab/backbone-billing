@@ -16,7 +16,6 @@ pub mod sales_invoice_api_test;
 pub mod sales_invoice_line_api_test;
 
 // Re-exports for convenience
-pub use crud_test_base::*;
 pub use invoice_tax_line_api_test::*;
 pub use payment_schedule_api_test::*;
 pub use payment_term_api_test::*;
