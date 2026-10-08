@@ -226,6 +226,7 @@ impl backbone_orm::EntityRepoMeta for PaymentSchedule {
         m.insert("id".to_string(), "uuid".to_string());
         m.insert("invoice_kind".to_string(), "invoice_kind".to_string());
         m.insert("status".to_string(), "payment_schedule_status".to_string());
+        m.insert("due_date".to_string(), "date".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {

@@ -171,6 +171,8 @@ impl BillingModule {
 /// Builder for BillingModule
 pub struct BillingModuleBuilder {
     db_pool: Option<PgPool>,
+    // <<< CUSTOM BUILDER FIELDS
+    // END CUSTOM
 }
 
 impl BillingModuleBuilder {
@@ -178,6 +180,8 @@ impl BillingModuleBuilder {
     pub fn new() -> Self {
         Self {
             db_pool: None,
+            // <<< CUSTOM BUILDER DEFAULTS
+            // END CUSTOM
         }
     }
 
