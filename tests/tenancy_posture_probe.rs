@@ -39,6 +39,13 @@ async fn admin() -> PgPool {
     PgPool::connect(&url).await.expect("connect admin")
 }
 
+/// The probe role's pool: the admin's own host, port and database, signed in as the
+/// minted role, so the probe follows whichever database DATABASE_URL names.
+async fn restricted_pool(admin: &PgPool) -> PgPool {
+    let opts = (*admin.connect_options()).clone().username(ROLE).password(PWD);
+    PgPool::connect_with(opts).await.expect("connect probe role")
+}
+
 /// Shed the role's grants, then drop it. Leftover grants (from a run whose teardown never
 /// reached the drop, or whose drop was swallowed) make plain DROP ROLE fail with 2BP01 —
 /// DROP OWNED BY first keeps both bootstrap and teardown idempotent across runs.
@@ -143,11 +150,7 @@ async fn plain_role_is_default_denied_until_the_decorator_composes() {
     .await
     .unwrap();
 
-    let restricted = PgPool::connect(&format!(
-        "postgresql://{ROLE}:{PWD}@localhost:5433/backbone_billing"
-    ))
-    .await
-    .expect("connect probe role");
+    let restricted = restricted_pool(&admin).await;
 
     // Bare read: zero rows — default-deny with no policy admitting the role.
     let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM billing.payment_terms WHERE id=$1")
@@ -280,11 +283,7 @@ async fn restricted_pool_with_ambient_scope_completes_default_denied() {
     let _ddl = ROLE_DDL_LOCK.lock().await;
     let admin = admin().await;
     bootstrap_role(&admin, &["payment_terms", "payment_term_lines"]).await;
-    let restricted = PgPool::connect(&format!(
-        "postgresql://{ROLE}:{PWD}@localhost:5433/backbone_billing"
-    ))
-    .await
-    .expect("connect probe role");
+    let restricted = restricted_pool(&admin).await;
 
     let company = Uuid::new_v4();
     let w = BillingWriteService::new(restricted.clone());
