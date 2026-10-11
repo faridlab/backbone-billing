@@ -15,7 +15,6 @@ pub mod sales_invoice_handler;
 pub mod sales_invoice_line_handler;
 
 // <<< CUSTOM
-pub mod guarded_routes;
 // END CUSTOM
 
 // Re-exports
@@ -28,5 +27,7 @@ pub use purchase_invoice_line_handler::{create_purchase_invoice_line_routes, cre
 pub use sales_invoice_handler::{create_sales_invoice_routes, create_sales_invoice_read_routes, create_sales_invoice_write_routes};
 pub use sales_invoice_line_handler::{create_sales_invoice_line_routes, create_sales_invoice_line_read_routes, create_sales_invoice_line_write_routes};
 // <<< CUSTOM
-pub use guarded_routes::create_guarded_billing_routes;
 // END CUSTOM
+
+// This directory's extension (hand-written; ADR-0031).
+include!("mod.ext.rs");
