@@ -119,6 +119,4 @@ mod tests {
 // CUSTOM TESTS
 // ============================================================================
 
-// <<< CUSTOM TESTS START >>>
 // Add InvoiceTaxLine specific tests here
-// <<< CUSTOM TESTS END >>>

@@ -18,9 +18,5 @@ pub fn purchase_invoice_validator() -> PurchaseInvoiceValidator {
         .rule(RequiredString::new("invoice_number", |e: &PurchaseInvoice| &e.invoice_number))
         .rule(RequiredString::new("currency", |e: &PurchaseInvoice| &e.currency))
         .rule(OptionalNotBlank::new("notes", |e: &PurchaseInvoice| e.notes.as_deref()))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

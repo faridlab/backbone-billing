@@ -24,8 +24,6 @@ pub mod application;
 pub mod presentation;
 pub mod seeders;
 pub mod exports;
-// <<< CUSTOM MODULES
-// END CUSTOM
 
 // Re-exports for convenience - Domain entities
 pub use domain::entity::*;
@@ -71,8 +69,6 @@ pub struct BillingModule {
     pub(crate) purchase_invoice_line_service: Arc<PurchaseInvoiceLineService>,
     pub(crate) sales_invoice_service: Arc<SalesInvoiceService>,
     pub(crate) sales_invoice_line_service: Arc<SalesInvoiceLineService>,
-    // <<< CUSTOM FIELDS
-    // END CUSTOM
 }
 
 impl BillingModule {
@@ -147,15 +143,11 @@ impl BillingModule {
             .merge(create_sales_invoice_line_read_routes(self.sales_invoice_line_service.clone()))
     }
 
-    // <<< CUSTOM METHODS
-    // END CUSTOM
 }
 
 /// Builder for BillingModule
 pub struct BillingModuleBuilder {
     db_pool: Option<PgPool>,
-    // <<< CUSTOM BUILDER FIELDS
-    // END CUSTOM
 }
 
 impl BillingModuleBuilder {
@@ -163,8 +155,6 @@ impl BillingModuleBuilder {
     pub fn new() -> Self {
         Self {
             db_pool: None,
-            // <<< CUSTOM BUILDER DEFAULTS
-            // END CUSTOM
         }
     }
 
@@ -174,8 +164,6 @@ impl BillingModuleBuilder {
         self
     }
 
-    // <<< CUSTOM - custom builder methods
-    // END CUSTOM
 
     /// Build the module with configured dependencies
     pub fn build(self) -> anyhow::Result<BillingModule> {
@@ -214,8 +202,6 @@ impl BillingModuleBuilder {
         let sales_invoice_line_repository = Arc::new(SalesInvoiceLineRepository::new(db_pool.clone()));
         let sales_invoice_line_service = Arc::new(SalesInvoiceLineService::with_repository(sales_invoice_line_repository.clone()));
 
-        // <<< CUSTOM
-        // END CUSTOM
 
         Ok(BillingModule {
             invoice_tax_line_service,
@@ -226,8 +212,6 @@ impl BillingModuleBuilder {
             purchase_invoice_line_service,
             sales_invoice_service,
             sales_invoice_line_service,
-            // <<< CUSTOM
-            // END CUSTOM
         })
     }
 }

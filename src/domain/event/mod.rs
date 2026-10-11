@@ -36,5 +36,3 @@ pub use sales_invoice_event_handlers::SalesInvoiceEventHandler;
 pub use sales_invoice_line_events::{SalesInvoiceLineEvent, SalesInvoiceLineEventPublisher, NoopSalesInvoiceLineEventPublisher};
 pub use sales_invoice_line_event_handlers::SalesInvoiceLineEventHandler;
 
-// <<< CUSTOM
-// END CUSTOM

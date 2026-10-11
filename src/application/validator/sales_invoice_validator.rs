@@ -18,9 +18,5 @@ pub fn sales_invoice_validator() -> SalesInvoiceValidator {
         .rule(RequiredString::new("invoice_number", |e: &SalesInvoice| &e.invoice_number))
         .rule(RequiredString::new("currency", |e: &SalesInvoice| &e.currency))
         .rule(OptionalNotBlank::new("notes", |e: &SalesInvoice| e.notes.as_deref()))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

@@ -16,9 +16,5 @@ pub type PurchaseInvoiceLineValidator = EntityValidator<PurchaseInvoiceLine>;
 pub fn purchase_invoice_line_validator() -> PurchaseInvoiceLineValidator {
     EntityValidator::new()
         .rule(OptionalNotBlank::new("description", |e: &PurchaseInvoiceLine| e.description.as_deref()))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

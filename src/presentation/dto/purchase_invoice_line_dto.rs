@@ -299,7 +299,7 @@ impl backbone_core::ApplyUpdateDto<UpdatePurchaseInvoiceLineDto> for PurchaseInv
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to PurchaseInvoiceLine here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

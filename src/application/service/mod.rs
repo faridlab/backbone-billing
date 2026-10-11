@@ -16,8 +16,6 @@ pub mod purchase_invoice_line_service;
 pub mod sales_invoice_service;
 pub mod sales_invoice_line_service;
 
-// <<< CUSTOM
-// END CUSTOM
 
 pub use invoice_tax_line_service::InvoiceTaxLineService;
 pub use payment_schedule_service::PaymentScheduleService;
@@ -27,8 +25,6 @@ pub use purchase_invoice_service::PurchaseInvoiceService;
 pub use purchase_invoice_line_service::PurchaseInvoiceLineService;
 pub use sales_invoice_service::SalesInvoiceService;
 pub use sales_invoice_line_service::SalesInvoiceLineService;
-// <<< CUSTOM
-// END CUSTOM
 
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

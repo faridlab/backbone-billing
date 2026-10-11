@@ -32,5 +32,3 @@ pub type PaymentTermLineService = GenericCrudService<
     PaymentTermLineRepository,
 >;
 
-// <<< CUSTOM
-// END CUSTOM

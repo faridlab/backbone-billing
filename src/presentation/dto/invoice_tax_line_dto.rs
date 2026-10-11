@@ -349,7 +349,7 @@ impl backbone_core::ApplyUpdateDto<UpdateInvoiceTaxLineDto> for InvoiceTaxLine {
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to InvoiceTaxLine here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

@@ -20,5 +20,3 @@ pub use purchase_invoice_line_domain_policy::PurchaseInvoiceLineDomainPolicy;
 pub use sales_invoice_domain_policy::SalesInvoiceDomainPolicy;
 pub use sales_invoice_line_domain_policy::SalesInvoiceLineDomainPolicy;
 
-// <<< CUSTOM
-// END CUSTOM

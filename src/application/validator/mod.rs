@@ -23,5 +23,3 @@ pub use purchase_invoice_line_validator::{PurchaseInvoiceLineValidator, purchase
 pub use sales_invoice_validator::{SalesInvoiceValidator, sales_invoice_validator};
 pub use sales_invoice_line_validator::{SalesInvoiceLineValidator, sales_invoice_line_validator};
 
-// <<< CUSTOM
-// END CUSTOM

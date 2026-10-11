@@ -32,5 +32,3 @@ pub type PaymentScheduleService = GenericCrudService<
     PaymentScheduleRepository,
 >;
 
-// <<< CUSTOM
-// END CUSTOM

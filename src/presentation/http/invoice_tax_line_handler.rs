@@ -187,3 +187,4 @@ pub fn create_protected_invoice_tax_line_routes<A: AuthMiddleware + Send + Sync 
             }
         }))
 }
+

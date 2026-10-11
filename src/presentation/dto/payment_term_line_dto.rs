@@ -306,7 +306,7 @@ impl backbone_core::ApplyUpdateDto<UpdatePaymentTermLineDto> for PaymentTermLine
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to PaymentTermLine here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

@@ -299,7 +299,7 @@ impl backbone_core::ApplyUpdateDto<UpdateSalesInvoiceLineDto> for SalesInvoiceLi
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to SalesInvoiceLine here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

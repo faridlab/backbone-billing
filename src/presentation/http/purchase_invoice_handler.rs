@@ -188,3 +188,4 @@ pub fn create_protected_purchase_invoice_routes<A: AuthMiddleware + Send + Sync 
             }
         }))
 }
+

@@ -18,5 +18,3 @@ use crate::domain::entity::PaymentSchedule;
 /// service. `PermitAllPolicy` is the safe default until then.
 pub type PaymentScheduleDomainPolicy = PermitAllPolicy<PaymentSchedule>;
 
-// <<< CUSTOM
-// END CUSTOM

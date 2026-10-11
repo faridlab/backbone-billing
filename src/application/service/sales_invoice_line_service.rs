@@ -32,5 +32,3 @@ pub type SalesInvoiceLineService = GenericCrudService<
     SalesInvoiceLineRepository,
 >;
 
-// <<< CUSTOM
-// END CUSTOM

@@ -14,8 +14,6 @@ pub mod purchase_invoice_line_handler;
 pub mod sales_invoice_handler;
 pub mod sales_invoice_line_handler;
 
-// <<< CUSTOM
-// END CUSTOM
 
 // Re-exports
 pub use invoice_tax_line_handler::{create_invoice_tax_line_routes, create_invoice_tax_line_read_routes, create_invoice_tax_line_write_routes};
@@ -26,8 +24,6 @@ pub use purchase_invoice_handler::{create_purchase_invoice_routes, create_purcha
 pub use purchase_invoice_line_handler::{create_purchase_invoice_line_routes, create_purchase_invoice_line_read_routes, create_purchase_invoice_line_write_routes};
 pub use sales_invoice_handler::{create_sales_invoice_routes, create_sales_invoice_read_routes, create_sales_invoice_write_routes};
 pub use sales_invoice_line_handler::{create_sales_invoice_line_routes, create_sales_invoice_line_read_routes, create_sales_invoice_line_write_routes};
-// <<< CUSTOM
-// END CUSTOM
 
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

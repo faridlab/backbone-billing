@@ -15,5 +15,3 @@ pub mod purchase_invoice_line_specification;
 pub mod sales_invoice_specification;
 pub mod sales_invoice_line_specification;
 
-// <<< CUSTOM
-// END CUSTOM

@@ -16,9 +16,5 @@ pub type InvoiceTaxLineValidator = EntityValidator<InvoiceTaxLine>;
 pub fn invoice_tax_line_validator() -> InvoiceTaxLineValidator {
     EntityValidator::new()
         .rule(OptionalNotBlank::new("description", |e: &InvoiceTaxLine| e.description.as_deref()))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

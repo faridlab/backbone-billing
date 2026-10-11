@@ -15,10 +15,6 @@ pub type PaymentTermLineValidator = EntityValidator<PaymentTermLine>;
 /// Build a validator for PaymentTermLine with all schema-defined field rules.
 pub fn payment_term_line_validator() -> PaymentTermLineValidator {
     EntityValidator::new()
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
         // No schema-derived rules — add custom rules above.
 }
 
-// <<< CUSTOM
-// END CUSTOM

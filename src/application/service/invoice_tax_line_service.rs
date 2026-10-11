@@ -32,5 +32,3 @@ pub type InvoiceTaxLineService = GenericCrudService<
     InvoiceTaxLineRepository,
 >;
 
-// <<< CUSTOM
-// END CUSTOM

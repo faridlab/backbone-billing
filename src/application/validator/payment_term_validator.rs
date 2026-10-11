@@ -17,9 +17,5 @@ pub fn payment_term_validator() -> PaymentTermValidator {
     EntityValidator::new()
         .rule(RequiredString::new("name", |e: &PaymentTerm| &e.name))
         .rule(OptionalNotBlank::new("note", |e: &PaymentTerm| e.note.as_deref()))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

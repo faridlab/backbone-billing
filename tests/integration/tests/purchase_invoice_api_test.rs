@@ -144,6 +144,4 @@ mod tests {
 // CUSTOM TESTS
 // ============================================================================
 
-// <<< CUSTOM TESTS START >>>
 // Add PurchaseInvoice specific tests here
-// <<< CUSTOM TESTS END >>>
