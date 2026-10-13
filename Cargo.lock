@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "backbone-billing"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -434,9 +434,9 @@ dependencies = [
 
 [[package]]
 name = "backbone-tax"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53832df79f11cb74822da5d861b2736fae381f6905b28a1e3602ff9b0014127a"
+checksum = "0dfca16f4c3f713f58ce608e50337549c04154e1617613421267026edb825068"
 dependencies = [
  "anyhow",
  "async-trait",
