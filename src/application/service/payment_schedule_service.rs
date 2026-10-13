@@ -32,3 +32,45 @@ pub type PaymentScheduleService = GenericCrudService<
     PaymentScheduleRepository,
 >;
 
+/// The rules the schema declares for PaymentSchedule, checked against the row a create or update
+/// would store. The generated build attaches it to [`PaymentScheduleService`]. A refusing rule's
+/// break answers 422; a rule in shadow is logged under `backbone::write_guard` and the
+/// write goes ahead.
+pub struct PaymentScheduleRowRules;
+
+#[async_trait::async_trait]
+impl backbone_core::write_guard::WriteGuard<PaymentSchedule> for PaymentScheduleRowRules {
+    async fn check(
+        &self,
+        ctx: &backbone_core::write_guard::WriteCtx<'_, PaymentSchedule>,
+    ) -> backbone_core::write_guard::GuardOutcome {
+        use backbone_core::row_rule as r;
+        use backbone_core::violation::Violation;
+        use backbone_core::write_guard::{GuardOutcome, WriteKind};
+        let (create, update) = (ctx.kind == WriteKind::Create, ctx.kind == WriteKind::Update);
+        let Some(after) = ctx.after.filter(|_| create || update) else {
+            return GuardOutcome::allow();
+        };
+        let Ok(row) = serde_json::to_value(after) else {
+            return GuardOutcome::allow();
+        };
+        let row = &row;
+        let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
+        let mut shadow = Vec::new();
+        let mut refuse = Vec::new();
+        // `invoice_ref_required` (@required on PaymentSchedule.invoice_ref)
+        if (create || (update && r::changed(old.as_ref(), row, &["invoice_ref"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "invoice_ref")), r::not(r::is_empty(r::trim(r::field(row, "invoice_ref")))))) {
+            refuse.push(Violation::new("invoice_ref", "required", "invoice_ref is required"));
+        }
+        // `amount_non_negative` (@non_negative on PaymentSchedule.amount)
+        if (create || (update && r::changed(old.as_ref(), row, &["amount"]))) && !r::holds(&r::ge(r::field(row, "amount"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("amount", "non_negative", "amount must not be negative"));
+        }
+        // `paid_amount_non_negative` (@non_negative on PaymentSchedule.paid_amount)
+        if (create || (update && r::changed(old.as_ref(), row, &["paid_amount"]))) && !r::holds(&r::ge(r::field(row, "paid_amount"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("paid_amount", "non_negative", "paid_amount must not be negative"));
+        }
+        GuardOutcome { refuse, shadow }
+    }
+}
+

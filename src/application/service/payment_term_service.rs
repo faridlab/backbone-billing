@@ -32,3 +32,49 @@ pub type PaymentTermService = GenericCrudService<
     PaymentTermRepository,
 >;
 
+/// The rules the schema declares for PaymentTerm, checked against the row a create or update
+/// would store. The generated build attaches it to [`PaymentTermService`]. A refusing rule's
+/// break answers 422; a rule in shadow is logged under `backbone::write_guard` and the
+/// write goes ahead.
+pub struct PaymentTermRowRules;
+
+#[async_trait::async_trait]
+impl backbone_core::write_guard::WriteGuard<PaymentTerm> for PaymentTermRowRules {
+    async fn check(
+        &self,
+        ctx: &backbone_core::write_guard::WriteCtx<'_, PaymentTerm>,
+    ) -> backbone_core::write_guard::GuardOutcome {
+        use backbone_core::row_rule as r;
+        use backbone_core::violation::Violation;
+        use backbone_core::write_guard::{GuardOutcome, WriteKind};
+        let (create, update) = (ctx.kind == WriteKind::Create, ctx.kind == WriteKind::Update);
+        let Some(after) = ctx.after.filter(|_| create || update) else {
+            return GuardOutcome::allow();
+        };
+        let Ok(row) = serde_json::to_value(after) else {
+            return GuardOutcome::allow();
+        };
+        let row = &row;
+        let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
+        let mut shadow = Vec::new();
+        let mut refuse = Vec::new();
+        // `name_required` (@required on PaymentTerm.name)
+        if (create || (update && r::changed(old.as_ref(), row, &["name"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "name")), r::not(r::is_empty(r::trim(r::field(row, "name")))))) {
+            refuse.push(Violation::new("name", "required", "name is required"));
+        }
+        // `name_max_length` (@max(100) on PaymentTerm.name)
+        if (create || (update && r::changed(old.as_ref(), row, &["name"]))) && !r::holds(&r::le(r::length(r::field(row, "name")), r::Val::Num(100.0_f64))) {
+            shadow.push(Violation::new("name", "max_length", "name must be at most 100 characters").with_param("max", 100_i64));
+        }
+        // `note_max_length` (@max(500) on PaymentTerm.note)
+        if (create || (update && r::changed(old.as_ref(), row, &["note"]))) && !r::holds(&r::le(r::length(r::field(row, "note")), r::Val::Num(500.0_f64))) {
+            shadow.push(Violation::new("note", "max_length", "note must be at most 500 characters").with_param("max", 500_i64));
+        }
+        // `discount_percent_non_negative` (@non_negative on PaymentTerm.discount_percent)
+        if (create || (update && r::changed(old.as_ref(), row, &["discount_percent"]))) && !r::holds(&r::ge(r::field(row, "discount_percent"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("discount_percent", "non_negative", "discount_percent must not be negative"));
+        }
+        GuardOutcome { refuse, shadow }
+    }
+}
+

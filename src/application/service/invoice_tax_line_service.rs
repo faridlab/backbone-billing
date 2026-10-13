@@ -32,3 +32,57 @@ pub type InvoiceTaxLineService = GenericCrudService<
     InvoiceTaxLineRepository,
 >;
 
+/// The rules the schema declares for InvoiceTaxLine, checked against the row a create or update
+/// would store. The generated build attaches it to [`InvoiceTaxLineService`]. A refusing rule's
+/// break answers 422; a rule in shadow is logged under `backbone::write_guard` and the
+/// write goes ahead.
+pub struct InvoiceTaxLineRowRules;
+
+#[async_trait::async_trait]
+impl backbone_core::write_guard::WriteGuard<InvoiceTaxLine> for InvoiceTaxLineRowRules {
+    async fn check(
+        &self,
+        ctx: &backbone_core::write_guard::WriteCtx<'_, InvoiceTaxLine>,
+    ) -> backbone_core::write_guard::GuardOutcome {
+        use backbone_core::row_rule as r;
+        use backbone_core::violation::Violation;
+        use backbone_core::write_guard::{GuardOutcome, WriteKind};
+        let (create, update) = (ctx.kind == WriteKind::Create, ctx.kind == WriteKind::Update);
+        let Some(after) = ctx.after.filter(|_| create || update) else {
+            return GuardOutcome::allow();
+        };
+        let Ok(row) = serde_json::to_value(after) else {
+            return GuardOutcome::allow();
+        };
+        let row = &row;
+        let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
+        let mut shadow = Vec::new();
+        let mut refuse = Vec::new();
+        // `invoice_ref_required` (@required on InvoiceTaxLine.invoice_ref)
+        if (create || (update && r::changed(old.as_ref(), row, &["invoice_ref"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "invoice_ref")), r::not(r::is_empty(r::trim(r::field(row, "invoice_ref")))))) {
+            refuse.push(Violation::new("invoice_ref", "required", "invoice_ref is required"));
+        }
+        // `account_id_required` (@required on InvoiceTaxLine.account_id)
+        if (create || (update && r::changed(old.as_ref(), row, &["account_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "account_id")), r::not(r::is_empty(r::trim(r::field(row, "account_id")))))) {
+            refuse.push(Violation::new("account_id", "required", "account_id is required"));
+        }
+        // `description_max_length` (@max(150) on InvoiceTaxLine.description)
+        if (create || (update && r::changed(old.as_ref(), row, &["description"]))) && !r::holds(&r::le(r::length(r::field(row, "description")), r::Val::Num(150.0_f64))) {
+            shadow.push(Violation::new("description", "max_length", "description must be at most 150 characters").with_param("max", 150_i64));
+        }
+        // `taxable_base_non_negative` (@non_negative on InvoiceTaxLine.taxable_base)
+        if (create || (update && r::changed(old.as_ref(), row, &["taxable_base"]))) && !r::holds(&r::ge(r::field(row, "taxable_base"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("taxable_base", "non_negative", "taxable_base must not be negative"));
+        }
+        // `rate_non_negative` (@non_negative on InvoiceTaxLine.rate)
+        if (create || (update && r::changed(old.as_ref(), row, &["rate"]))) && !r::holds(&r::ge(r::field(row, "rate"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("rate", "non_negative", "rate must not be negative"));
+        }
+        // `tax_amount_non_negative` (@non_negative on InvoiceTaxLine.tax_amount)
+        if (create || (update && r::changed(old.as_ref(), row, &["tax_amount"]))) && !r::holds(&r::ge(r::field(row, "tax_amount"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("tax_amount", "non_negative", "tax_amount must not be negative"));
+        }
+        GuardOutcome { refuse, shadow }
+    }
+}
+

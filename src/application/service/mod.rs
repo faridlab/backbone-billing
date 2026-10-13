@@ -25,6 +25,14 @@ pub use purchase_invoice_service::PurchaseInvoiceService;
 pub use purchase_invoice_line_service::PurchaseInvoiceLineService;
 pub use sales_invoice_service::SalesInvoiceService;
 pub use sales_invoice_line_service::SalesInvoiceLineService;
+pub use invoice_tax_line_service::InvoiceTaxLineRowRules;
+pub use payment_schedule_service::PaymentScheduleRowRules;
+pub use payment_term_service::PaymentTermRowRules;
+pub use payment_term_line_service::PaymentTermLineRowRules;
+pub use purchase_invoice_service::PurchaseInvoiceRowRules;
+pub use purchase_invoice_line_service::PurchaseInvoiceLineRowRules;
+pub use sales_invoice_service::SalesInvoiceRowRules;
+pub use sales_invoice_line_service::SalesInvoiceLineRowRules;
 
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

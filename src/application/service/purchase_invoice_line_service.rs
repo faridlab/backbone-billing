@@ -32,3 +32,61 @@ pub type PurchaseInvoiceLineService = GenericCrudService<
     PurchaseInvoiceLineRepository,
 >;
 
+/// The rules the schema declares for PurchaseInvoiceLine, checked against the row a create or update
+/// would store. The generated build attaches it to [`PurchaseInvoiceLineService`]. A refusing rule's
+/// break answers 422; a rule in shadow is logged under `backbone::write_guard` and the
+/// write goes ahead.
+pub struct PurchaseInvoiceLineRowRules;
+
+#[async_trait::async_trait]
+impl backbone_core::write_guard::WriteGuard<PurchaseInvoiceLine> for PurchaseInvoiceLineRowRules {
+    async fn check(
+        &self,
+        ctx: &backbone_core::write_guard::WriteCtx<'_, PurchaseInvoiceLine>,
+    ) -> backbone_core::write_guard::GuardOutcome {
+        use backbone_core::row_rule as r;
+        use backbone_core::violation::Violation;
+        use backbone_core::write_guard::{GuardOutcome, WriteKind};
+        let (create, update) = (ctx.kind == WriteKind::Create, ctx.kind == WriteKind::Update);
+        let Some(after) = ctx.after.filter(|_| create || update) else {
+            return GuardOutcome::allow();
+        };
+        let Ok(row) = serde_json::to_value(after) else {
+            return GuardOutcome::allow();
+        };
+        let row = &row;
+        let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
+        let mut shadow = Vec::new();
+        let mut refuse = Vec::new();
+        // `invoice_id_required` (@required on PurchaseInvoiceLine.invoice_id)
+        if (create || (update && r::changed(old.as_ref(), row, &["invoice_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "invoice_id")), r::not(r::is_empty(r::trim(r::field(row, "invoice_id")))))) {
+            refuse.push(Violation::new("invoice_id", "required", "invoice_id is required"));
+        }
+        // `item_id_required` (@required on PurchaseInvoiceLine.item_id)
+        if (create || (update && r::changed(old.as_ref(), row, &["item_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "item_id")), r::not(r::is_empty(r::trim(r::field(row, "item_id")))))) {
+            refuse.push(Violation::new("item_id", "required", "item_id is required"));
+        }
+        // `expense_account_id_required` (@required on PurchaseInvoiceLine.expense_account_id)
+        if (create || (update && r::changed(old.as_ref(), row, &["expense_account_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "expense_account_id")), r::not(r::is_empty(r::trim(r::field(row, "expense_account_id")))))) {
+            refuse.push(Violation::new("expense_account_id", "required", "expense_account_id is required"));
+        }
+        // `description_max_length` (@max(300) on PurchaseInvoiceLine.description)
+        if (create || (update && r::changed(old.as_ref(), row, &["description"]))) && !r::holds(&r::le(r::length(r::field(row, "description")), r::Val::Num(300.0_f64))) {
+            shadow.push(Violation::new("description", "max_length", "description must be at most 300 characters").with_param("max", 300_i64));
+        }
+        // `quantity_non_negative` (@non_negative on PurchaseInvoiceLine.quantity)
+        if (create || (update && r::changed(old.as_ref(), row, &["quantity"]))) && !r::holds(&r::ge(r::field(row, "quantity"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("quantity", "non_negative", "quantity must not be negative"));
+        }
+        // `unit_price_non_negative` (@non_negative on PurchaseInvoiceLine.unit_price)
+        if (create || (update && r::changed(old.as_ref(), row, &["unit_price"]))) && !r::holds(&r::ge(r::field(row, "unit_price"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("unit_price", "non_negative", "unit_price must not be negative"));
+        }
+        // `net_amount_non_negative` (@non_negative on PurchaseInvoiceLine.net_amount)
+        if (create || (update && r::changed(old.as_ref(), row, &["net_amount"]))) && !r::holds(&r::ge(r::field(row, "net_amount"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("net_amount", "non_negative", "net_amount must not be negative"));
+        }
+        GuardOutcome { refuse, shadow }
+    }
+}
+

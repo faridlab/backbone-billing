@@ -1,0 +1,20 @@
+# LOCAL DEV ONLY — gitignored (see .gitignore). Recreate from .cargo/config.toml.example.
+#
+# Redirects backbone-outbox, backbone-tax, + the seam-test dev-deps (backbone-accounting,
+# backbone-buying) to their local ../backbone-* checkouts for local workspace dev so uncommitted
+# edits propagate instantly. Cargo forbids `path` + `git` on one line, so the prod/CI git source
+# lives in Cargo.toml and this overrides it only when present. A standalone clone has no
+# .cargo/config.toml and builds from git tags.
+
+[patch."https://github.com/faridlab/backbone-framework"]
+backbone-outbox = { path = "../backbone-framework/backbone-outbox" }
+backbone-gl-posting = { path = "../backbone-framework/backbone-gl-posting" }
+
+[patch."https://github.com/faridlab/backbone-accounting"]
+backbone-accounting = { path = "../backbone-accounting" }
+
+[patch."https://github.com/faridlab/backbone-buying"]
+backbone-buying = { path = "../backbone-buying" }
+
+[patch."https://github.com/faridlab/backbone-tax"]
+backbone-tax = { path = "../backbone-tax" }
