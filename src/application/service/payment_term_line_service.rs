@@ -56,7 +56,7 @@ impl backbone_core::write_guard::WriteGuard<PaymentTermLine> for PaymentTermLine
         };
         let row = &row;
         let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
-        let mut shadow = Vec::new();
+        let shadow = Vec::new();
         let mut refuse = Vec::new();
         // `term_id_required` (@required on PaymentTermLine.term_id)
         if (create || (update && r::changed(old.as_ref(), row, &["term_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "term_id")), r::not(r::is_empty(r::trim(r::field(row, "term_id")))))) {
@@ -64,7 +64,7 @@ impl backbone_core::write_guard::WriteGuard<PaymentTermLine> for PaymentTermLine
         }
         // `value_amount_non_negative` (@non_negative on PaymentTermLine.value_amount)
         if (create || (update && r::changed(old.as_ref(), row, &["value_amount"]))) && !r::holds(&r::ge(r::field(row, "value_amount"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("value_amount", "non_negative", "value_amount must not be negative"));
+            refuse.push(Violation::new("value_amount", "non_negative", "value_amount must not be negative"));
         }
         GuardOutcome { refuse, shadow }
     }

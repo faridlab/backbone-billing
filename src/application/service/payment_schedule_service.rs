@@ -56,7 +56,7 @@ impl backbone_core::write_guard::WriteGuard<PaymentSchedule> for PaymentSchedule
         };
         let row = &row;
         let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
-        let mut shadow = Vec::new();
+        let shadow = Vec::new();
         let mut refuse = Vec::new();
         // `invoice_ref_required` (@required on PaymentSchedule.invoice_ref)
         if (create || (update && r::changed(old.as_ref(), row, &["invoice_ref"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "invoice_ref")), r::not(r::is_empty(r::trim(r::field(row, "invoice_ref")))))) {
@@ -64,11 +64,11 @@ impl backbone_core::write_guard::WriteGuard<PaymentSchedule> for PaymentSchedule
         }
         // `amount_non_negative` (@non_negative on PaymentSchedule.amount)
         if (create || (update && r::changed(old.as_ref(), row, &["amount"]))) && !r::holds(&r::ge(r::field(row, "amount"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("amount", "non_negative", "amount must not be negative"));
+            refuse.push(Violation::new("amount", "non_negative", "amount must not be negative"));
         }
         // `paid_amount_non_negative` (@non_negative on PaymentSchedule.paid_amount)
         if (create || (update && r::changed(old.as_ref(), row, &["paid_amount"]))) && !r::holds(&r::ge(r::field(row, "paid_amount"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("paid_amount", "non_negative", "paid_amount must not be negative"));
+            refuse.push(Violation::new("paid_amount", "non_negative", "paid_amount must not be negative"));
         }
         GuardOutcome { refuse, shadow }
     }

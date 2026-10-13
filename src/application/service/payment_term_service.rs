@@ -56,7 +56,7 @@ impl backbone_core::write_guard::WriteGuard<PaymentTerm> for PaymentTermRowRules
         };
         let row = &row;
         let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
-        let mut shadow = Vec::new();
+        let shadow = Vec::new();
         let mut refuse = Vec::new();
         // `name_required` (@required on PaymentTerm.name)
         if (create || (update && r::changed(old.as_ref(), row, &["name"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "name")), r::not(r::is_empty(r::trim(r::field(row, "name")))))) {
@@ -64,15 +64,15 @@ impl backbone_core::write_guard::WriteGuard<PaymentTerm> for PaymentTermRowRules
         }
         // `name_max_length` (@max(100) on PaymentTerm.name)
         if (create || (update && r::changed(old.as_ref(), row, &["name"]))) && !r::holds(&r::le(r::length(r::field(row, "name")), r::Val::Num(100.0_f64))) {
-            shadow.push(Violation::new("name", "max_length", "name must be at most 100 characters").with_param("max", 100_i64));
+            refuse.push(Violation::new("name", "max_length", "name must be at most 100 characters").with_param("max", 100_i64));
         }
         // `note_max_length` (@max(500) on PaymentTerm.note)
         if (create || (update && r::changed(old.as_ref(), row, &["note"]))) && !r::holds(&r::le(r::length(r::field(row, "note")), r::Val::Num(500.0_f64))) {
-            shadow.push(Violation::new("note", "max_length", "note must be at most 500 characters").with_param("max", 500_i64));
+            refuse.push(Violation::new("note", "max_length", "note must be at most 500 characters").with_param("max", 500_i64));
         }
         // `discount_percent_non_negative` (@non_negative on PaymentTerm.discount_percent)
         if (create || (update && r::changed(old.as_ref(), row, &["discount_percent"]))) && !r::holds(&r::ge(r::field(row, "discount_percent"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("discount_percent", "non_negative", "discount_percent must not be negative"));
+            refuse.push(Violation::new("discount_percent", "non_negative", "discount_percent must not be negative"));
         }
         GuardOutcome { refuse, shadow }
     }

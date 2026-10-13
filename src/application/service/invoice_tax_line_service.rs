@@ -56,7 +56,7 @@ impl backbone_core::write_guard::WriteGuard<InvoiceTaxLine> for InvoiceTaxLineRo
         };
         let row = &row;
         let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
-        let mut shadow = Vec::new();
+        let shadow = Vec::new();
         let mut refuse = Vec::new();
         // `invoice_ref_required` (@required on InvoiceTaxLine.invoice_ref)
         if (create || (update && r::changed(old.as_ref(), row, &["invoice_ref"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "invoice_ref")), r::not(r::is_empty(r::trim(r::field(row, "invoice_ref")))))) {
@@ -68,19 +68,19 @@ impl backbone_core::write_guard::WriteGuard<InvoiceTaxLine> for InvoiceTaxLineRo
         }
         // `description_max_length` (@max(150) on InvoiceTaxLine.description)
         if (create || (update && r::changed(old.as_ref(), row, &["description"]))) && !r::holds(&r::le(r::length(r::field(row, "description")), r::Val::Num(150.0_f64))) {
-            shadow.push(Violation::new("description", "max_length", "description must be at most 150 characters").with_param("max", 150_i64));
+            refuse.push(Violation::new("description", "max_length", "description must be at most 150 characters").with_param("max", 150_i64));
         }
         // `taxable_base_non_negative` (@non_negative on InvoiceTaxLine.taxable_base)
         if (create || (update && r::changed(old.as_ref(), row, &["taxable_base"]))) && !r::holds(&r::ge(r::field(row, "taxable_base"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("taxable_base", "non_negative", "taxable_base must not be negative"));
+            refuse.push(Violation::new("taxable_base", "non_negative", "taxable_base must not be negative"));
         }
         // `rate_non_negative` (@non_negative on InvoiceTaxLine.rate)
         if (create || (update && r::changed(old.as_ref(), row, &["rate"]))) && !r::holds(&r::ge(r::field(row, "rate"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("rate", "non_negative", "rate must not be negative"));
+            refuse.push(Violation::new("rate", "non_negative", "rate must not be negative"));
         }
         // `tax_amount_non_negative` (@non_negative on InvoiceTaxLine.tax_amount)
         if (create || (update && r::changed(old.as_ref(), row, &["tax_amount"]))) && !r::holds(&r::ge(r::field(row, "tax_amount"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("tax_amount", "non_negative", "tax_amount must not be negative"));
+            refuse.push(Violation::new("tax_amount", "non_negative", "tax_amount must not be negative"));
         }
         GuardOutcome { refuse, shadow }
     }

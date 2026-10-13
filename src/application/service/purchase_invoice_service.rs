@@ -56,7 +56,7 @@ impl backbone_core::write_guard::WriteGuard<PurchaseInvoice> for PurchaseInvoice
         };
         let row = &row;
         let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
-        let mut shadow = Vec::new();
+        let shadow = Vec::new();
         let mut refuse = Vec::new();
         // `invoice_number_required` (@required on PurchaseInvoice.invoice_number)
         if (create || (update && r::changed(old.as_ref(), row, &["invoice_number"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "invoice_number")), r::not(r::is_empty(r::trim(r::field(row, "invoice_number")))))) {
@@ -64,7 +64,7 @@ impl backbone_core::write_guard::WriteGuard<PurchaseInvoice> for PurchaseInvoice
         }
         // `invoice_number_max_length` (@max(40) on PurchaseInvoice.invoice_number)
         if (create || (update && r::changed(old.as_ref(), row, &["invoice_number"]))) && !r::holds(&r::le(r::length(r::field(row, "invoice_number")), r::Val::Num(40.0_f64))) {
-            shadow.push(Violation::new("invoice_number", "max_length", "invoice_number must be at most 40 characters").with_param("max", 40_i64));
+            refuse.push(Violation::new("invoice_number", "max_length", "invoice_number must be at most 40 characters").with_param("max", 40_i64));
         }
         // `supplier_id_required` (@required on PurchaseInvoice.supplier_id)
         if (create || (update && r::changed(old.as_ref(), row, &["supplier_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "supplier_id")), r::not(r::is_empty(r::trim(r::field(row, "supplier_id")))))) {
@@ -72,31 +72,31 @@ impl backbone_core::write_guard::WriteGuard<PurchaseInvoice> for PurchaseInvoice
         }
         // `early_pay_discount_percent_non_negative` (@non_negative on PurchaseInvoice.early_pay_discount_percent)
         if (create || (update && r::changed(old.as_ref(), row, &["early_pay_discount_percent"]))) && !r::holds(&r::ge(r::field(row, "early_pay_discount_percent"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("early_pay_discount_percent", "non_negative", "early_pay_discount_percent must not be negative"));
+            refuse.push(Violation::new("early_pay_discount_percent", "non_negative", "early_pay_discount_percent must not be negative"));
         }
         // `currency_max_length` (@max(3) on PurchaseInvoice.currency)
         if (create || (update && r::changed(old.as_ref(), row, &["currency"]))) && !r::holds(&r::le(r::length(r::field(row, "currency")), r::Val::Num(3.0_f64))) {
-            shadow.push(Violation::new("currency", "max_length", "currency must be at most 3 characters").with_param("max", 3_i64));
+            refuse.push(Violation::new("currency", "max_length", "currency must be at most 3 characters").with_param("max", 3_i64));
         }
         // `net_total_non_negative` (@non_negative on PurchaseInvoice.net_total)
         if (create || (update && r::changed(old.as_ref(), row, &["net_total"]))) && !r::holds(&r::ge(r::field(row, "net_total"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("net_total", "non_negative", "net_total must not be negative"));
+            refuse.push(Violation::new("net_total", "non_negative", "net_total must not be negative"));
         }
         // `tax_total_non_negative` (@non_negative on PurchaseInvoice.tax_total)
         if (create || (update && r::changed(old.as_ref(), row, &["tax_total"]))) && !r::holds(&r::ge(r::field(row, "tax_total"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("tax_total", "non_negative", "tax_total must not be negative"));
+            refuse.push(Violation::new("tax_total", "non_negative", "tax_total must not be negative"));
         }
         // `withholding_total_non_negative` (@non_negative on PurchaseInvoice.withholding_total)
         if (create || (update && r::changed(old.as_ref(), row, &["withholding_total"]))) && !r::holds(&r::ge(r::field(row, "withholding_total"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("withholding_total", "non_negative", "withholding_total must not be negative"));
+            refuse.push(Violation::new("withholding_total", "non_negative", "withholding_total must not be negative"));
         }
         // `grand_total_non_negative` (@non_negative on PurchaseInvoice.grand_total)
         if (create || (update && r::changed(old.as_ref(), row, &["grand_total"]))) && !r::holds(&r::ge(r::field(row, "grand_total"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("grand_total", "non_negative", "grand_total must not be negative"));
+            refuse.push(Violation::new("grand_total", "non_negative", "grand_total must not be negative"));
         }
         // `outstanding_amount_non_negative` (@non_negative on PurchaseInvoice.outstanding_amount)
         if (create || (update && r::changed(old.as_ref(), row, &["outstanding_amount"]))) && !r::holds(&r::ge(r::field(row, "outstanding_amount"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("outstanding_amount", "non_negative", "outstanding_amount must not be negative"));
+            refuse.push(Violation::new("outstanding_amount", "non_negative", "outstanding_amount must not be negative"));
         }
         // `payable_account_id_required` (@required on PurchaseInvoice.payable_account_id)
         if (create || (update && r::changed(old.as_ref(), row, &["payable_account_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "payable_account_id")), r::not(r::is_empty(r::trim(r::field(row, "payable_account_id")))))) {
@@ -104,7 +104,7 @@ impl backbone_core::write_guard::WriteGuard<PurchaseInvoice> for PurchaseInvoice
         }
         // `notes_max_length` (@max(1000) on PurchaseInvoice.notes)
         if (create || (update && r::changed(old.as_ref(), row, &["notes"]))) && !r::holds(&r::le(r::length(r::field(row, "notes")), r::Val::Num(1000.0_f64))) {
-            shadow.push(Violation::new("notes", "max_length", "notes must be at most 1000 characters").with_param("max", 1000_i64));
+            refuse.push(Violation::new("notes", "max_length", "notes must be at most 1000 characters").with_param("max", 1000_i64));
         }
         GuardOutcome { refuse, shadow }
     }
