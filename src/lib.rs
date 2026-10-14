@@ -169,35 +169,35 @@ impl BillingModuleBuilder {
 
         // InvoiceTaxLine service
         let invoice_tax_line_repository = Arc::new(InvoiceTaxLineRepository::new(db_pool.clone()));
-        let invoice_tax_line_service = Arc::new(InvoiceTaxLineService::with_repository(invoice_tax_line_repository.clone()).with_guard(Arc::new(crate::application::service::InvoiceTaxLineRowRules)));
+        let invoice_tax_line_service = Arc::new(crate::application::service::build_invoice_tax_line_service(invoice_tax_line_repository.clone()));
 
         // PaymentSchedule service
         let payment_schedule_repository = Arc::new(PaymentScheduleRepository::new(db_pool.clone()));
-        let payment_schedule_service = Arc::new(PaymentScheduleService::with_repository(payment_schedule_repository.clone()).with_guard(Arc::new(crate::application::service::PaymentScheduleRowRules)));
+        let payment_schedule_service = Arc::new(crate::application::service::build_payment_schedule_service(payment_schedule_repository.clone()));
 
         // PaymentTerm service
         let payment_term_repository = Arc::new(PaymentTermRepository::new(db_pool.clone()));
-        let payment_term_service = Arc::new(PaymentTermService::with_repository(payment_term_repository.clone()).with_guard(Arc::new(crate::application::service::PaymentTermRowRules)));
+        let payment_term_service = Arc::new(crate::application::service::build_payment_term_service(payment_term_repository.clone()));
 
         // PaymentTermLine service
         let payment_term_line_repository = Arc::new(PaymentTermLineRepository::new(db_pool.clone()));
-        let payment_term_line_service = Arc::new(PaymentTermLineService::with_repository(payment_term_line_repository.clone()).with_guard(Arc::new(crate::application::service::PaymentTermLineRowRules)));
+        let payment_term_line_service = Arc::new(crate::application::service::build_payment_term_line_service(payment_term_line_repository.clone()));
 
         // PurchaseInvoice service
         let purchase_invoice_repository = Arc::new(PurchaseInvoiceRepository::new(db_pool.clone()));
-        let purchase_invoice_service = Arc::new(PurchaseInvoiceService::with_repository(purchase_invoice_repository.clone()).with_guard(Arc::new(crate::application::service::PurchaseInvoiceRowRules)));
+        let purchase_invoice_service = Arc::new(crate::application::service::build_purchase_invoice_service(purchase_invoice_repository.clone()));
 
         // PurchaseInvoiceLine service
         let purchase_invoice_line_repository = Arc::new(PurchaseInvoiceLineRepository::new(db_pool.clone()));
-        let purchase_invoice_line_service = Arc::new(PurchaseInvoiceLineService::with_repository(purchase_invoice_line_repository.clone()).with_guard(Arc::new(crate::application::service::PurchaseInvoiceLineRowRules)));
+        let purchase_invoice_line_service = Arc::new(crate::application::service::build_purchase_invoice_line_service(purchase_invoice_line_repository.clone()));
 
         // SalesInvoice service
         let sales_invoice_repository = Arc::new(SalesInvoiceRepository::new(db_pool.clone()));
-        let sales_invoice_service = Arc::new(SalesInvoiceService::with_repository(sales_invoice_repository.clone()).with_guard(Arc::new(crate::application::service::SalesInvoiceRowRules)));
+        let sales_invoice_service = Arc::new(crate::application::service::build_sales_invoice_service(sales_invoice_repository.clone()));
 
         // SalesInvoiceLine service
         let sales_invoice_line_repository = Arc::new(SalesInvoiceLineRepository::new(db_pool.clone()));
-        let sales_invoice_line_service = Arc::new(SalesInvoiceLineService::with_repository(sales_invoice_line_repository.clone()).with_guard(Arc::new(crate::application::service::SalesInvoiceLineRowRules)));
+        let sales_invoice_line_service = Arc::new(crate::application::service::build_sales_invoice_line_service(sales_invoice_line_repository.clone()));
 
 
         Ok(BillingModule {

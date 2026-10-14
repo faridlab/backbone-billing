@@ -34,5 +34,69 @@ pub use purchase_invoice_line_service::PurchaseInvoiceLineRowRules;
 pub use sales_invoice_service::SalesInvoiceRowRules;
 pub use sales_invoice_line_service::SalesInvoiceLineRowRules;
 
+/// A `InvoiceTaxLineService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_invoice_tax_line_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::InvoiceTaxLineRepository>,
+) -> InvoiceTaxLineService {
+    InvoiceTaxLineService::with_repository(repository).with_guard(std::sync::Arc::new(InvoiceTaxLineRowRules))
+}
+
+/// A `PaymentScheduleService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_payment_schedule_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::PaymentScheduleRepository>,
+) -> PaymentScheduleService {
+    PaymentScheduleService::with_repository(repository).with_guard(std::sync::Arc::new(PaymentScheduleRowRules))
+}
+
+/// A `PaymentTermService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_payment_term_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::PaymentTermRepository>,
+) -> PaymentTermService {
+    PaymentTermService::with_repository(repository).with_guard(std::sync::Arc::new(PaymentTermRowRules))
+}
+
+/// A `PaymentTermLineService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_payment_term_line_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::PaymentTermLineRepository>,
+) -> PaymentTermLineService {
+    PaymentTermLineService::with_repository(repository).with_guard(std::sync::Arc::new(PaymentTermLineRowRules))
+}
+
+/// A `PurchaseInvoiceService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_purchase_invoice_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::PurchaseInvoiceRepository>,
+) -> PurchaseInvoiceService {
+    PurchaseInvoiceService::with_repository(repository).with_guard(std::sync::Arc::new(PurchaseInvoiceRowRules))
+}
+
+/// A `PurchaseInvoiceLineService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_purchase_invoice_line_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::PurchaseInvoiceLineRepository>,
+) -> PurchaseInvoiceLineService {
+    PurchaseInvoiceLineService::with_repository(repository).with_guard(std::sync::Arc::new(PurchaseInvoiceLineRowRules))
+}
+
+/// A `SalesInvoiceService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_sales_invoice_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::SalesInvoiceRepository>,
+) -> SalesInvoiceService {
+    SalesInvoiceService::with_repository(repository).with_guard(std::sync::Arc::new(SalesInvoiceRowRules))
+}
+
+/// A `SalesInvoiceLineService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_sales_invoice_line_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::SalesInvoiceLineRepository>,
+) -> SalesInvoiceLineService {
+    SalesInvoiceLineService::with_repository(repository).with_guard(std::sync::Arc::new(SalesInvoiceLineRowRules))
+}
+
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");
