@@ -43,9 +43,14 @@ pub struct CreatePaymentScheduleDto {
     #[serde(alias = "due_date")]
     pub due_date: NaiveDate,
     pub amount: Decimal,
-    #[serde(alias = "paid_amount")]
+    #[serde(default, alias = "paid_amount")]
     pub paid_amount: Decimal,
+    #[serde(default = "default_create_payment_schedule_status")]
     pub status: PaymentScheduleStatus,
+}
+
+fn default_create_payment_schedule_status() -> PaymentScheduleStatus {
+    PaymentScheduleStatus::Unpaid
 }
 
 // =============================================================================
@@ -285,12 +290,4 @@ impl backbone_core::ApplyUpdateDto<UpdatePaymentScheduleDto> for PaymentSchedule
         Ok(self)
     }
 }
-
-// =============================================================================
-// Custom DTOs
-// =============================================================================
-
-// Add custom DTOs specific to PaymentSchedule here.
-// This section will be preserved during regeneration.
-// >>> END CUSTOM DTOs
 

@@ -81,6 +81,13 @@ impl axum::response::IntoResponse for PurchaseInvoiceLineError {
 // Route Configuration
 // =============================================================================
 
+/// The permissions this entity's generic routes require: `purchase_invoice_line:<action>` for `read`, `create`,
+/// `update`, `delete`, `restore` and `purge`, with any rename the schema's `requires:` declares.
+pub fn purchase_invoice_line_permissions() -> backbone_core::http::CrudPermissions {
+    backbone_core::http::CrudPermissions::new("purchase_invoice_line")
+        .in_module("billing")
+}
+
 /// Create Axum router with all 16 Backbone endpoints for PurchaseInvoiceLine.
 ///
 /// # Routes
@@ -110,21 +117,23 @@ impl axum::response::IntoResponse for PurchaseInvoiceLineError {
 /// let router = create_purchase_invoice_line_routes(service);
 /// ```
 pub fn create_purchase_invoice_line_routes(service: Arc<PurchaseInvoiceLineService>) -> Router {
-    BackboneCrudHandler::<PurchaseInvoiceLineService, PurchaseInvoiceLine, CreatePurchaseInvoiceLineDto, UpdatePurchaseInvoiceLineDto, PurchaseInvoiceLineResponseDto>::routes(
+    BackboneCrudHandler::<PurchaseInvoiceLineService, PurchaseInvoiceLine, CreatePurchaseInvoiceLineDto, UpdatePurchaseInvoiceLineDto, PurchaseInvoiceLineResponseDto>::routes_guarded(
         service,
         "/purchase_invoice_lines",
+        purchase_invoice_line_permissions(),
     )
 }
 
 /// Create Axum router with only the read (GET) endpoints for PurchaseInvoiceLine.
 ///
-/// Safe for public, unauthenticated exposure (e.g., reference data).
+/// Each route requires the entity's `read` permission, so it needs an authenticated caller.
 /// Mutations must be served separately via `create_purchase_invoice_line_write_routes`,
 /// typically wrapped in an auth middleware layer.
 pub fn create_purchase_invoice_line_read_routes(service: Arc<PurchaseInvoiceLineService>) -> Router {
-    BackboneCrudHandler::<PurchaseInvoiceLineService, PurchaseInvoiceLine, CreatePurchaseInvoiceLineDto, UpdatePurchaseInvoiceLineDto, PurchaseInvoiceLineResponseDto>::read_routes(
+    BackboneCrudHandler::<PurchaseInvoiceLineService, PurchaseInvoiceLine, CreatePurchaseInvoiceLineDto, UpdatePurchaseInvoiceLineDto, PurchaseInvoiceLineResponseDto>::read_routes_guarded(
         service,
         "/purchase_invoice_lines",
+        purchase_invoice_line_permissions(),
     )
 }
 
@@ -140,9 +149,10 @@ pub fn create_purchase_invoice_line_read_routes(service: Arc<PurchaseInvoiceLine
 /// service (e.g. a command router over its domain engine), serve THAT instead
 /// for any mutation that must respect domain rules.
 pub fn create_purchase_invoice_line_write_routes(service: Arc<PurchaseInvoiceLineService>) -> Router {
-    BackboneCrudHandler::<PurchaseInvoiceLineService, PurchaseInvoiceLine, CreatePurchaseInvoiceLineDto, UpdatePurchaseInvoiceLineDto, PurchaseInvoiceLineResponseDto>::write_routes(
+    BackboneCrudHandler::<PurchaseInvoiceLineService, PurchaseInvoiceLine, CreatePurchaseInvoiceLineDto, UpdatePurchaseInvoiceLineDto, PurchaseInvoiceLineResponseDto>::write_routes_guarded(
         service,
         "/purchase_invoice_lines",
+        purchase_invoice_line_permissions(),
     )
 }
 

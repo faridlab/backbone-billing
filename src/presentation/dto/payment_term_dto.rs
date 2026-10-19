@@ -36,20 +36,34 @@ pub struct CreatePaymentTermDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
+    #[serde(default = "default_create_payment_term_sequence")]
     pub sequence: i32,
+    #[serde(default = "default_create_payment_term_status")]
     pub status: PaymentTermStatus,
     #[cfg_attr(feature = "openapi", schema(example = true))]
-    #[serde(alias = "early_discount")]
+    #[serde(default, alias = "early_discount")]
     pub early_discount: bool,
-    #[serde(alias = "discount_percent")]
+    #[serde(default, alias = "discount_percent")]
     pub discount_percent: Decimal,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
-    #[serde(alias = "discount_days")]
+    #[serde(default, alias = "discount_days")]
     pub discount_days: i32,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "discount_account_id")]
     pub discount_account_id: Option<Uuid>,
-    #[serde(alias = "discount_tax_basis")]
+    #[serde(default = "default_create_payment_term_discount_tax_basis", alias = "discount_tax_basis")]
     pub discount_tax_basis: DiscountTaxBasis,
+}
+
+fn default_create_payment_term_sequence() -> i32 {
+    10
+}
+
+fn default_create_payment_term_status() -> PaymentTermStatus {
+    PaymentTermStatus::Active
+}
+
+fn default_create_payment_term_discount_tax_basis() -> DiscountTaxBasis {
+    DiscountTaxBasis::Included
 }
 
 // =============================================================================
@@ -100,8 +114,8 @@ pub struct PatchPaymentTermDto {
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
+    #[serde(default, deserialize_with = "crate::presentation::dto::double_option")]
+    pub note: Option<Option<String>>,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sequence: Option<i32>,
@@ -115,8 +129,8 @@ pub struct PatchPaymentTermDto {
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "discount_days")]
     pub discount_days: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none", alias = "discount_account_id")]
-    pub discount_account_id: Option<Uuid>,
+    #[serde(default, deserialize_with = "crate::presentation::dto::double_option", alias = "discount_account_id")]
+    pub discount_account_id: Option<Option<Uuid>>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "discount_tax_basis")]
     pub discount_tax_basis: Option<DiscountTaxBasis>,
 }
@@ -309,12 +323,4 @@ impl backbone_core::ApplyUpdateDto<UpdatePaymentTermDto> for PaymentTerm {
         Ok(self)
     }
 }
-
-// =============================================================================
-// Custom DTOs
-// =============================================================================
-
-// Add custom DTOs specific to PaymentTerm here.
-// This section will be preserved during regeneration.
-// >>> END CUSTOM DTOs
 

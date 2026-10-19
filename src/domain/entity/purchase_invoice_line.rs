@@ -192,6 +192,12 @@ impl super::Entity for PurchaseInvoiceLine {
 }
 
 impl backbone_core::PersistentEntity for PurchaseInvoiceLine {
+    fn references() -> &'static [backbone_core::Reference] {
+        const REFERENCES: &[backbone_core::Reference] = &[
+            backbone_core::Reference::new("invoice_id", "billing.purchase_invoices", "id"),
+        ];
+        REFERENCES
+    }
     fn entity_id(&self) -> String {
         self.id.to_string()
     }

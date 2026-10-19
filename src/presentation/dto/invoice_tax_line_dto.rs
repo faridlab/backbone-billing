@@ -43,8 +43,9 @@ pub struct CreateInvoiceTaxLineDto {
     pub basis: TaxBasis,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(alias = "taxable_base")]
+    #[serde(default, alias = "taxable_base")]
     pub taxable_base: Decimal,
+    #[serde(default)]
     pub rate: Decimal,
     #[serde(alias = "tax_amount")]
     pub tax_amount: Decimal,
@@ -54,7 +55,12 @@ pub struct CreateInvoiceTaxLineDto {
     pub repartition_line_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "real_account_id")]
     pub real_account_id: Option<Uuid>,
+    #[serde(default = "default_create_invoice_tax_line_exigibility")]
     pub exigibility: TaxExigibility,
+}
+
+fn default_create_invoice_tax_line_exigibility() -> TaxExigibility {
+    TaxExigibility::OnInvoice
 }
 
 // =============================================================================
@@ -116,20 +122,20 @@ pub struct PatchInvoiceTaxLineDto {
     pub account_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub basis: Option<TaxBasis>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
+    #[serde(default, deserialize_with = "crate::presentation::dto::double_option")]
+    pub description: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "taxable_base")]
     pub taxable_base: Option<Decimal>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate: Option<Decimal>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "tax_amount")]
     pub tax_amount: Option<Decimal>,
-    #[serde(skip_serializing_if = "Option::is_none", alias = "tax_template_id")]
-    pub tax_template_id: Option<Uuid>,
-    #[serde(skip_serializing_if = "Option::is_none", alias = "repartition_line_id")]
-    pub repartition_line_id: Option<Uuid>,
-    #[serde(skip_serializing_if = "Option::is_none", alias = "real_account_id")]
-    pub real_account_id: Option<Uuid>,
+    #[serde(default, deserialize_with = "crate::presentation::dto::double_option", alias = "tax_template_id")]
+    pub tax_template_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "crate::presentation::dto::double_option", alias = "repartition_line_id")]
+    pub repartition_line_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "crate::presentation::dto::double_option", alias = "real_account_id")]
+    pub real_account_id: Option<Option<Uuid>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exigibility: Option<TaxExigibility>,
 }
@@ -335,12 +341,4 @@ impl backbone_core::ApplyUpdateDto<UpdateInvoiceTaxLineDto> for InvoiceTaxLine {
         Ok(self)
     }
 }
-
-// =============================================================================
-// Custom DTOs
-// =============================================================================
-
-// Add custom DTOs specific to InvoiceTaxLine here.
-// This section will be preserved during regeneration.
-// >>> END CUSTOM DTOs
 

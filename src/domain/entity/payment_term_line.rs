@@ -201,6 +201,12 @@ impl super::Entity for PaymentTermLine {
 }
 
 impl backbone_core::PersistentEntity for PaymentTermLine {
+    fn references() -> &'static [backbone_core::Reference] {
+        const REFERENCES: &[backbone_core::Reference] = &[
+            backbone_core::Reference::new("term_id", "billing.payment_terms", "id"),
+        ];
+        REFERENCES
+    }
     fn entity_id(&self) -> String {
         self.id.to_string()
     }

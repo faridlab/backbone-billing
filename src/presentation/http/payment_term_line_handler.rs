@@ -81,6 +81,13 @@ impl axum::response::IntoResponse for PaymentTermLineError {
 // Route Configuration
 // =============================================================================
 
+/// The permissions this entity's generic routes require: `payment_term_line:<action>` for `read`, `create`,
+/// `update`, `delete`, `restore` and `purge`, with any rename the schema's `requires:` declares.
+pub fn payment_term_line_permissions() -> backbone_core::http::CrudPermissions {
+    backbone_core::http::CrudPermissions::new("payment_term_line")
+        .in_module("billing")
+}
+
 /// Create Axum router with all 16 Backbone endpoints for PaymentTermLine.
 ///
 /// # Routes
@@ -110,21 +117,23 @@ impl axum::response::IntoResponse for PaymentTermLineError {
 /// let router = create_payment_term_line_routes(service);
 /// ```
 pub fn create_payment_term_line_routes(service: Arc<PaymentTermLineService>) -> Router {
-    BackboneCrudHandler::<PaymentTermLineService, PaymentTermLine, CreatePaymentTermLineDto, UpdatePaymentTermLineDto, PaymentTermLineResponseDto>::routes(
+    BackboneCrudHandler::<PaymentTermLineService, PaymentTermLine, CreatePaymentTermLineDto, UpdatePaymentTermLineDto, PaymentTermLineResponseDto>::routes_guarded(
         service,
         "/payment_term_lines",
+        payment_term_line_permissions(),
     )
 }
 
 /// Create Axum router with only the read (GET) endpoints for PaymentTermLine.
 ///
-/// Safe for public, unauthenticated exposure (e.g., reference data).
+/// Each route requires the entity's `read` permission, so it needs an authenticated caller.
 /// Mutations must be served separately via `create_payment_term_line_write_routes`,
 /// typically wrapped in an auth middleware layer.
 pub fn create_payment_term_line_read_routes(service: Arc<PaymentTermLineService>) -> Router {
-    BackboneCrudHandler::<PaymentTermLineService, PaymentTermLine, CreatePaymentTermLineDto, UpdatePaymentTermLineDto, PaymentTermLineResponseDto>::read_routes(
+    BackboneCrudHandler::<PaymentTermLineService, PaymentTermLine, CreatePaymentTermLineDto, UpdatePaymentTermLineDto, PaymentTermLineResponseDto>::read_routes_guarded(
         service,
         "/payment_term_lines",
+        payment_term_line_permissions(),
     )
 }
 
@@ -140,9 +149,10 @@ pub fn create_payment_term_line_read_routes(service: Arc<PaymentTermLineService>
 /// service (e.g. a command router over its domain engine), serve THAT instead
 /// for any mutation that must respect domain rules.
 pub fn create_payment_term_line_write_routes(service: Arc<PaymentTermLineService>) -> Router {
-    BackboneCrudHandler::<PaymentTermLineService, PaymentTermLine, CreatePaymentTermLineDto, UpdatePaymentTermLineDto, PaymentTermLineResponseDto>::write_routes(
+    BackboneCrudHandler::<PaymentTermLineService, PaymentTermLine, CreatePaymentTermLineDto, UpdatePaymentTermLineDto, PaymentTermLineResponseDto>::write_routes_guarded(
         service,
         "/payment_term_lines",
+        payment_term_line_permissions(),
     )
 }
 

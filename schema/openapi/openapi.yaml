@@ -3033,11 +3033,7 @@ components:
         - invoice_kind
         - account_id
         - basis
-        - taxable_base
-        - rate
         - tax_amount
-        - exigibility
-        - metadata
       properties:
         invoice_ref:
           type: string
@@ -3073,8 +3069,6 @@ components:
           format: uuid
         exigibility:
           type: string
-        metadata:
-          type: object
 
     UpdateInvoiceTaxLineRequest:
       type: object
@@ -3087,7 +3081,6 @@ components:
         - rate
         - tax_amount
         - exigibility
-        - metadata
       properties:
         invoice_ref:
           type: string
@@ -3123,8 +3116,6 @@ components:
           format: uuid
         exigibility:
           type: string
-        metadata:
-          type: object
 
     PatchInvoiceTaxLineRequest:
       type: object
@@ -3163,8 +3154,6 @@ components:
           format: uuid
         exigibility:
           type: string
-        metadata:
-          type: object
 
     InvoiceTaxLineList:
       type: object
@@ -3233,9 +3222,6 @@ components:
         - installment_no
         - due_date
         - amount
-        - paid_amount
-        - status
-        - metadata
       properties:
         invoice_ref:
           type: string
@@ -3254,8 +3240,6 @@ components:
           type: string
         status:
           type: string
-        metadata:
-          type: object
 
     UpdatePaymentScheduleRequest:
       type: object
@@ -3267,7 +3251,6 @@ components:
         - amount
         - paid_amount
         - status
-        - metadata
       properties:
         invoice_ref:
           type: string
@@ -3286,8 +3269,6 @@ components:
           type: string
         status:
           type: string
-        metadata:
-          type: object
 
     PatchPaymentScheduleRequest:
       type: object
@@ -3309,8 +3290,6 @@ components:
           type: string
         status:
           type: string
-        metadata:
-          type: object
 
     PaymentScheduleList:
       type: object
@@ -3383,13 +3362,6 @@ components:
       type: object
       required:
         - name
-        - sequence
-        - status
-        - early_discount
-        - discount_percent
-        - discount_days
-        - discount_tax_basis
-        - metadata
       properties:
         name:
           type: string
@@ -3416,8 +3388,6 @@ components:
           format: uuid
         discount_tax_basis:
           type: string
-        metadata:
-          type: object
 
     UpdatePaymentTermRequest:
       type: object
@@ -3429,7 +3399,6 @@ components:
         - discount_percent
         - discount_days
         - discount_tax_basis
-        - metadata
       properties:
         name:
           type: string
@@ -3456,8 +3425,6 @@ components:
           format: uuid
         discount_tax_basis:
           type: string
-        metadata:
-          type: object
 
     PatchPaymentTermRequest:
       type: object
@@ -3487,8 +3454,6 @@ components:
           format: uuid
         discount_tax_basis:
           type: string
-        metadata:
-          type: object
 
     PaymentTermList:
       type: object
@@ -3557,13 +3522,7 @@ components:
       type: object
       required:
         - term_id
-        - value
-        - value_amount
         - nb_days
-        - delay_type
-        - anchor
-        - sequence
-        - metadata
       properties:
         term_id:
           type: string
@@ -3586,8 +3545,6 @@ components:
         sequence:
           type: integer
           format: int32
-        metadata:
-          type: object
 
     UpdatePaymentTermLineRequest:
       type: object
@@ -3599,7 +3556,6 @@ components:
         - delay_type
         - anchor
         - sequence
-        - metadata
       properties:
         term_id:
           type: string
@@ -3622,8 +3578,6 @@ components:
         sequence:
           type: integer
           format: int32
-        metadata:
-          type: object
 
     PatchPaymentTermLineRequest:
       type: object
@@ -3649,8 +3603,6 @@ components:
         sequence:
           type: integer
           format: int32
-        metadata:
-          type: object
 
     PaymentTermLineList:
       type: object
@@ -3776,18 +3728,8 @@ components:
       required:
         - invoice_number
         - supplier_id
-        - status
         - posting_date
-        - early_pay_discount_percent
-        - currency
-        - net_total
-        - tax_total
-        - withholding_total
-        - grand_total
-        - outstanding_amount
         - payable_account_id
-        - posting_state
-        - metadata
       properties:
         invoice_number:
           type: string
@@ -3860,8 +3802,6 @@ components:
           nullable: true
           type: string
           maxLength: 1000
-        metadata:
-          type: object
 
     UpdatePurchaseInvoiceRequest:
       type: object
@@ -3879,7 +3819,6 @@ components:
         - outstanding_amount
         - payable_account_id
         - posting_state
-        - metadata
       properties:
         invoice_number:
           type: string
@@ -3952,8 +3891,6 @@ components:
           nullable: true
           type: string
           maxLength: 1000
-        metadata:
-          type: object
 
     PatchPurchaseInvoiceRequest:
       type: object
@@ -4029,8 +3966,6 @@ components:
           nullable: true
           type: string
           maxLength: 1000
-        metadata:
-          type: object
 
     PurchaseInvoiceList:
       type: object
@@ -4100,8 +4035,6 @@ components:
         - expense_account_id
         - quantity
         - unit_price
-        - net_amount
-        - metadata
       properties:
         invoice_id:
           type: string
@@ -4122,8 +4055,6 @@ components:
           type: string
         net_amount:
           type: string
-        metadata:
-          type: object
 
     UpdatePurchaseInvoiceLineRequest:
       type: object
@@ -4134,7 +4065,6 @@ components:
         - quantity
         - unit_price
         - net_amount
-        - metadata
       properties:
         invoice_id:
           type: string
@@ -4155,8 +4085,6 @@ components:
           type: string
         net_amount:
           type: string
-        metadata:
-          type: object
 
     PatchPurchaseInvoiceLineRequest:
       type: object
@@ -4180,8 +4108,6 @@ components:
           type: string
         net_amount:
           type: string
-        metadata:
-          type: object
 
     PurchaseInvoiceLineList:
       type: object
@@ -4304,17 +4230,8 @@ components:
       required:
         - invoice_number
         - customer_id
-        - status
         - posting_date
-        - early_pay_discount_percent
-        - currency
-        - net_total
-        - tax_total
-        - grand_total
-        - outstanding_amount
         - receivable_account_id
-        - posting_state
-        - metadata
       properties:
         invoice_number:
           type: string
@@ -4385,8 +4302,6 @@ components:
           nullable: true
           type: string
           maxLength: 1000
-        metadata:
-          type: object
 
     UpdateSalesInvoiceRequest:
       type: object
@@ -4403,7 +4318,6 @@ components:
         - outstanding_amount
         - receivable_account_id
         - posting_state
-        - metadata
       properties:
         invoice_number:
           type: string
@@ -4474,8 +4388,6 @@ components:
           nullable: true
           type: string
           maxLength: 1000
-        metadata:
-          type: object
 
     PatchSalesInvoiceRequest:
       type: object
@@ -4549,8 +4461,6 @@ components:
           nullable: true
           type: string
           maxLength: 1000
-        metadata:
-          type: object
 
     SalesInvoiceList:
       type: object
@@ -4620,8 +4530,6 @@ components:
         - revenue_account_id
         - quantity
         - unit_price
-        - net_amount
-        - metadata
       properties:
         invoice_id:
           type: string
@@ -4642,8 +4550,6 @@ components:
           type: string
         net_amount:
           type: string
-        metadata:
-          type: object
 
     UpdateSalesInvoiceLineRequest:
       type: object
@@ -4654,7 +4560,6 @@ components:
         - quantity
         - unit_price
         - net_amount
-        - metadata
       properties:
         invoice_id:
           type: string
@@ -4675,8 +4580,6 @@ components:
           type: string
         net_amount:
           type: string
-        metadata:
-          type: object
 
     PatchSalesInvoiceLineRequest:
       type: object
@@ -4700,8 +4603,6 @@ components:
           type: string
         net_amount:
           type: string
-        metadata:
-          type: object
 
     SalesInvoiceLineList:
       type: object

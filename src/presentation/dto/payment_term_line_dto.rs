@@ -35,19 +35,38 @@ pub struct CreatePaymentTermLineDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "term_id")]
     pub term_id: Uuid,
+    #[serde(default = "default_create_payment_term_line_value")]
     pub value: PaymentTermLineValue,
-    #[serde(alias = "value_amount")]
+    #[serde(default, alias = "value_amount")]
     pub value_amount: Decimal,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     #[serde(alias = "nb_days")]
     pub nb_days: i32,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "day_of_month")]
     pub day_of_month: Option<i32>,
-    #[serde(alias = "delay_type")]
+    #[serde(default = "default_create_payment_term_line_delay_type", alias = "delay_type")]
     pub delay_type: PaymentTermDelayType,
+    #[serde(default = "default_create_payment_term_line_anchor")]
     pub anchor: PaymentTermAnchor,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
+    #[serde(default = "default_create_payment_term_line_sequence")]
     pub sequence: i32,
+}
+
+fn default_create_payment_term_line_value() -> PaymentTermLineValue {
+    PaymentTermLineValue::Balance
+}
+
+fn default_create_payment_term_line_delay_type() -> PaymentTermDelayType {
+    PaymentTermDelayType::Days
+}
+
+fn default_create_payment_term_line_anchor() -> PaymentTermAnchor {
+    PaymentTermAnchor::InvoiceDate
+}
+
+fn default_create_payment_term_line_sequence() -> i32 {
+    10
 }
 
 // =============================================================================
@@ -102,8 +121,8 @@ pub struct PatchPaymentTermLineDto {
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "nb_days")]
     pub nb_days: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none", alias = "day_of_month")]
-    pub day_of_month: Option<i32>,
+    #[serde(default, deserialize_with = "crate::presentation::dto::double_option", alias = "day_of_month")]
+    pub day_of_month: Option<Option<i32>>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "delay_type")]
     pub delay_type: Option<PaymentTermDelayType>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -295,12 +314,4 @@ impl backbone_core::ApplyUpdateDto<UpdatePaymentTermLineDto> for PaymentTermLine
         Ok(self)
     }
 }
-
-// =============================================================================
-// Custom DTOs
-// =============================================================================
-
-// Add custom DTOs specific to PaymentTermLine here.
-// This section will be preserved during regeneration.
-// >>> END CUSTOM DTOs
 

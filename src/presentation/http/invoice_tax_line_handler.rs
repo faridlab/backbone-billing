@@ -81,6 +81,13 @@ impl axum::response::IntoResponse for InvoiceTaxLineError {
 // Route Configuration
 // =============================================================================
 
+/// The permissions this entity's generic routes require: `invoice_tax_line:<action>` for `read`, `create`,
+/// `update`, `delete`, `restore` and `purge`, with any rename the schema's `requires:` declares.
+pub fn invoice_tax_line_permissions() -> backbone_core::http::CrudPermissions {
+    backbone_core::http::CrudPermissions::new("invoice_tax_line")
+        .in_module("billing")
+}
+
 /// Create Axum router with all 16 Backbone endpoints for InvoiceTaxLine.
 ///
 /// # Routes
@@ -110,21 +117,23 @@ impl axum::response::IntoResponse for InvoiceTaxLineError {
 /// let router = create_invoice_tax_line_routes(service);
 /// ```
 pub fn create_invoice_tax_line_routes(service: Arc<InvoiceTaxLineService>) -> Router {
-    BackboneCrudHandler::<InvoiceTaxLineService, InvoiceTaxLine, CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, InvoiceTaxLineResponseDto>::routes(
+    BackboneCrudHandler::<InvoiceTaxLineService, InvoiceTaxLine, CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, InvoiceTaxLineResponseDto>::routes_guarded(
         service,
         "/invoice_tax_lines",
+        invoice_tax_line_permissions(),
     )
 }
 
 /// Create Axum router with only the read (GET) endpoints for InvoiceTaxLine.
 ///
-/// Safe for public, unauthenticated exposure (e.g., reference data).
+/// Each route requires the entity's `read` permission, so it needs an authenticated caller.
 /// Mutations must be served separately via `create_invoice_tax_line_write_routes`,
 /// typically wrapped in an auth middleware layer.
 pub fn create_invoice_tax_line_read_routes(service: Arc<InvoiceTaxLineService>) -> Router {
-    BackboneCrudHandler::<InvoiceTaxLineService, InvoiceTaxLine, CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, InvoiceTaxLineResponseDto>::read_routes(
+    BackboneCrudHandler::<InvoiceTaxLineService, InvoiceTaxLine, CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, InvoiceTaxLineResponseDto>::read_routes_guarded(
         service,
         "/invoice_tax_lines",
+        invoice_tax_line_permissions(),
     )
 }
 
@@ -140,9 +149,10 @@ pub fn create_invoice_tax_line_read_routes(service: Arc<InvoiceTaxLineService>) 
 /// service (e.g. a command router over its domain engine), serve THAT instead
 /// for any mutation that must respect domain rules.
 pub fn create_invoice_tax_line_write_routes(service: Arc<InvoiceTaxLineService>) -> Router {
-    BackboneCrudHandler::<InvoiceTaxLineService, InvoiceTaxLine, CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, InvoiceTaxLineResponseDto>::write_routes(
+    BackboneCrudHandler::<InvoiceTaxLineService, InvoiceTaxLine, CreateInvoiceTaxLineDto, UpdateInvoiceTaxLineDto, InvoiceTaxLineResponseDto>::write_routes_guarded(
         service,
         "/invoice_tax_lines",
+        invoice_tax_line_permissions(),
     )
 }
 
